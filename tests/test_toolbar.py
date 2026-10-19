@@ -5,12 +5,12 @@ from scrcrappy.toolbar import TAB, Button, buttons, layout, next_free, pill_rect
 
 HOME, APPS = Custom(2, "\ue9b2", "Home"), Custom(3, "\ue8eb", "")
 
-COPY_TIP = "Needs jailbreak"
+COPY_TIP = "Needs --mouse agent (jailbreak)"
 
 
 def test_buttons_order_and_copy_disabled():
     items = buttons(has_input=True, natural=False, customs=[HOME, APPS])
-    assert [b.id if b else None for b in items] == ["paste", "copy", None, "custom:2", "custom:3", "add", None, "natural", None, "collapse"]
+    assert [b.id if b else None for b in items] == ["paste", "copy", None, "custom:2", "custom:3", "add", None, "natural", "settings", None, "collapse"]
     copy = items[1]
     assert not copy.enabled and copy.tip == COPY_TIP
     assert all(b.enabled for b in items if b and b.id != "copy")
@@ -25,7 +25,7 @@ def test_natural_toggle_reflects_setting():
 def test_no_input_disables_actions():
     by_id = {b.id: b for b in buttons(has_input=False, natural=False, customs=[HOME]) if b}
     for i in ("paste", "custom:2", "add"):
-        assert not by_id[i].enabled and by_id[i].tip == "Needs --mouse ble or esp32"
+        assert not by_id[i].enabled and by_id[i].tip == "Needs --mouse ble, esp32 or agent"
     assert by_id["natural"].enabled and by_id["collapse"].enabled
 
 
@@ -51,7 +51,7 @@ def test_layout_fits_height_without_overlap(height):
     assert all(0 <= r.left and r.right <= width for _, r in rects)
     sizes = [r.height for b, r in rects if not b.small]
     assert max(sizes) <= 40
-    if height >= 150:
+    if height >= 170:  # a phone window ~210 px tall or more
         assert min(sizes) >= 16
 
 
@@ -81,3 +81,26 @@ def test_next_free_reuses_lowest():
     assert next_free([]) == 2
     assert next_free([Custom(2, "\ue9b2", ""), Custom(4, "\ue9b2", "")]) == 3
     assert next_free([Custom(n, "\ue9b2", "") for n in (2, 3, 4, 5)]) is None
+
+
+def test_agent_buttons_replace_custom_ones():
+    items = buttons(has_input=True, natural=False, customs=[HOME], agent=True)
+    assert [b.id if b else None for b in items] == ["paste", "copy", "screenshot", None, "home", "switcher", "lock",
+                                                   None, "natural", "settings", None, "collapse"]
+    assert all(b.enabled for b in items if b)
+
+
+def test_every_icon_is_in_the_subset_font():
+    # scripts/make-icons.sh keeps only listed glyphs: a new icon must be added there too
+    import pygame
+    from scrcrappy.config import ICON_CHOICES
+    from scrcrappy.toolbar import CHEVRON_KEEP, ICONS
+    pygame.font.init()
+    font = pygame.font.Font(ICONS / "MaterialSymbolsRounded-outline.ttf", 20)
+    used = {b.icon for agent in (False, True) for b in buttons(True, False, [], agent=agent) if b}
+    used |= {c for c, _ in ICON_CHOICES} | {CHEVRON_KEEP, ""}  # folder_open: Settings' browse button
+    def look(c):
+        return pygame.image.tobytes(font.render(c, True, (0, 0, 0), (255, 255, 255)), "RGB")
+
+    missing = look("\U0010fffd")  # a codepoint no icon font has: renders the "missing" box
+    assert [hex(ord(c)) for c in used if look(c) == missing] == []

@@ -114,3 +114,53 @@ def test_only_one_popup_at_a_time():
     popups = Popups()
     first = popups.open(lambda: Dialog(DialogState(2, "x"), on_send=lambda: None, on_done=lambda r: None))
     assert first and popups.open(lambda: Dialog(DialogState(3, "x"), on_send=lambda: None, on_done=lambda r: None)) is None
+
+
+def settings_panel(cfg, changes):
+    from scrcrappy.dialog import Settings
+    closed = []
+    panel = Settings(cfg, place=lambda size: (0, 0), on_change=lambda: changes.append(1),
+                     on_natural=lambda: setattr(cfg, "natural_scroll", not cfg.natural_scroll),
+                     on_close=lambda: closed.append(1))
+    return panel, closed
+
+
+def click(panel, key):
+    panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=panel.hits[key].center, window=panel.win))
+
+
+def test_settings_mode_saves_at_once_and_esp32_shows_port():
+    from scrcrappy.config import Config
+    cfg, changes = Config(), []
+    panel, _ = settings_panel(cfg, changes)
+    assert "port" not in panel.hits
+    click(panel, "mode:2")
+    assert cfg.mouse == "esp32" and changes and "port" in panel.hits
+    assert panel.win.size[1] == panel.height
+
+
+def test_settings_typed_folder_kept_on_enter_and_on_close():
+    from scrcrappy.config import Config
+    cfg, changes = Config(), []
+    panel, closed = settings_panel(cfg, changes)
+    click(panel, "screenshots")
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="~/shots", window=panel.win))
+    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN, window=panel.win))
+    assert cfg.screenshots == "~/shots" and len(changes) == 1
+    click(panel, "screenshots")
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="2", window=panel.win))
+    panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.win))  # clicked back on the phone
+    assert cfg.screenshots == "~/shots2" and closed == [1]
+
+
+def test_settings_natural_switch_and_empty_port_falls_back():
+    from scrcrappy.config import Config
+    cfg, changes = Config(mouse="esp32", port="/dev/x"), []
+    panel, _ = settings_panel(cfg, changes)
+    click(panel, "natural")
+    assert cfg.natural_scroll is True
+    click(panel, "port")
+    for _ in range(6):
+        panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, window=panel.win))
+    panel.close()
+    assert cfg.port == "/dev/ttyUSB0"

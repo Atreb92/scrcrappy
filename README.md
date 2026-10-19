@@ -1,6 +1,6 @@
 # scrcrappy
 
-scrcpy for iOS: mirror an iPhone's screen over USB (control comes next).
+scrcpy for iOS: mirror and control an iPhone over USB.
 
 ## Setup
 
@@ -66,6 +66,22 @@ After updating scrcrappy, if the device description changed: "Forget" it on the 
 `bluetoothctl remove <phone address>` (ble) or reflash (esp32), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.
 
+## Control with a jailbreak (scrcrappy-agent)
+
+On a jailbroken phone, install [scrcrappy-agent](../scrcrappy-agent) (a SpringBoard tweak, reached over USB
+only) and run `.venv/bin/scrcrappy --mouse agent` (or pick Agent in the toolbar's Settings once). No Bluetooth, no AssistiveTouch, no calibration:
+
+- Click / drag = touch at that exact spot; **Ctrl+drag** = two-finger pinch around the screen centre;
+  wheel = short swipe (`--natural-scroll` applies).
+- Keys go to the phone by physical position (same Hardware Keyboard layout note as below); held keys repeat.
+- Paste (**Ctrl+Shift+V**) types any text, accents and emoji included. iOS shows *Allow Paste* in the app
+  (Settings › ‹app› › Paste from Other Apps › Allow stops it); the text stays on the phone's clipboard.
+- Toolbar: Copy (phone clipboard → computer), Screenshot (PNG in `~/Pictures`, or the folder in Settings), Home, App switcher, Lock.
+
+First run: unlock the phone; it asks *Allow “‹computer›” to control this iPhone?* with a 6-digit code —
+check it matches the one in the terminal, tap Allow. After each phone reboot, touch its screen once
+before clicks work (the terminal says so).
+
 ## Toolbar
 
 A small bar sits to the right of the phone window (left if there's no room) and follows it.
@@ -74,10 +90,11 @@ Hover a button for its name.
 | Button | Does |
 |---|---|
 | Paste | Types the computer's clipboard into the phone (also **Ctrl+Shift+V**). US layout, printable ASCII + Enter/Tab; other characters are skipped and reported. |
-| Copy | Greyed out: copying from the phone to the computer needs the jailbreak backend (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
+| Copy | Phone clipboard → computer, with `--mouse agent` only (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
 | Natural scrolling | Flips the wheel direction live. |
+| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
 | Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32

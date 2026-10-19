@@ -13,8 +13,8 @@ GAP = 11  # between phone window and pill
 PAD_Y, PAD_X = 8, 4
 MAX_D = 40  # button diameter cap
 TAB = (8, 48)  # collapsed pill
-NEEDS_INPUT = "Needs --mouse ble or esp32"
-COPY_TIP = "Needs jailbreak"  # a Bluetooth keyboard/mouse can't read the phone's clipboard
+NEEDS_INPUT = "Needs --mouse ble, esp32 or agent"
+COPY_TIP = "Needs --mouse agent (jailbreak)"  # a Bluetooth keyboard/mouse can't read the phone's clipboard
 
 
 @dataclass
@@ -33,23 +33,36 @@ def next_free(customs: list[Custom]) -> int | None:
     return next((n for n in BUTTONS if n not in used), None)
 
 
-def buttons(has_input: bool, natural: bool, customs: list[Custom]) -> list[Button | None]:
-    """The pill's items top to bottom; None is a separator."""
+def buttons(has_input: bool, natural: bool, customs: list[Custom], agent: bool = False,
+            settings: bool = False) -> list[Button | None]:
+    """The pill's items top to bottom; None is a separator. With the agent (jailbreak): copy, screenshot and the
+    phone's buttons instead of the AssistiveTouch custom buttons."""
     def action(id_, icon, tip):
         return Button(id_, icon, tip if has_input else NEEDS_INPUT, enabled=has_input)
 
-    labels = dict(ICON_CHOICES)
-    add = [action("add", "\ue145", "Add a button…")] if next_free(customs) is not None else []  # gone when all used
+    paste = action("paste", "\ue14f", "Paste computer clipboard (Ctrl+Shift+V)")
+    if agent:
+        middle = [paste, Button("copy", "\ue14d", "Copy phone clipboard to the computer"),
+                  Button("screenshot", "\uec08", "Save a screenshot"), None,
+                  Button("home", "\ue9b2", "Home"), Button("switcher", "\ue8eb", "App switcher"),
+                  Button("lock", "\uf8c7", "Lock")]
+    else:
+        labels = dict(ICON_CHOICES)
+        add = [action("add", "\ue145", "Add a button…")] if next_free(customs) is not None else []  # gone when all used
+        middle = [
+            paste,
+            Button("copy", "\ue14d", COPY_TIP, enabled=False),
+            None,
+            *(action(f"custom:{c.button}", c.icon,
+                     f"{c.name or labels.get(c.icon, 'Custom')} (button {c.button}) · right-click to edit or remove")
+              for c in sorted(customs, key=lambda c: c.button)),
+            *add,
+        ]
     return [
-        action("paste", "\ue14f", "Paste computer clipboard (Ctrl+Shift+V)"),
-        Button("copy", "\ue14d", COPY_TIP, enabled=False),
-        None,
-        *(action(f"custom:{c.button}", c.icon,
-                 f"{c.name or labels.get(c.icon, 'Custom')} (button {c.button}) · right-click to edit or remove")
-          for c in sorted(customs, key=lambda c: c.button)),
-        *add,
+        *middle,
         None,
         Button("natural", "\ue8d5", "Natural scrolling", toggled=natural),
+        Button("settings", "\ue8b8", "Settings", toggled=settings),
         None,
         Button("collapse", "\ue5cb", "Collapse (shows again on hover)", small=True),
     ]
@@ -192,7 +205,7 @@ class Pill:
                 self.actions["custom"](int(button.id[7:]))
             else:
                 self.actions[button.id]()
-        if button.id != "add":  # + opens a window of its own: leave it in front
+        if button.id not in ("add", "settings"):  # these open a window of their own: leave it in front
             self.main.focus()  # keep typing going to the phone
 
     def focused(self) -> bool:
@@ -220,7 +233,7 @@ class Pill:
     def _tip_for(self, button: Button) -> str:
         if button.id == "collapse":
             return "Collapse (shows again on hover)" if self.pinned else "Keep open"
-        if button.toggled is not None:
+        if button.toggled is not None and button.id != "settings":
             return f"{button.tip}: {'on' if button.toggled else 'off'}"
         return button.tip
 

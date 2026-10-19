@@ -1,9 +1,12 @@
-"""Small windows opened from the toolbar: add/edit a custom button, and its right-click menu."""
+"""Small windows opened from the toolbar: add/edit a custom button, its right-click menu, and Settings."""
+import subprocess
+import sys
+import threading
 from typing import Callable
 
 import pygame
 
-from .config import ICON_CHOICES, Custom
+from .config import ICON_CHOICES, Config, Custom
 from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP
 
 SURFACE, TEXT, MUTED, ACCENT = (0xF4, 0xF7, 0xFB), (0x1D, 0x25, 0x30), (0x6B, 0x75, 0x84), (0x2F, 0x5E, 0xA8)
@@ -205,8 +208,179 @@ class Menu:
         self.win.flip()
 
 
+MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
+PANEL_W, SWITCH = 260, (34, 18)
+
+
+def pick_folder(initial: str) -> str | None:
+    """The desktop's folder picker (zenity on Linux, AppleScript on macOS); None if cancelled or missing."""
+    if sys.platform == "darwin":
+        cmd = ["osascript", "-e", "POSIX path of (choose folder)"]
+    else:
+        cmd = ["zenity", "--file-selection", "--directory", f"--filename={initial.rstrip('/')}/"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True)
+    except OSError:
+        print("settings: no folder picker found (install zenity); type the path instead", file=sys.stderr)
+        return None
+    return (out.stdout.strip() or None) if out.returncode == 0 else None
+
+
+class Settings:
+    """The settings fly-out beside the pill. Choices are written to `cfg` and `on_change` runs at once; typed
+    text (port, folder) is kept on Enter, on clicking elsewhere in the panel, or when the panel closes. Closes
+    when it loses focus (except while the folder picker is open). `place(size)` says where the panel goes."""
+
+    def __init__(self, cfg: Config, place: Callable[[tuple[int, int]], tuple[int, int]], on_change: Callable[[], None],
+                 on_natural: Callable[[], None], on_close: Callable[[], None]) -> None:
+        self.cfg, self.place, self.on_change, self.on_natural, self.on_close = cfg, place, on_change, on_natural, on_close
+        self.font, self.small = pygame.font.Font(None, 20), pygame.font.Font(None, 18)
+        self.icons = pygame.font.Font(ICONS / "MaterialSymbolsRounded-outline.ttf", 18)
+        self.text = {"port": cfg.port, "screenshots": cfg.screenshots}
+        self.editing: str | None = None
+        self.closed = self.picking = False
+        self.hits: dict[str, pygame.Rect] = {}
+        self._layout()
+        self.win = pygame.Window("scrcrappy settings", (PANEL_W, self.height), borderless=True, utility=True)
+        self.win.position = place(self.win.size)
+        self.win.focus()
+        self.draw()
+
+    def _layout(self) -> None:
+        self.hits = {}
+        cell = (PANEL_W - 2 * PAD) // len(MODES)
+        for i in range(len(MODES)):
+            self.hits[f"mode:{i}"] = pygame.Rect(PAD + i * cell, 34, cell, 28)
+        y = 34 + 28 + 10
+        if self.cfg.mouse == "esp32":
+            self.hits["port"] = pygame.Rect(PAD + 40, y, PANEL_W - 2 * PAD - 40, 26)
+            y += 26 + 10
+        self.hits["natural"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
+        y += 26 + 12
+        self.shots_top = y
+        self.hits["screenshots"] = pygame.Rect(PAD, y + 20, PANEL_W - 2 * PAD - 34, 26)
+        self.hits["browse"] = pygame.Rect(PANEL_W - PAD - 28, y + 20, 28, 26)
+        self.height = y + 20 + 26 + PAD
+
+    def handle(self, event: pygame.event.Event) -> bool:
+        if self.closed or getattr(event, "window", None) is not self.win:
+            return False
+        if event.type == pygame.WINDOWFOCUSLOST and not self.picking:
+            self.close()
+        elif event.type == pygame.TEXTINPUT and self.editing:
+            self.text[self.editing] = (self.text[self.editing] + event.text)[:300]
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_BACKSPACE and self.editing:
+            self.text[self.editing] = self.text[self.editing][:-1]
+        elif event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            self._commit()
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.close()
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self._click(next((k for k, r in self.hits.items() if r.collidepoint(event.pos)), None))
+        return True
+
+    def _click(self, hit: str | None) -> None:
+        if hit not in ("port", "screenshots"):
+            self._commit()
+        if hit and hit.startswith("mode:"):
+            self.cfg.mouse = MODES[int(hit[5:])][0]
+            self.on_change()
+            self._layout()  # the port row comes and goes with ESP32
+            self.win.size = (PANEL_W, self.height)
+            self.win.position = self.place(self.win.size)
+        elif hit in ("port", "screenshots") and hit != self.editing:
+            self._commit()
+            self.editing = hit
+            pygame.key.start_text_input()
+        elif hit == "natural":
+            self.on_natural()
+        elif hit == "browse" and not self.picking:
+            self.picking = True
+
+            def run() -> None:
+                path = pick_folder(self.text["screenshots"] or "~/Pictures")
+                pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: self._picked(path)))
+
+            threading.Thread(target=run, daemon=True).start()
+
+    def _picked(self, path: str | None) -> None:
+        self.picking = False
+        if path:
+            self.text["screenshots"] = path
+            self.editing = "screenshots"
+            self._commit()
+        if not self.closed:
+            self.win.focus()
+
+    def _commit(self) -> None:
+        if not self.editing:
+            return
+        value = self.text[self.editing].strip()
+        if self.editing == "port":
+            value = value or Config.port
+        self.text[self.editing] = value
+        if getattr(self.cfg, self.editing) != value:
+            setattr(self.cfg, self.editing, value)
+            self.on_change()
+        self.editing = None
+        pygame.key.stop_text_input()
+
+    def close(self) -> None:
+        if not self.closed:
+            self._commit()
+            self.closed = True
+            self.win.destroy()
+            self.on_close()
+
+    def _field(self, surf: pygame.Surface, key: str, placeholder: str) -> None:
+        r = self.hits[key]
+        pygame.draw.rect(surf, (255, 255, 255), r)
+        pygame.draw.rect(surf, ACCENT if self.editing == key else SEP, r, 1)
+        text = self.text[key] + ("|" if self.editing == key else "")
+        label = self.small.render(text or placeholder, True, TEXT if text else MUTED)
+        clip = label.subsurface(max(0, label.get_width() - (r.width - 12)), 0,  # long paths: show the end
+                                min(label.get_width(), r.width - 12), label.get_height())
+        surf.blit(clip, (r.x + 6, r.y + 7))
+
+    def draw(self) -> None:
+        if self.closed:
+            return
+        surf = self.win.get_surface()
+        surf.fill(SURFACE)
+        pygame.draw.rect(surf, SEP, surf.get_rect(), 1)
+        surf.blit(self.font.render("Input", True, FG), (PAD, 14))
+        tag = self.small.render("next launch", True, (0x8A, 0x5A, 0x00))
+        tag_bg = tag.get_rect(topleft=(PAD + 50, 13)).inflate(10, 4)
+        pygame.draw.rect(surf, (0xFD, 0xF0, 0xD5), tag_bg)
+        surf.blit(tag, tag.get_rect(center=tag_bg.center))
+        for i, (mode, name) in enumerate(MODES):
+            r = self.hits[f"mode:{i}"]
+            on = self.cfg.mouse == mode
+            pygame.draw.rect(surf, ON_BG if on else (255, 255, 255), r)
+            pygame.draw.rect(surf, SEP, r, 1)
+            label = self.small.render(name, True, ON_FG if on else FG)
+            surf.blit(label, label.get_rect(center=r.center))
+        if "port" in self.hits:
+            surf.blit(self.small.render("Port", True, FG), (PAD, self.hits["port"].y + 7))
+            self._field(surf, "port", Config.port)
+        sw = self.hits["natural"]
+        surf.blit(self.font.render("Natural scrolling", True, FG), (PAD, sw.y + 2))
+        on = self.cfg.natural_scroll
+        pygame.draw.rect(surf, ACCENT if on else SEP, sw, border_radius=sw.height // 2)
+        knob = (sw.right - sw.height // 2 if on else sw.x + sw.height // 2, sw.centery)
+        pygame.draw.circle(surf, (255, 255, 255), knob, sw.height // 2 - 2)
+        surf.blit(self.font.render("Screenshots", True, FG), (PAD, self.shots_top))
+        self._field(surf, "screenshots", "~/Pictures")
+        b = self.hits["browse"]
+        pygame.draw.rect(surf, (255, 255, 255), b)
+        pygame.draw.rect(surf, ACCENT, b, 1)
+        glyph = self.icons.render("\ue2c8", True, ACCENT)  # folder_open
+        surf.blit(glyph, glyph.get_rect(center=b.center))
+        self.win.flip()
+
+
 class Popups:
-    """The toolbar's popup windows (Dialog / Menu); at most one open at a time."""
+    """The toolbar's popup windows (Dialog / Menu / Settings); at most one open at a time."""
 
     def __init__(self) -> None:
         self.items: list = []

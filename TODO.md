@@ -2,9 +2,11 @@
 
 ## Next up
 
-- [ ] **Jailbreak controls** via our own tweak **scrcrappy-agent** (separate repo `~/source/scrcrappy-agent`, design approved 2026-10-19). ZXTouch was audited and rejected (unauthenticated root-capable socket on 0.0.0.0:6000, passwordless sudo rule, unsigned builds). The old ZXTouch plan is superseded; `scrcrappy/zxtouch.py` on the `jailbreak` branch goes away.
+- [x] **Jailbreak controls**: `--mouse agent` talks to scrcrappy-agent (`~/source/scrcrappy-agent`, PROTOCOL.md); client vendored as `scrcrappy/agent_client.py`.
+- [ ] Agent on the phone: check landscape taps land right (orientation 3/4 table in `geometry.py`), pinch, wheel swipe feel (`SWIPE`, hold before lift), screenshot upright in landscape.
+- [ ] Agent: pairing code is shown in the terminal only, not in the window.
 - [ ] Later (advanced): full terminal over SSH (OpenSSH on the phone, through `usbmux.connect(22)`).
-- [ ] Later: hardware buttons (Home, lock, volume) and opening apps via scrcrappy-agent.
+- [ ] Later: volume buttons and opening apps via scrcrappy-agent (Home / switcher / lock are on the toolbar).
 
 ## Usability
 

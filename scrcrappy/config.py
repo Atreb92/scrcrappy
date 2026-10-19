@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PATH = Path.home() / ".config" / "scrcrappy" / "config.json"
+MICE = ("none", "ble", "esp32", "agent")  # input modes (--mouse)
 BUTTONS = range(2, 6)  # mouse buttons free for custom actions (1 is the tap)
 
 # icon picker for custom buttons: Material Symbols codepoint, label
@@ -29,6 +30,9 @@ class Config:
     natural_scroll: bool = False
     pinned: bool = True
     customs: dict[str, list[Custom]] = field(default_factory=dict)  # "<phone serial>/<ble|esp32>" -> buttons
+    mouse: str = "none"  # input mode used when --mouse isn't given
+    port: str = "/dev/ttyUSB0"  # ESP32 serial port when --port isn't given
+    screenshots: str = ""  # folder; "" = ~/Pictures, else home
 
 
 def load(path: Path = PATH) -> Config:
@@ -51,7 +55,9 @@ def load(path: Path = PATH) -> Config:
                 seen.add(c.button)
                 kept.append(c)
         customs[str(key)] = kept
-    return Config(bool(raw.get("natural_scroll", False)), bool(raw.get("pinned", True)), customs)
+    mouse = raw.get("mouse") if raw.get("mouse") in MICE else "none"
+    return Config(bool(raw.get("natural_scroll", False)), bool(raw.get("pinned", True)), customs, mouse,
+                  str(raw.get("port") or Config.port), str(raw.get("screenshots") or ""))
 
 
 def save(cfg: Config, path: Path = PATH) -> None:
@@ -59,7 +65,8 @@ def save(cfg: Config, path: Path = PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {"natural_scroll": cfg.natural_scroll, "pinned": cfg.pinned,
             "customs": {k: [{"button": c.button, "icon": f"{ord(c.icon):x}", "name": c.name} for c in v]
-                        for k, v in cfg.customs.items()}}
+                        for k, v in cfg.customs.items()},
+            "mouse": cfg.mouse, "port": cfg.port, "screenshots": cfg.screenshots}
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2))
     os.replace(tmp, path)
