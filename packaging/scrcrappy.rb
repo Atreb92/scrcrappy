@@ -7,6 +7,7 @@ class Scrcrappy < Formula
   homepage "https://github.com/OWNER/scrcrappy"
   url "https://github.com/OWNER/scrcrappy/archive/refs/tags/v0.2.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  license "MIT"
 
   depends_on "go" => :build
   depends_on "pkg-config" => :build
