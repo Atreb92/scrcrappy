@@ -201,3 +201,62 @@ def test_run_survives_failing_settings_save(capsys):
     finally:
         Pill.__init__ = orig_init
     assert "could not save settings" in capsys.readouterr().err
+
+
+def test_calibrator_reports_current_value_and_saves_a_new_table(monkeypatch, tmp_path):
+    from scrcrappy import calibrate
+    monkeypatch.setenv("HOME", str(tmp_path))
+    c = calibrate.Calibrator("abc", send=lambda *a: None, frames=None)
+    assert c.value() == pytest.approx(1.66, abs=0.01)  # default table, medium move (12 counts)
+    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames: {1: 1.0, 12: 2.5, 24: 3.0})
+    c.run()
+    assert c.value() == pytest.approx(2.5)
+    assert calibrate.load("abc")[12.0] == 2.5
+
+
+def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
+    import os
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.toolbar import Pill
+    from scrcrappy.video import LatestFrame
+
+    pointers, runs, pills = [], [], []
+
+    def make_pointer(size):
+        pointers.append(FakePointer())
+        return pointers[-1]
+
+    class FakeCalibrator:
+        def value(self):
+            return 1.86
+
+        def run(self):
+            runs.append(len(pointers))  # pointers built so far when the measurement runs
+
+    orig_pill, orig_settings = Pill.__init__, app_module.Settings.__init__
+
+    def pill_init(self, *a, **kw):
+        orig_pill(self, *a, **kw)
+        pills.append(self)
+
+    def settings_init(self, *a, **kw):
+        orig_settings(self, *a, **kw)
+        self._click("calibrate")
+
+    monkeypatch.setattr(Pill, "__init__", pill_init)
+    monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
+    frames, t0, loops = LatestFrame(), time.time(), []
+
+    def alive():
+        loops.append(1)
+        if len(loops) == 3:
+            pills[0].actions["settings"]()  # gear clicked once the pointer exists
+        frames.put((bytes(30 * 60 * 3), (30, 60), 90))
+        return time.time() - t0 < 1.0
+
+    app_module.run(frames, alive, make_pointer=make_pointer, calibrator=FakeCalibrator(), save=lambda c: None)
+    assert runs == [1]  # measured once, with the old pointer stopped and no new one yet
+    assert ("stop",) in pointers[0].calls
+    assert len(pointers) == 2  # rebuilt afterwards, with the new table

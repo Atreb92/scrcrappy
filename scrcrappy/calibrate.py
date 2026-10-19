@@ -34,15 +34,13 @@ def to_array(frame: Frame) -> np.ndarray:
 
 
 def calibrate(send: Send, frames: LatestFrame) -> dict[int, float]:
-    last: list[Frame | None] = [None]
-
     def paced(reports: list[tuple[int, int]]) -> tuple[float, float] | None:
         for dx, dy in reports:
             send(dx, dy, 0, 0)
             time.sleep(TICK)
         time.sleep(0.35)  # let the last frames arrive
-        last[0] = frames.get() or last[0]
-        return find_cursor(to_array(last[0])) if last[0] else None
+        frame = frames.peek()
+        return find_cursor(to_array(frame)) if frame else None
 
     guess, table = Gain(DEFAULT_GAIN), {}
     for length in LENGTHS:
@@ -73,3 +71,18 @@ def save(serial: str, table: dict[int, float]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(table))
     return path
+
+
+class Calibrator:
+    """Recalibration from the running app (Settings › Calibrate): measures with `send` and the video, saves for
+    `serial`. The app rebuilds its pointer afterwards; make_pointer loads the saved table each time."""
+
+    def __init__(self, serial: str, send: Send, frames: LatestFrame) -> None:
+        self.serial, self.send, self.frames = serial, send, frames
+
+    def value(self) -> float:
+        """Screen px per count for a medium report (12 counts): the one number Settings shows."""
+        return Gain(load(self.serial))(12)
+
+    def run(self) -> None:
+        save(self.serial, calibrate(self.send, self.frames))

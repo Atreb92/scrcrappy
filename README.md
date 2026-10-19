@@ -82,8 +82,9 @@ cursor, and scrcrappy steers that cursor to follow your mouse over the window.
 2. For `ble` only: `sudo dnf install python3-dbus python3-gobject` (the helper runs under the system python).
 3. `.venv/bin/scrcrappy --mouse ble` (or `esp32`), then on the phone pair the mouse
    (AssistiveTouch > Devices > Bluetooth Devices).
-4. Optional, once per phone or after changing AssistiveTouch tracking speed: open a plain light
-   screen (e.g. Settings) and run `.venv/bin/scrcrappy --mouse ble --calibrate` (or `esp32`).
+4. Once per phone, after changing AssistiveTouch Tracking Speed, or when the cursor overshoots / falls
+   short: open a plain light screen (e.g. Settings) and click **Calibrate** in the toolbar's Settings
+   (or run `scrcrappy --mouse ble --calibrate`, or `esp32`).
 
 Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it).
 
@@ -124,7 +125,7 @@ Hover a button for its name.
 | Copy | Phone clipboard → computer, with `--mouse agent` only (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
-| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
+| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
 | Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32

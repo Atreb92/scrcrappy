@@ -116,12 +116,12 @@ def test_only_one_popup_at_a_time():
     assert first and popups.open(lambda: Dialog(DialogState(3, "x"), on_send=lambda: None, on_done=lambda r: None)) is None
 
 
-def settings_panel(cfg, changes):
+def settings_panel(cfg, changes, **kw):
     from scrcrappy.dialog import Settings
     closed = []
     panel = Settings(cfg, place=lambda size: (0, 0), on_change=lambda: changes.append(1),
                      on_natural=lambda: setattr(cfg, "natural_scroll", not cfg.natural_scroll),
-                     on_close=lambda: closed.append(1))
+                     on_close=lambda: closed.append(1), **kw)
     return panel, closed
 
 
@@ -164,3 +164,15 @@ def test_settings_natural_switch_and_empty_port_falls_back():
         panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, window=panel.win))
     panel.close()
     assert cfg.port == "/dev/ttyUSB0"
+
+
+def test_calibration_section_only_with_a_mouse_and_calibrate_closes_the_panel():
+    from scrcrappy.config import Config
+    panel, _ = settings_panel(Config(), [])
+    assert "calibrate" not in panel.hits  # agent / no input: nothing to calibrate
+    started = []
+    panel, closed = settings_panel(Config(), [], calibration=1.859, on_calibrate=lambda: started.append(1))
+    assert any("1.86" in line for line in panel.calibration_lines)
+    assert any("Tracking Speed" in line for line in panel.calibration_lines)
+    click(panel, "calibrate")
+    assert started == [1] and closed == [1] and panel.closed

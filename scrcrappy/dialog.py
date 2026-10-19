@@ -232,9 +232,17 @@ class Settings:
     when it loses focus (except while the folder picker is open). `place(size)` says where the panel goes."""
 
     def __init__(self, cfg: Config, place: Callable[[tuple[int, int]], tuple[int, int]], on_change: Callable[[], None],
-                 on_natural: Callable[[], None], on_close: Callable[[], None]) -> None:
+                 on_natural: Callable[[], None], on_close: Callable[[], None], calibration: float | None = None,
+                 on_calibrate: Callable[[], None] | None = None) -> None:
+        """`calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section."""
         self.cfg, self.place, self.on_change, self.on_natural, self.on_close = cfg, place, on_change, on_natural, on_close
+        self.on_calibrate = on_calibrate
         self.font, self.small = pygame.font.Font(None, 20), pygame.font.Font(None, 18)
+        self.calibration_lines = [] if calibration is None else _wrap(
+            f"Current: {calibration:.2f} screen px per mouse count. The cursor speed is set on the iPhone in "
+            "Settings › Accessibility › Touch › AssistiveTouch › Tracking Speed. Recalibrate after changing it, "
+            "or when the cursor overshoots or falls short: open a plain light screen (e.g. Settings) first, "
+            "then click Calibrate and don't touch the mouse for about 20 s.", self.small, PANEL_W - 2 * PAD)
         self.icons = pygame.font.Font(ICONS / "MaterialSymbolsRounded-outline.ttf", 18)
         self.text = {"port": cfg.port, "screenshots": cfg.screenshots}
         self.editing: str | None = None
@@ -260,7 +268,13 @@ class Settings:
         self.shots_top = y
         self.hits["screenshots"] = pygame.Rect(PAD, y + 20, PANEL_W - 2 * PAD - 34, 26)
         self.hits["browse"] = pygame.Rect(PANEL_W - PAD - 28, y + 20, 28, 26)
-        self.height = y + 20 + 26 + PAD
+        y += 20 + 26
+        if self.calibration_lines:
+            self.calib_top = y + 14
+            y = self.calib_top + 20 + 16 * len(self.calibration_lines) + 6
+            self.hits["calibrate"] = pygame.Rect(PANEL_W - PAD - 100, y, 100, 28)
+            y += 28
+        self.height = y + PAD
 
     def handle(self, event: pygame.event.Event) -> bool:
         if self.closed or getattr(event, "window", None) is not self.win:
@@ -294,6 +308,9 @@ class Settings:
             pygame.key.start_text_input()
         elif hit == "natural":
             self.on_natural()
+        elif hit == "calibrate":
+            self.close()
+            self.on_calibrate()
         elif hit == "browse" and not self.picking:
             self.picking = True
 
@@ -376,6 +393,14 @@ class Settings:
         pygame.draw.rect(surf, ACCENT, b, 1)
         glyph = self.icons.render("\ue2c8", True, ACCENT)  # folder_open
         surf.blit(glyph, glyph.get_rect(center=b.center))
+        if self.calibration_lines:
+            surf.blit(self.font.render("Pointer calibration", True, FG), (PAD, self.calib_top))
+            for i, line in enumerate(self.calibration_lines):
+                surf.blit(self.small.render(line, True, MUTED), (PAD, self.calib_top + 20 + 16 * i))
+            c = self.hits["calibrate"]
+            pygame.draw.rect(surf, ACCENT, c)
+            label = self.small.render("Calibrate", True, (255, 255, 255))
+            surf.blit(label, label.get_rect(center=c.center))
         self.win.flip()
 
 

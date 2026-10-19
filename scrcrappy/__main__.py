@@ -69,7 +69,8 @@ def main(argv: list[str] | None = None) -> int:
     serial = dev.serial_number
     video.reset_if_stuck(dev)
 
-    make_pointer, keys, session = None, None, None
+    make_pointer, keys, session, calibrator = None, None, None, None
+    frames = video.LatestFrame()
     if args.mouse == "agent":
         try:
             host = socket.gethostname()
@@ -89,10 +90,9 @@ def main(argv: list[str] | None = None) -> int:
             print("waiting for the iPhone to connect to 'scrcrappy PC' / 'scrcrappy ESP32' "
                   "(AssistiveTouch on; pair it in Settings > Bluetooth the first time)...", file=sys.stderr)
             connected.wait()
-        gain = mouse.Gain(calibrate.load(serial))
-        make_pointer = lambda size: mouse.Pointer(send, gain, size)  # noqa: E731
+        make_pointer = lambda size: mouse.Pointer(send, mouse.Gain(calibrate.load(serial)), size)  # noqa: E731
+        calibrator = calibrate.Calibrator(serial, send, frames)  # loaded again after Settings › Calibrate
 
-    frames = video.LatestFrame()
     with video.capture(qvh, frames) as proc:
         if args.calibrate:
             time.sleep(3)  # stream start-up
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.natural_scroll is not None:
             cfg.natural_scroll = args.natural_scroll
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer, keys=keys,
-                                 cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session,
+                                 cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator,
                                  device_name="scrcrappy ESP32" if args.mouse == "esp32" else "scrcrappy PC")
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), qvh log: {proc.log_path}", file=sys.stderr)

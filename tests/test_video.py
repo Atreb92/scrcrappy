@@ -49,3 +49,13 @@ def test_libusb_found_in_homebrew_when_the_system_search_misses():
                              exists=lambda p: p == "/opt/homebrew/lib/libusb-1.0.dylib") == "/opt/homebrew/lib/libusb-1.0.dylib"
     assert video.libusb_path("usb-1.0", find=lambda n: "/usr/lib/libusb-1.0.so.0", exists=lambda p: False) == "/usr/lib/libusb-1.0.so.0"
     assert video.libusb_path("usb-1.0", find=lambda n: None, exists=lambda p: False) is None
+
+
+def test_peek_sees_the_newest_frame_even_after_the_window_took_it():
+    # calibrating inside the running app: the window loop get()s every frame, calibration still needs the newest
+    from scrcrappy.video import LatestFrame
+    frames = LatestFrame()
+    assert frames.peek() is None
+    frames.put((b"a", (1, 1), 3))
+    assert frames.get() == (b"a", (1, 1), 3)
+    assert frames.peek() == (b"a", (1, 1), 3) and frames.get() is None

@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import time
 from typing import Callable
 
@@ -9,6 +10,7 @@ from .geometry import fit, inside, to_frame
 from .keyqueue import KeyQueue
 from .mouse import Pointer
 from . import agent as agent_mod, config
+from .calibrate import Calibrator
 from .config import Config, Custom
 from .dialog import Dialog, DialogState, Menu, Popups, Settings
 from .toolbar import GAP, ICONS, Pill, buttons, next_free
@@ -97,10 +99,10 @@ def save_or_warn(save: Callable[[Config], None], cfg: Config) -> None:
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
         save: Callable[[Config], None] = config.save, title: str = "scrcrappy",
-        agent: agent_mod.Session | None = None) -> bool:
+        agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None) -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
-    with `agent`, clicks and keys go to scrcrappy-agent instead.
+    with `agent`, clicks and keys go to scrcrappy-agent instead. `calibrator` adds Calibrate to Settings.
     Toolbar and Settings changes (custom buttons, natural scrolling, pinned, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667), resizable=True)
@@ -117,6 +119,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     popups = Popups()
     settings: Settings | None = None
     settings_closed_at = 0.0
+    calibrating = False
 
     def items():
         return buttons(has_input=make_pointer is not None or agent is not None, customs=customs, agent=agent is not None, settings=bool(settings and not settings.closed))
@@ -183,12 +186,40 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         settings_closed_at = time.monotonic()
         pill.set_items(items())
 
+    def calibrate() -> None:
+        """Settings › Calibrate: the pointer stops while the calibrator drives the cursor, then is rebuilt
+        (on the next frame) with the new table."""
+        nonlocal controller, calibrating
+        if controller:
+            controller.release_all()
+            controller.stop()
+        controller, calibrating = None, True
+        main.title = f"{title} — calibrating, don't touch the mouse…"
+
+        def work() -> None:
+            try:
+                calibrator.run()
+                error = None
+            except RuntimeError as e:
+                error = str(e)
+            pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: calibrated(error)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def calibrated(error: str | None) -> None:
+        nonlocal calibrating
+        calibrating = False
+        main.title = f"{title} — calibration failed, see the terminal" if error else title
+        if error:
+            print(f"calibration failed: {error}", file=sys.stderr)
+
     def open_settings() -> None:
         nonlocal settings
         if settings and not settings.closed:
             settings.close()
         elif time.monotonic() - settings_closed_at > 0.5:  # else this click is what closed it (focus moved)
-            settings = popups.open(lambda: Settings(cfg, place, settings_changed, toggle_natural, settings_done)) or settings
+            settings = popups.open(lambda: Settings(cfg, place, settings_changed, toggle_natural, settings_done,
+                                                     calibrator.value() if calibrator else None, calibrate)) or settings
         pill.set_items(items())
 
     pill = Pill(main, items(), {
@@ -221,7 +252,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             if frame := frames.get():
                 pixels, size, pitch = frame
                 img = pygame.image.frombuffer(pixels, size, "RGB", pitch)
-                if make_pointer and not controller:
+                if make_pointer and not controller and not calibrating:
                     pointer = make_pointer(size)
                     pointer.home()
                     pointer.start()

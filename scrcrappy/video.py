@@ -23,16 +23,22 @@ class LatestFrame:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._frame: Frame | None = None
+        self._newest: Frame | None = None
 
     def put(self, frame: Frame) -> None:
         with self._lock:
-            self._frame = frame
+            self._frame = self._newest = frame
 
     def get(self) -> Frame | None:
         """Newest frame, or None if nothing new since the last call."""
         with self._lock:
             frame, self._frame = self._frame, None
             return frame
+
+    def peek(self) -> Frame | None:
+        """Newest frame, whether or not get() already took it (calibration while the window runs)."""
+        with self._lock:
+            return self._newest
 
 
 HOMEBREW_LIBS = ("/opt/homebrew/lib", "/usr/local/lib")  # Apple Silicon, Intel
