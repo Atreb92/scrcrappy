@@ -58,6 +58,10 @@ Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it).
 
 The same BLE device is also a keyboard: keys typed in the window go to the phone by physical
 position, so set the phone's hardware layout to match your computer's
-(Settings > General > Keyboard > Hardware Keyboard). While it is connected iOS hides the on-screen
-keyboard. After updating from a mouse-only version, "Forget" the device on the phone and pair again. The cursor re-syncs in the top-left corner whenever the
+(Settings > General > Keyboard > Hardware Keyboard, per language). iOS uses the layout of the
+*active* input language: Ctrl+Space in the window switches it. While connected, iOS hides the
+on-screen keyboard.
+
+After updating scrcrappy, if the device description changed: "Forget" it on the phone, run
+`bluetoothctl remove <phone address>` (ble) or reflash (esp32), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.

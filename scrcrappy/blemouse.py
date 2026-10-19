@@ -18,7 +18,13 @@ BLUEZ = "org.bluez"
 PROPS = "org.freedesktop.DBus.Properties"
 SVC, CHR, DSC = "org.bluez.GattService1", "org.bluez.GattCharacteristic1", "org.bluez.GattDescriptor1"
 
-REPORT_MAP = bytes.fromhex(
+REPORT_MAP = bytes.fromhex(  # keyboard first, with LED output: iOS only treats it as a keyboard like this
+    "05010906a1018502"  # generic desktop, keyboard, collection(application), report id 2
+    "050719e029e715002501750195088102"  # 8 modifier bits
+    "950175088101"  # reserved byte
+    "950575010508190129059102950175039101"  # 5 LED outputs + 3 bits padding
+    "95067508150025650507190029658100"  # 6 key slots, usages 0..0x65
+    "c0"
     "05010902a1018501"  # generic desktop, mouse, collection(application), report id 1
     "0901a100"  # pointer, collection(physical)
     "05091901290315002501950375018102"  # 3 buttons
@@ -26,11 +32,6 @@ REPORT_MAP = bytes.fromhex(
     "0501093009310938"  # X, Y, wheel
     "1581257f750895038106"  # int8, relative
     "c0c0"
-    "05010906a1018502"  # generic desktop, keyboard, collection(application), report id 2
-    "050719e029e715002501750195088102"  # 8 modifier bits
-    "950175088101"  # reserved byte
-    "95067508150025650507190029658100"  # 6 key slots, usages 0..0x65
-    "c0"
 )
 
 
@@ -119,6 +120,8 @@ class App(dbus.service.Object):
         self.objs.append(Dsc(bus, f"{self.report.path}/d0", "2908", self.report.path, bytes([0x01, 0x01])))
         self.keys = chr(s, 5, "2a4d", ["read", "notify", "encrypt-read"], bytes(8))
         self.objs.append(Dsc(bus, f"{self.keys.path}/d0", "2908", self.keys.path, bytes([0x02, 0x01])))
+        leds = chr(s, 6, "2a4d", ["read", "write", "write-without-response", "encrypt-read", "encrypt-write"], b"\x00")
+        self.objs.append(Dsc(bus, f"{leds.path}/d0", "2908", leds.path, bytes([0x02, 0x02])))  # report 2, output
 
     @dbus.service.method("org.freedesktop.DBus.ObjectManager", out_signature="a{oa{sa{sv}}}")
     def GetManagedObjects(self):
@@ -128,7 +131,7 @@ class App(dbus.service.Object):
 class Adv(Obj):
     def __init__(self, bus):
         super().__init__(bus, "/scrcrappy/adv", "org.bluez.LEAdvertisement1", {
-            "Type": "peripheral", "ServiceUUIDs": ["1812"], "Appearance": dbus.UInt16(0x03C2),
+            "Type": "peripheral", "ServiceUUIDs": ["1812"], "Appearance": dbus.UInt16(0x03C1),  # keyboard: as mouse (0x03C2) iOS never registered the keyboard part
             "LocalName": "scrcrappy mouse", "Discoverable": True})
 
     @dbus.service.method("org.bluez.LEAdvertisement1")
