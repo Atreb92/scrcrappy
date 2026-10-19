@@ -9,13 +9,26 @@ from pathlib import Path
 from . import agent, app, calibrate, config, links, mouse, video
 from .keyqueue import KeyQueue
 
-BUNDLED_QVH = Path(__file__).resolve().parent.parent / "bin" / "qvh"  # from scripts/build-qvh.sh
+PACKAGED_QVH = Path(__file__).resolve().parent / "bin" / "qvh"  # from scripts/build-qvh.sh, shipped in the package
+REPO_QVH = Path(__file__).resolve().parent.parent / "bin" / "qvh"  # older checkouts built it here
+
+
+def find_qvh(flag: str | None, package: Path | None = None, repo: Path | None = None) -> str | None:
+    """--qvh, else the package's copy, else the repo's, else PATH."""
+    if flag:
+        return shutil.which(flag)
+    for path in (package or PACKAGED_QVH, repo or REPO_QVH):
+        if path.is_file():
+            if not os.access(path, os.X_OK):  # an installer may drop the exec bit
+                path.chmod(path.stat().st_mode | 0o100)
+            return str(path)
+    return shutil.which("qvh")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="scrcrappy", description="Mirror and control an iPhone over USB.")
-    parser.add_argument("--qvh", default=str(BUNDLED_QVH) if BUNDLED_QVH.exists() else "qvh",
-                        help="path to the patched qvh binary (default: bin/qvh, else PATH)")
+    parser.add_argument("--qvh", help="path to the patched qvh binary (default: the one built into scrcrappy, "
+                                      "else PATH)")
     parser.add_argument("--mouse", choices=config.MICE, default=None,
                         help="input: drive the AssistiveTouch cursor through a BLE mouse (ble = this computer's "
                              "Bluetooth (Linux), esp32 = ESP32 with firmware/esp32-mouse on --port), or "
@@ -41,9 +54,10 @@ def main(argv: list[str] | None = None) -> int:
     cfg = config.load()  # flags win over saved settings for this run, without changing them
     args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
 
-    qvh = shutil.which(args.qvh)
+    qvh = find_qvh(args.qvh)
     if not qvh:
-        print(f"error: qvh not found at '{args.qvh}', build it with scripts/build-qvh.sh", file=sys.stderr)
+        print(f"error: qvh not found{f' at {args.qvh!r}' if args.qvh else ''}, build it with scripts/build-qvh.sh",
+              file=sys.stderr)
         return 1
     if args.calibrate and args.mouse not in ("ble", "esp32"):
         print("error: --calibrate needs --mouse ble or esp32", file=sys.stderr)

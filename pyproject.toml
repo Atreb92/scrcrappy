@@ -1,6 +1,6 @@
 [project]
 name = "scrcrappy"
-version = "0.1.0"
+version = "0.2.0"
 description = "scrcpy for iOS"
 requires-python = ">=3.11"
 dependencies = ["av", "numpy", "pygame-ce", "pyusb"]
@@ -19,4 +19,4 @@ build-backend = "setuptools.build_meta"
 packages = ["scrcrappy"]
 
 [tool.setuptools.package-data]
-scrcrappy = ["icons/*"]
+scrcrappy = ["icons/*", "bin/qvh"]
