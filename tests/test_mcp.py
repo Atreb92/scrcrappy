@@ -120,3 +120,28 @@ def test_busy_port_raises_oserror():
     with pytest.raises(OSError):
         mcp.McpServer(TOKEN, lambda: [], port=taken.getsockname()[1]).start()
     taken.close()
+
+
+def test_non_ascii_authorization_is_401(server):
+    import http.client
+    c = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+    c.putrequest("POST", "/mcp")
+    c.putheader("Authorization", "Bearer s3crèt".encode("latin-1"))
+    c.putheader("Content-Length", "2")
+    c.endheaders(b"{}")
+    assert c.getresponse().status == 401
+
+
+def test_401_tells_the_client_it_is_a_bearer_token(server):
+    req = urllib.request.Request(f"http://127.0.0.1:{server.port}/mcp", b"{}", {"Authorization": "Bearer nope"})
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(req, timeout=5)
+    assert e.value.code == 401 and e.value.headers["WWW-Authenticate"].startswith("Bearer")
+    assert b"Settings" in e.value.read()  # where to get the right command
+
+
+def test_initialize_answers_a_supported_version(server):
+    _, r = post(server, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "1999-01-01"}})
+    assert r["result"]["protocolVersion"] in mcp.SUPPORTED
+    _, r = post(server, {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}})
+    assert r["result"]["protocolVersion"] == "2025-03-26"

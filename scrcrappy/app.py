@@ -22,6 +22,13 @@ MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage -
 os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
 
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
+INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL,
+         pygame.KEYDOWN, pygame.KEYUP)
+
+
+def paused(event: pygame.event.Event, locked: bool) -> bool:
+    """While an AI action runs, the user's mouse and keyboard reach nothing (phone window or toolbar)."""
+    return locked and event.type in INPUT
 
 
 class Controller:
@@ -129,8 +136,6 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     calibrating = False
     ai = ai_mod.AiControl(frames, session=agent, keys=keys,
                           pointer=(lambda: controller.pointer if controller else None) if make_pointer else None)
-    INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL,
-             pygame.KEYDOWN, pygame.KEYUP)
     was_locked = False
 
     def items():
@@ -282,13 +287,15 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 if event.type == pygame.USEREVENT and hasattr(event, "run"):
                     event.run()  # an agent reply, handled on this thread
                     continue
+                if paused(event, ai.locked()):  # checked per event: the lock starts the moment a tool does
+                    continue
                 if popups.handle(event) or pill.handle(event):
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
                 if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
                     pill.follow()
-                if controller and img and not (was_locked and event.type in INPUT):  # AI acting: input paused
+                if controller and img:
                     controller.handle(event, fit(img.get_size(), main.size), img.get_size())
             if frame := frames.get():
                 pixels, size, pitch = frame
@@ -308,11 +315,9 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 x, y, w, h = fit(img.get_size(), screen.get_size())
                 screen.blit(pygame.transform.smoothscale(img, (w, h)), (x, y))
                 now = time.monotonic()
-                ai.rings = [r for r in ai.rings if now - r[2] < ai_mod.RING_S]
-                for rx, ry, t in ai.rings:  # where the AI touched
-                    if now >= t:
-                        pygame.draw.circle(screen, ai_mod.RED, (x + rx / 100 * w, y + ry / 100 * h),
-                                           10 + (now - t) * 40, 3)
+                for rx, ry, t in ai.current_rings(now):  # where the AI touched
+                    pygame.draw.circle(screen, ai_mod.RED, (x + rx / 100 * w, y + ry / 100 * h),
+                                       10 + (now - t) * 40, 3)
             main.flip()
             pill.led_colour = ai.led()
             pill.update(app_focused=pill.focused() or popups.focused())

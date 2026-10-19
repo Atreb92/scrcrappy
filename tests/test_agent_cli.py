@@ -117,3 +117,10 @@ def test_long_press_and_swipe_durations(monkeypatch, capsys):
     events = phone.touches()
     assert events[0]["phase"] == "down" and events[-1]["phase"] == "up"
     assert events[-1]["y"] == pytest.approx(0.2)
+
+
+def test_empty_screenshot_path_is_an_error(monkeypatch, capsys):
+    phone = FakePhone(monkeypatch, clipboard="secret")
+    code, out = run(["--screenshot", ""], capsys)
+    assert code == 1 and "path" in out["error"]
+    assert not any(m["cmd"] == "clipboard_get" for m in phone.seen)

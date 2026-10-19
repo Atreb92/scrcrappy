@@ -15,7 +15,7 @@ from typing import Callable
 
 PORT = 7331
 LOCAL_ORIGIN = re.compile(r"https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$")
-PROTOCOL = "2025-06-18"  # used when a client doesn't say which one it speaks
+SUPPORTED = ("2025-06-18", "2025-03-26", "2024-11-05")  # newest first: answered when a client asks for another
 
 
 class ToolError(Exception):
@@ -64,8 +64,11 @@ class McpServer:
                     return self._reply(404, None)
                 if (origin := self.headers.get("Origin")) and not LOCAL_ORIGIN.match(origin):
                     return self._reply(403, None)
-                if not hmac.compare_digest(self.headers.get("Authorization", ""), f"Bearer {server.token}"):
-                    return self._reply(401, None)
+                got = self.headers.get("Authorization", "").encode("latin-1")  # http.server decodes as latin-1
+                if not hmac.compare_digest(got, f"Bearer {server.token}".encode()):
+                    return self._reply(401, _error(None, -32001, "wrong or missing token: copy the setup command "
+                                                   "again from scrcrappy's Settings"),
+                                       {"WWW-Authenticate": 'Bearer error="invalid_token"'})
                 try:
                     msg = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
                 except ValueError:
@@ -77,9 +80,11 @@ class McpServer:
                     return self._reply(202, None)
                 self._reply(200, server.handle(msg))
 
-            def _reply(self, status: int, body: dict | None) -> None:
+            def _reply(self, status: int, body: dict | None, headers: dict | None = None) -> None:
                 data = json.dumps(body).encode() if body is not None else b""
                 self.send_response(status)
+                for k, v in (headers or {}).items():
+                    self.send_header(k, v)
                 if body is not None:
                     self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(data)))
@@ -102,7 +107,8 @@ class McpServer:
         if not isinstance(params, dict):
             return _error(id_, -32602, "params must be an object")
         if method == "initialize":
-            return _result(id_, {"protocolVersion": params.get("protocolVersion", PROTOCOL),
+            asked = params.get("protocolVersion")
+            return _result(id_, {"protocolVersion": asked if asked in SUPPORTED else SUPPORTED[0],
                                  "capabilities": {"tools": {}},
                                  "serverInfo": {"name": "scrcrappy", "version": _version()}})
         if method == "ping":
