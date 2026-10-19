@@ -72,10 +72,9 @@ def test_custom_tips_use_name_or_icon_label():
     assert by_id["custom:3"].tip.startswith("App switcher (button 3)")  # no name: the icon's label
 
 
-def test_add_disabled_when_full():
+def test_add_hidden_when_full():
     full = [Custom(n, "\ue9b2", "") for n in (2, 3, 4, 5)]
-    add = [b for b in buttons(True, False, full) if b and b.id == "add"][0]
-    assert not add.enabled and add.tip == "All 4 custom buttons in use"
+    assert not any(b and b.id == "add" for b in buttons(True, False, full))
 
 
 def test_next_free_reuses_lowest():

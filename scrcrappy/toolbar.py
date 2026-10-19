@@ -39,9 +39,7 @@ def buttons(has_input: bool, natural: bool, customs: list[Custom]) -> list[Butto
         return Button(id_, icon, tip if has_input else NEEDS_INPUT, enabled=has_input)
 
     labels = dict(ICON_CHOICES)
-    add = action("add", "\ue145", "Add a button…")
-    if has_input and next_free(customs) is None:
-        add.enabled, add.tip = False, f"All {len(BUTTONS)} custom buttons in use"
+    add = [action("add", "\ue145", "Add a button…")] if next_free(customs) is not None else []  # gone when all used
     return [
         action("paste", "\ue14f", "Paste computer clipboard (Ctrl+Shift+V)"),
         Button("copy", "\ue14d", COPY_TIP, enabled=False),
@@ -49,7 +47,7 @@ def buttons(has_input: bool, natural: bool, customs: list[Custom]) -> list[Butto
         *(action(f"custom:{c.button}", c.icon,
                  f"{c.name or labels.get(c.icon, 'Custom')} (button {c.button}) · right-click to edit or remove")
           for c in sorted(customs, key=lambda c: c.button)),
-        add,
+        *add,
         None,
         Button("natural", "\ue8d5", "Natural scrolling", toggled=natural),
         None,
