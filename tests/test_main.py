@@ -30,16 +30,16 @@ def test_saved_input_mode_used_unless_flag_given(monkeypatch, capsys):
     assert "no iPhone connected" in capsys.readouterr().err
 
 
-def test_find_qvh_prefers_flag_then_package_then_repo(tmp_path):
-    pkg, repo = tmp_path / "pkg" / "qvh", tmp_path / "repo" / "qvh"
-    for p in (pkg, repo):
-        p.parent.mkdir()
-        p.write_text("")
-        p.chmod(0o755)
-    assert cli.find_qvh("/bin/true", pkg, repo) == "/bin/true"
-    assert cli.find_qvh(None, pkg, repo) == str(pkg)  # package beats an old repo build
+def test_find_qvh_prefers_flag_then_package_then_path(tmp_path, monkeypatch):
+    pkg = tmp_path / "pkg" / "qvh"
+    pkg.parent.mkdir()
+    pkg.write_text("")
+    pkg.chmod(0o755)
+    assert cli.find_qvh("/bin/true", pkg) == "/bin/true"
+    assert cli.find_qvh(None, pkg) == str(pkg)
     pkg.unlink()
-    assert cli.find_qvh(None, pkg, repo) == str(repo)
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert cli.find_qvh(None, pkg) is None
 
 
 def test_find_qvh_restores_exec_bit(tmp_path):
@@ -47,13 +47,12 @@ def test_find_qvh_restores_exec_bit(tmp_path):
     pkg = tmp_path / "qvh"
     pkg.write_text("")
     pkg.chmod(0o644)
-    assert cli.find_qvh(None, pkg, tmp_path / "none") == str(pkg)
+    assert cli.find_qvh(None, pkg) == str(pkg)
     assert os.access(pkg, os.X_OK)
 
 
 def test_missing_qvh_names_build_script(capsys, monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "PACKAGED_QVH", tmp_path / "a")
-    monkeypatch.setattr(cli, "REPO_QVH", tmp_path / "b")
     monkeypatch.setenv("PATH", str(tmp_path))
     monkeypatch.setattr(cli.video, "find_iphone", lambda: None)  # never reach a real phone if this regresses
     assert cli.main([]) == 1

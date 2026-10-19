@@ -13,18 +13,17 @@ from . import agent, app, calibrate, config, links, mouse, video
 from .keyqueue import KeyQueue
 
 PACKAGED_QVH = Path(__file__).resolve().parent / "bin" / "qvh"  # from scripts/build-qvh.sh, shipped in the package
-REPO_QVH = Path(__file__).resolve().parent.parent / "bin" / "qvh"  # older checkouts built it here
 
 
-def find_qvh(flag: str | None, package: Path | None = None, repo: Path | None = None) -> str | None:
-    """--qvh, else the package's copy, else the repo's, else PATH."""
+def find_qvh(flag: str | None, package: Path | None = None) -> str | None:
+    """--qvh, else the package's copy (scripts/build-qvh.sh), else PATH."""
     if flag:
         return shutil.which(flag)
-    for path in (package or PACKAGED_QVH, repo or REPO_QVH):
-        if path.is_file():
-            if not os.access(path, os.X_OK):  # an installer may drop the exec bit
-                path.chmod(path.stat().st_mode | 0o100)
-            return str(path)
+    path = package or PACKAGED_QVH
+    if path.is_file():
+        if not os.access(path, os.X_OK):  # an installer may drop the exec bit
+            path.chmod(path.stat().st_mode | 0o100)
+        return str(path)
     return shutil.which("qvh")
 
 

@@ -4,7 +4,7 @@ from scrcrappy.geometry import ROTATION_BY_ORIENTATION, to_device
 
 TALL = (269, 0, 462, 1000)  # portrait frame letterboxed in a 1000x1000 window
 WIDE = (0, 0, 1000, 461)  # landscape frame filling a 1000-wide window
-SIZE = (375, 812)  # ZXTouch portrait screen size
+SIZE = (375, 812)  # a portrait screen in points (iPhone X)
 
 
 def test_centre_maps_to_centre():
