@@ -66,6 +66,7 @@ class Dialog:
         self.hits: dict[str, pygame.Rect] = {}
         self._layout()
         self.win = pygame.Window(state.title, (WIDTH, self.height))
+        self.win.focus()  # in front of the phone window
         pygame.key.start_text_input()  # the name field; key events for this window never reach the phone
         self.draw()
 

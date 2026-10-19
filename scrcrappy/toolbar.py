@@ -194,7 +194,8 @@ class Pill:
                 self.actions["custom"](int(button.id[7:]))
             else:
                 self.actions[button.id]()
-        self.main.focus()  # keep typing going to the phone
+        if button.id != "add":  # + opens a window of its own: leave it in front
+            self.main.focus()  # keep typing going to the phone
 
     def focused(self) -> bool:
         return any(w is not None and w.focused for w in (self.main, self.win, self.tip_win))

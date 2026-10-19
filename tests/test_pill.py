@@ -144,3 +144,25 @@ def test_starts_collapsed_when_not_pinned():
     p = Pill(pygame.Window("phone", (300, 500)), buttons(True, False, []), {}, pinned=False)
     assert p.collapsed and not p.pinned
     pygame.quit()
+
+
+class FakeMain:
+    position, size, focused = (100, 100), (300, 500), True
+
+    def __init__(self):
+        self.focus_calls = 0
+
+    def focus(self):
+        self.focus_calls += 1
+
+
+def test_add_leaves_focus_to_the_dialog_it_opens(pill):
+    pill.main = FakeMain()
+    click(pill, "add")
+    assert pill.main.focus_calls == 0  # refocusing the phone window would cover the Add window
+
+
+def test_other_buttons_refocus_the_phone_window(pill):
+    pill.main = FakeMain()
+    click(pill, "custom:2")
+    assert pill.main.focus_calls == 1
