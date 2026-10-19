@@ -83,7 +83,7 @@ TIP_BG, TIP_FG = (0x30, 0x30, 0x34), (0xF2, 0xF0, 0xF4)
 TIP_DELAY, TIP_WIDTH = 0.5, 220
 AUTOHIDE = 2.0  # s after the mouse leaves a hover-opened pill
 UNFOCUSED_HIDE = 0.2  # s with none of our windows focused before the pill hides
-CHEVRON_COLLAPSE, CHEVRON_KEEP = "", ""
+CHEVRON_KEEP = "\ue5cc"  # collapse button while hover-opened: click to pin
 
 
 class Pill:

@@ -9,10 +9,10 @@ BUTTONS = range(2, 6)  # mouse buttons free for custom actions (1 is the tap)
 
 # icon picker for custom buttons: Material Symbols codepoint, label
 ICON_CHOICES = [
-    ("", "Home"), ("", "App switcher"), ("", "Lock screen"), ("", "Control Centre"),
-    ("", "Notification Centre"), ("", "Screenshot"), ("", "Siri"), ("", "Volume up"),
-    ("", "Volume down"), ("", "Mute"), ("", "Rotate"), ("", "Spotlight"),
-    ("", "Camera"), ("", "Shake"), ("", "Accessibility"), ("", "Star"),
+    ("\ue9b2", "Home"), ("\ue8eb", "App switcher"), ("\ue899", "Lock screen"), ("\ue429", "Control Centre"),
+    ("\ue7f5", "Notification Centre"), ("\uec08", "Screenshot"), ("\ue31d", "Siri"), ("\ue050", "Volume up"),
+    ("\ue04d", "Volume down"), ("\ue04f", "Mute"), ("\uf2d5", "Rotate"), ("\uef7a", "Spotlight"),
+    ("\ue412", "Camera"), ("\uf2cb", "Shake"), ("\ue92c", "Accessibility"), ("\uf09a", "Star"),
 ]
 _ICONS = {c for c, _ in ICON_CHOICES}
 

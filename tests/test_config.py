@@ -6,7 +6,7 @@ import pytest
 from scrcrappy import config
 from scrcrappy.config import Config, Custom
 
-HOME = ""
+HOME = "\ue9b2"
 
 
 def test_missing_file_gives_defaults(tmp_path):
