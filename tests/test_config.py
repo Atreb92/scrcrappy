@@ -48,3 +48,7 @@ def test_save_is_atomic(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         config.save(Config(natural_scroll=False), p)
     assert config.load(p).natural_scroll is True
+
+
+def test_power_icon_offered():
+    assert ("\uf8c7", "Power / Lock") in config.ICON_CHOICES
