@@ -233,10 +233,13 @@ class Settings:
 
     def __init__(self, cfg: Config, place: Callable[[tuple[int, int]], tuple[int, int]], on_change: Callable[[], None],
                  on_natural: Callable[[], None], on_close: Callable[[], None], calibration: float | None = None,
-                 on_calibrate: Callable[[], None] | None = None) -> None:
-        """`calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section."""
+                 on_calibrate: Callable[[], None] | None = None, on_ai: Callable[[], None] | None = None,
+                 ai_status: Callable[[], str] = lambda: "", on_copy: Callable[[], None] | None = None) -> None:
+        """`calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
+        `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
+        the command that registers it with an AI client."""
         self.cfg, self.place, self.on_change, self.on_natural, self.on_close = cfg, place, on_change, on_natural, on_close
-        self.on_calibrate = on_calibrate
+        self.on_calibrate, self.on_ai, self.ai_status, self.on_copy = on_calibrate, on_ai, ai_status, on_copy
         self.font, self.small = pygame.font.Font(None, 20), pygame.font.Font(None, 18)
         self.calibration_lines = [] if calibration is None else _wrap(
             f"Current: {calibration:.2f} screen px per mouse count. The cursor speed is set on the iPhone in "
@@ -268,7 +271,15 @@ class Settings:
         self.shots_top = y
         self.hits["screenshots"] = pygame.Rect(PAD, y + 20, PANEL_W - 2 * PAD - 34, 26)
         self.hits["browse"] = pygame.Rect(PANEL_W - PAD - 28, y + 20, 28, 26)
-        y += 20 + 26
+        y += 20 + 26 + 12
+        self.ai_top = y
+        self.hits["ai"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
+        y += 26
+        self.ai_lines = _wrap(self.ai_status(), self.small, PANEL_W - 2 * PAD) if self.cfg.ai_control else []
+        if self.cfg.ai_control:
+            y += 16 * len(self.ai_lines) + 6
+            self.hits["copy"] = pygame.Rect(PANEL_W - PAD - 150, y, 150, 28)
+            y += 28
         if self.calibration_lines:
             self.calib_top = y + 14
             y = self.calib_top + 20 + 16 * len(self.calibration_lines) + 6
@@ -299,15 +310,18 @@ class Settings:
         if hit and hit.startswith("mode:"):
             self.cfg.mouse = MODES[int(hit[5:])][0]
             self.on_change()
-            self._layout()  # the port row comes and goes with ESP32
-            self.win.size = (PANEL_W, self.height)
-            self.win.position = self.place(self.win.size)
+            self._relayout()  # the port row comes and goes with ESP32
         elif hit in ("port", "screenshots") and hit != self.editing:
             self._commit()
             self.editing = hit
             pygame.key.start_text_input()
         elif hit == "natural":
             self.on_natural()
+        elif hit == "ai" and self.on_ai:
+            self.on_ai()
+            self._relayout()
+        elif hit == "copy" and self.on_copy:
+            self.on_copy()
         elif hit == "calibrate":
             self.close()
             self.on_calibrate()
@@ -319,6 +333,11 @@ class Settings:
                 pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: self._picked(path)))
 
             threading.Thread(target=run, daemon=True).start()
+
+    def _relayout(self) -> None:
+        self._layout()
+        self.win.size = (PANEL_W, self.height)
+        self.win.position = self.place(self.win.size)
 
     def _picked(self, path: str | None) -> None:
         self.picking = False
@@ -348,6 +367,13 @@ class Settings:
             self.closed = True
             self.win.destroy()
             self.on_close()
+
+    def _switch(self, surf: pygame.Surface, key: str, label: str, on: bool) -> None:
+        sw = self.hits[key]
+        surf.blit(self.font.render(label, True, FG), (PAD, sw.y + 2))
+        pygame.draw.rect(surf, ACCENT if on else SEP, sw, border_radius=sw.height // 2)
+        knob = (sw.right - sw.height // 2 if on else sw.x + sw.height // 2, sw.centery)
+        pygame.draw.circle(surf, (255, 255, 255), knob, sw.height // 2 - 2)
 
     def _field(self, surf: pygame.Surface, key: str, placeholder: str) -> None:
         r = self.hits[key]
@@ -380,12 +406,7 @@ class Settings:
         if "port" in self.hits:
             surf.blit(self.small.render("Port", True, FG), (PAD, self.hits["port"].y + 7))
             self._field(surf, "port", Config.port)
-        sw = self.hits["natural"]
-        surf.blit(self.font.render("Natural scrolling", True, FG), (PAD, sw.y + 2))
-        on = self.cfg.natural_scroll
-        pygame.draw.rect(surf, ACCENT if on else SEP, sw, border_radius=sw.height // 2)
-        knob = (sw.right - sw.height // 2 if on else sw.x + sw.height // 2, sw.centery)
-        pygame.draw.circle(surf, (255, 255, 255), knob, sw.height // 2 - 2)
+        self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
         surf.blit(self.font.render("Screenshots", True, FG), (PAD, self.shots_top))
         self._field(surf, "screenshots", "~/Pictures")
         b = self.hits["browse"]
@@ -393,6 +414,15 @@ class Settings:
         pygame.draw.rect(surf, ACCENT, b, 1)
         glyph = self.icons.render("\ue2c8", True, ACCENT)  # folder_open
         surf.blit(glyph, glyph.get_rect(center=b.center))
+        self._switch(surf, "ai", "Allow AI control (MCP)", self.cfg.ai_control)
+        for i, line in enumerate(self.ai_lines):
+            surf.blit(self.small.render(line, True, MUTED), (PAD, self.ai_top + 28 + 16 * i))
+        if "copy" in self.hits:
+            c = self.hits["copy"]
+            pygame.draw.rect(surf, (255, 255, 255), c)
+            pygame.draw.rect(surf, ACCENT, c, 1)
+            label = self.small.render("Copy setup command", True, ACCENT)
+            surf.blit(label, label.get_rect(center=c.center))
         if self.calibration_lines:
             surf.blit(self.font.render("Pointer calibration", True, FG), (PAD, self.calib_top))
             for i, line in enumerate(self.calibration_lines):

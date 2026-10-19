@@ -104,3 +104,8 @@ def test_every_icon_is_in_the_subset_font():
 
     missing = look("\U0010fffd")  # a codepoint no icon font has: renders the "missing" box
     assert [hex(ord(c)) for c in used if look(c) == missing] == []
+
+
+def test_led_on_top_only_while_ai_control_is_on():
+    assert buttons(True, [], agent=True, led=True)[0].id == "led"
+    assert "led" not in [b.id for b in buttons(True, [], agent=True) if b]
