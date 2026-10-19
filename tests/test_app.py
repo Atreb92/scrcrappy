@@ -163,3 +163,14 @@ def test_first_click_on_unfocused_pill_is_delivered(monkeypatch):
     monkeypatch.delenv("SDL_MOUSE_FOCUS_CLICKTHROUGH", raising=False)
     importlib.reload(scrcrappy.app)
     assert os.environ["SDL_MOUSE_FOCUS_CLICKTHROUGH"] == "1"
+
+
+def test_failed_config_save_warns_instead_of_crashing(capsys):
+    from scrcrappy.app import save_or_warn
+    from scrcrappy.config import Config
+
+    def broken(cfg):
+        raise OSError("read-only file system")
+
+    save_or_warn(broken, Config())
+    assert "could not save settings" in capsys.readouterr().err

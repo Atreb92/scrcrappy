@@ -82,6 +82,14 @@ class Controller:
             self.release_all()  # keys released elsewhere never reach us
 
 
+def save_or_warn(save: Callable[[Config], None], cfg: Config) -> None:
+    """Settings are saved after every toolbar change; a failed save must not end the session."""
+    try:
+        save(cfg)
+    except OSError as e:
+        print(f"warning: could not save settings: {e}", file=sys.stderr)
+
+
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
         save: Callable[[Config], None] = config.save, title: str = "scrcrappy") -> bool:
