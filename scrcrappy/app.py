@@ -11,7 +11,7 @@ from .mouse import Pointer
 from . import agent as agent_mod, config
 from .config import Config, Custom
 from .dialog import Dialog, DialogState, Menu, Popups, Settings
-from .toolbar import GAP, Pill, buttons, next_free
+from .toolbar import GAP, ICONS, Pill, buttons, next_free
 from .video import LatestFrame
 
 
@@ -104,6 +104,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     Toolbar changes (custom buttons, natural scrolling, pinned) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667), resizable=True)
+    main.set_icon(pygame.image.load(ICONS / "scrcrappy.png"))  # rendered from icons/scrcrappy.svg
     pygame.key.stop_text_input()  # raw key events only, no IME
     clock = pygame.time.Clock()
     img, controller = None, None

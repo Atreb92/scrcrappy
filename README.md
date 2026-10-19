@@ -1,3 +1,5 @@
+<img src="scrcrappy/icons/scrcrappy.svg" width="96" alt="">
+
 # scrcrappy
 
 scrcpy for iOS: mirror and control an iPhone over USB.
