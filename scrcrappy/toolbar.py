@@ -33,7 +33,7 @@ def next_free(customs: list[Custom]) -> int | None:
     return next((n for n in BUTTONS if n not in used), None)
 
 
-def buttons(has_input: bool, natural: bool, customs: list[Custom], agent: bool = False,
+def buttons(has_input: bool, customs: list[Custom], agent: bool = False,
             settings: bool = False) -> list[Button | None]:
     """The pill's items top to bottom; None is a separator. With the agent (jailbreak): copy, screenshot and the
     phone's buttons instead of the AssistiveTouch custom buttons."""
@@ -61,7 +61,6 @@ def buttons(has_input: bool, natural: bool, customs: list[Custom], agent: bool =
     return [
         *middle,
         None,
-        Button("natural", "\ue8d5", "Natural scrolling", toggled=natural),
         Button("settings", "\ue8b8", "Settings", toggled=settings),
         None,
         Button("collapse", "\ue5cb", "Collapse (shows again on hover)", small=True),

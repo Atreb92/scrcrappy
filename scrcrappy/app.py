@@ -101,7 +101,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
     with `agent`, clicks and keys go to scrcrappy-agent instead.
-    Toolbar changes (custom buttons, natural scrolling, pinned) are written to `cfg` and saved at once."""
+    Toolbar and Settings changes (custom buttons, natural scrolling, pinned, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667), resizable=True)
     main.set_icon(pygame.image.load(ICONS / "scrcrappy.png"))  # rendered from icons/scrcrappy.svg
@@ -119,8 +119,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     settings_closed_at = 0.0
 
     def items():
-        return buttons(has_input=make_pointer is not None or agent is not None, natural=cfg.natural_scroll,
-                       customs=customs, agent=agent is not None, settings=bool(settings and not settings.closed))
+        return buttons(has_input=make_pointer is not None or agent is not None, customs=customs, agent=agent is not None, settings=bool(settings and not settings.closed))
 
     def changed() -> None:
         save_or_warn(save, cfg)
@@ -179,10 +178,6 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if agent and controller:
             controller.screenshots = cfg.screenshots
 
-    def natural_from_settings() -> None:
-        toggle_natural()
-        pill.set_items(items())
-
     def settings_done() -> None:
         nonlocal settings_closed_at
         settings_closed_at = time.monotonic()
@@ -193,7 +188,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if settings and not settings.closed:
             settings.close()
         elif time.monotonic() - settings_closed_at > 0.5:  # else this click is what closed it (focus moved)
-            settings = popups.open(lambda: Settings(cfg, place, settings_changed, natural_from_settings, settings_done)) or settings
+            settings = popups.open(lambda: Settings(cfg, place, settings_changed, toggle_natural, settings_done)) or settings
         pill.set_items(items())
 
     pill = Pill(main, items(), {
@@ -206,7 +201,6 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "custom": click,
         "add": edit,
         "menu": menu,
-        "natural": toggle_natural,
         "settings": open_settings,
         "pinned": set_pinned,
     }, pinned=cfg.pinned)
@@ -241,7 +235,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             pill.update(app_focused=pill.focused() or popups.focused())
             pill.draw()
             if settings:
-                settings.draw()  # natural scrolling may have changed from the pill
+                settings.draw()
             clock.tick(60)
         return False
     finally:

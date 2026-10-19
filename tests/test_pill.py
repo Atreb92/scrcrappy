@@ -14,8 +14,8 @@ def pill():
     pygame.init()
     main = pygame.Window("phone", (300, 500))
     calls = []
-    actions = {i: (lambda *a, i=i: calls.append((i, *a))) for i in ("paste", "copy", "natural", "add", "custom", "menu")}
-    p = Pill(main, buttons(has_input=True, natural=False, customs=[Custom(2, "\ue9b2", "Home")]), actions)
+    actions = {i: (lambda *a, i=i: calls.append((i, *a))) for i in ("paste", "copy", "settings", "add", "custom", "menu")}
+    p = Pill(main, buttons(has_input=True, customs=[Custom(2, "\ue9b2", "Home")]), actions)
     p.calls = calls
     yield p
     pygame.quit()
@@ -55,7 +55,7 @@ def test_right_click_other_does_nothing(pill):
 
 
 def test_set_items_relayouts(pill):
-    pill.set_items(buttons(True, False, []))
+    pill.set_items(buttons(True, []))
     assert not any(b.id.startswith("custom:") for b, _ in pill.rects)
 
 
@@ -65,9 +65,9 @@ def test_click_on_disabled_button_does_nothing(pill):
 
 
 def test_toggle_flips_state(pill):
-    click(pill, "natural")
-    assert pill.calls == [("natural",)]
-    assert next(b for b, _ in pill.rects if b.id == "natural").toggled is True
+    click(pill, "settings")
+    assert pill.calls == [("settings",)]
+    assert next(b for b, _ in pill.rects if b.id == "settings").toggled is True
 
 
 def test_tooltip_after_hover_hides_on_leave(pill):
@@ -141,7 +141,7 @@ def test_pin_changes_reported(pill):
 
 def test_starts_collapsed_when_not_pinned():
     pygame.init()
-    p = Pill(pygame.Window("phone", (300, 500)), buttons(True, False, []), {}, pinned=False)
+    p = Pill(pygame.Window("phone", (300, 500)), buttons(True, []), {}, pinned=False)
     assert p.collapsed and not p.pinned
     pygame.quit()
 

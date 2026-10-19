@@ -192,7 +192,7 @@ def test_run_survives_failing_settings_save(capsys):
 
     def init(self, *a, **kw):
         orig_init(self, *a, **kw)
-        self.actions["natural"]()  # as if the user clicked the toggle right away
+        self.actions["pinned"](False)  # as if the user clicked the chevron right away
 
     Pill.__init__ = init
     try:

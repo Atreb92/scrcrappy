@@ -124,13 +124,12 @@ Hover a button for its name.
 | Copy | Phone clipboard → computer, with `--mouse agent` only (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
-| Natural scrolling | Flips the wheel direction live. |
 | Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
 | Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32
 each have their own mapping on the phone). The toolbar's state is saved in
-`~/.config/scrcrappy/config.json`: custom buttons, natural scrolling, and whether the bar is pinned.
+`~/.config/scrcrappy/config.json`: custom buttons, whether the bar is pinned and the Settings (input mode, natural scrolling, screenshot folder).
 `--natural-scroll` / `--no-natural-scroll` override the saved scrolling direction.
 
 After updating to the 5-button version, forget and re-pair the device on the phone once.
