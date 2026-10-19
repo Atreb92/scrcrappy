@@ -4,7 +4,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import app, calibrate, mouse, video
+from . import app, calibrate, links, mouse, video
 
 BUNDLED_QVH = Path(__file__).resolve().parent.parent / "bin" / "qvh"  # from scripts/build-qvh.sh
 
@@ -13,8 +13,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="scrcrappy", description="Mirror and control an iPhone over USB.")
     parser.add_argument("--qvh", default=str(BUNDLED_QVH) if BUNDLED_QVH.exists() else "qvh",
                         help="path to the patched qvh binary (default: bin/qvh, else PATH)")
-    parser.add_argument("--mouse", choices=["none", "ble"], default="none",
-                        help="ble: this computer's Bluetooth acts as a mouse for AssistiveTouch (Linux)")
+    parser.add_argument("--mouse", choices=["none", "ble", "esp32"], default="none",
+                        help="drive the AssistiveTouch cursor through a BLE mouse: ble = this computer's "
+                             "Bluetooth (Linux), esp32 = ESP32 with firmware/esp32-mouse on --port")
+    parser.add_argument("--port", default="/dev/ttyUSB0", help="ESP32 serial port (default: /dev/ttyUSB0)")
     parser.add_argument("--ble-python", default="/usr/bin/python3",
                         help="python with python3-dbus and python3-gobject, runs the Bluetooth helper")
     parser.add_argument("--calibrate", action="store_true",
@@ -26,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: qvh not found at '{args.qvh}', build it with scripts/build-qvh.sh", file=sys.stderr)
         return 1
     if args.calibrate and args.mouse == "none":
-        print("error: --calibrate needs --mouse ble", file=sys.stderr)
+        print("error: --calibrate needs --mouse ble or esp32", file=sys.stderr)
         return 1
     dev = video.find_iphone()
     if not dev:
@@ -36,14 +38,15 @@ def main(argv: list[str] | None = None) -> int:
     video.reset_if_stuck(dev)
 
     make_pointer = None
-    if args.mouse == "ble":
+    if args.mouse != "none":
         try:
-            send, connected, _helper = mouse.start_ble(args.ble_python)
+            link = links.ble(args.ble_python) if args.mouse == "ble" else links.esp32(args.port)
         except (OSError, RuntimeError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
+        send, connected = link.send, link.connected
         if not connected.wait(5):
-            print("waiting for the iPhone to connect to 'scrcrappy mouse' "
+            print("waiting for the iPhone to connect to the scrcrappy mouse "
                   "(AssistiveTouch on; pair it in Settings > Bluetooth the first time)...", file=sys.stderr)
             connected.wait()
         gain = mouse.Gain(calibrate.load(serial))

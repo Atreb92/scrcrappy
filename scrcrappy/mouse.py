@@ -7,10 +7,8 @@ was measured at that rate.
 """
 import collections
 import math
-import subprocess
 import threading
 import time
-from pathlib import Path
 from typing import Callable
 
 TICK = 0.008  # seconds between reports
@@ -128,28 +126,3 @@ class Pointer:
     def stop(self) -> None:
         self._thread = None
 
-
-def start_ble(python: str) -> tuple[Send, threading.Event, subprocess.Popen]:
-    """Start the BLE mouse helper (blemouse.py) under the system python, which has the BlueZ bindings.
-    Returns a report sender, an event set once the phone is connected, and the process."""
-    proc = subprocess.Popen([python, "-I", str(Path(__file__).with_name("blemouse.py"))],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
-    if proc.stdout.readline().strip() != "ready":  # helper prints the reason on stderr
-        proc.wait()
-        raise RuntimeError("Bluetooth mouse helper failed to start")
-    connected = threading.Event()
-
-    def watch() -> None:
-        for line in proc.stdout:
-            if line.strip() == "connected":
-                connected.set()
-
-    threading.Thread(target=watch, daemon=True).start()
-
-    def send(dx: int, dy: int, buttons: int, wheel: int) -> None:
-        try:
-            proc.stdin.write(f"{dx} {dy} {buttons} {wheel}\n")
-        except BrokenPipeError:
-            pass  # helper died; the capture/window loop reports the problem
-
-    return send, connected, proc
