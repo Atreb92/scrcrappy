@@ -78,3 +78,18 @@ def test_click_send_calls_on_send():
     d, done = dialog(on_send=lambda: sent.append(1))
     d.handle(ev(d, pygame.MOUSEBUTTONUP, button=1, pos=d.hits["send"].center))
     assert sent == [1] and done == []
+
+
+def test_menu_remove_calls_back():
+    from scrcrappy.dialog import Menu
+    calls = []
+    m = Menu((100, 100), 3, on_edit=lambda: calls.append("edit"), on_remove=lambda: calls.append("remove"))
+    m.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=m.win, button=1, pos=m.hits["remove"].center))
+    assert calls == ["remove"] and m.closed
+
+
+def test_menu_closes_when_focus_lost():
+    from scrcrappy.dialog import Menu
+    m = Menu((100, 100), 3, on_edit=lambda: None, on_remove=lambda: None)
+    m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.win))
+    assert m.closed

@@ -7,7 +7,10 @@ import pygame
 from .geometry import fit, inside, to_frame
 from .keyqueue import KeyQueue
 from .mouse import Pointer
-from .toolbar import Pill, buttons
+from . import config
+from .config import Config, Custom
+from .dialog import Dialog, DialogState, Menu
+from .toolbar import Pill, buttons, next_free
 from .video import LatestFrame
 
 
@@ -80,37 +83,81 @@ class Controller:
 
 
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
-        natural_scroll: bool = False, keys: KeyQueue | None = None, title: str = "scrcrappy") -> bool:
+        keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
+        save: Callable[[Config], None] = config.save, title: str = "scrcrappy") -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
-    With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known)."""
+    With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known).
+    Toolbar changes (custom buttons, natural scrolling, pinned) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667), resizable=True)
     pygame.key.stop_text_input()  # raw key events only, no IME
     clock = pygame.time.Clock()
     img, controller = None, None
-    natural = [natural_scroll]  # the toolbar may flip it before the controller exists
+    cfg = cfg or Config()
+    customs = cfg.customs.setdefault(device_key, [])
+    popups: list = []  # open Dialog / Menu windows
+
+    def items():
+        return buttons(has_input=make_pointer is not None, natural=cfg.natural_scroll, customs=customs)
+
+    def changed() -> None:
+        save(cfg)
+        pill.set_items(items())
 
     def paste() -> None:
         if controller and (skipped := controller.paste()):
             print(f"paste: skipped {skipped} characters (US layout, ASCII only)", file=sys.stderr)
 
     def toggle_natural() -> None:
-        natural[0] = not natural[0]
+        cfg.natural_scroll = not cfg.natural_scroll
         if controller:
-            controller.natural_scroll = natural[0]
+            controller.natural_scroll = cfg.natural_scroll
+        save(cfg)
 
-    pill = Pill(main, buttons(has_input=make_pointer is not None, natural=natural_scroll, customs=[]), {
+    def set_pinned(pinned: bool) -> None:
+        cfg.pinned = pinned
+        save(cfg)
+
+    def click(n: int) -> None:
+        if controller:
+            controller.pointer.click(1 << (n - 1))
+
+    def edit(n: int | None = None) -> None:
+        current = next((c for c in customs if c.button == n), None)
+        button = n if current else next_free(customs)
+        if button is None or popups:
+            return
+
+        def done(result: Custom | None) -> None:
+            if result:
+                customs[:] = [c for c in customs if c.button != result.button] + [result]
+                changed()
+
+        popups.append(Dialog(DialogState(button, device_name, current), on_send=lambda: click(button), on_done=done))
+
+    def menu(n: int) -> None:
+        def remove() -> None:
+            customs[:] = [c for c in customs if c.button != n]
+            changed()
+
+        rect = next(r for b, r in pill.rects if b.id == f"custom:{n}")
+        px, py = pill.win.position
+        popups.append(Menu((px + pill.win.size[0] + 4, py + rect.y), n, on_edit=lambda: edit(n), on_remove=remove))
+
+    pill = Pill(main, items(), {
         "paste": paste,
         "copy": lambda: None,
-        "custom": lambda n: controller and controller.pointer.click(1 << (n - 1)),
-        "add": lambda: None,
-        "menu": lambda n: None,
+        "custom": click,
+        "add": edit,
+        "menu": menu,
         "natural": toggle_natural,
-    })
+        "pinned": set_pinned,
+    }, pinned=cfg.pinned)
     try:
         while alive():
+            popups[:] = [p for p in popups if not p.closed]
             for event in pygame.event.get():
-                if pill.handle(event):
+                if any(p.handle(event) for p in list(popups)) or pill.handle(event):
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
@@ -125,14 +172,14 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     pointer = make_pointer(size)
                     pointer.home()
                     pointer.start()
-                    controller = Controller(pointer, natural[0], keys)
+                    controller = Controller(pointer, cfg.natural_scroll, keys)
             screen = main.get_surface()
             screen.fill((0, 0, 0))
             if img:
                 x, y, w, h = fit(img.get_size(), screen.get_size())
                 screen.blit(pygame.transform.smoothscale(img, (w, h)), (x, y))
             main.flip()
-            pill.update()
+            pill.update(app_focused=pill.focused() or any(not p.closed and p.win.focused for p in popups))
             pill.draw()
             clock.tick(60)
         return False

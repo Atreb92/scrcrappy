@@ -104,12 +104,13 @@ class Pill:
     """Borderless window beside the phone window holding the buttons. Pinned open by default;
     the chevron collapses it to a tab that opens while hovered (click the chevron again to pin)."""
 
-    def __init__(self, main: pygame.Window, items: list[Button | None], actions: dict[str, Callable[[], None]]) -> None:
+    def __init__(self, main: pygame.Window, items: list[Button | None], actions: dict[str, Callable],
+                 pinned: bool = True) -> None:
         self.main, self.items, self.actions = main, items, actions
         self.win = pygame.Window("scrcrappy tools", TAB, borderless=True, utility=True)
         self.tip_win: pygame.Window | None = None
         self.tip_text: str | None = None
-        self.collapsed, self.pinned = False, True
+        self.collapsed, self.pinned = not pinned, pinned
         self.hover: Button | None = None
         self.hover_since = 0.0
         self.leave_at: float | None = None  # when the mouse left a hover-opened pill
@@ -184,6 +185,8 @@ class Pill:
                 self._set_collapsed(True)
             else:
                 self.pinned, self.leave_at = True, None
+            if "pinned" in self.actions:
+                self.actions["pinned"](self.pinned)
         else:
             if button.toggled is not None:
                 button.toggled = not button.toggled

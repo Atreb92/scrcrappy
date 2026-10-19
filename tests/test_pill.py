@@ -130,3 +130,17 @@ def test_hides_when_app_loses_focus_and_returns(pill):
     assert not pill.visible
     pill.update(now=0.4, app_focused=True)
     assert pill.visible
+
+
+def test_pin_changes_reported(pill):
+    seen = []
+    pill.actions["pinned"] = seen.append
+    click(pill, "collapse")
+    assert seen == [False]
+
+
+def test_starts_collapsed_when_not_pinned():
+    pygame.init()
+    p = Pill(pygame.Window("phone", (300, 500)), buttons(True, False, []), {}, pinned=False)
+    assert p.collapsed and not p.pinned
+    pygame.quit()

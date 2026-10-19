@@ -154,3 +154,51 @@ class Dialog:
         self._button(surf, self.hits["cancel"], "Cancel", False)
         self._button(surf, self.hits["ok"], "Save" if s.title == "Edit button" else "Add to toolbar", True)
         self.win.flip()
+
+
+class Menu:
+    """Right-click menu of a custom button: Edit… / Remove. Closes when it loses focus."""
+
+    def __init__(self, pos: tuple[int, int], button: int, on_edit: Callable[[], None], on_remove: Callable[[], None]) -> None:
+        self.button, self.on_edit, self.on_remove = button, on_edit, on_remove
+        self.font, self.small = pygame.font.Font(None, 20), pygame.font.Font(None, 16)
+        self.note = _wrap(f"Removing keeps the phone's Button {button} mapping: set it to None there "
+                          "(AssistiveTouch › Devices) if you don't want it.", self.small, 220)
+        self.hits = {"edit": pygame.Rect(0, 4, 240, 30), "remove": pygame.Rect(0, 34, 240, 30)}
+        self.closed = False
+        self.win = pygame.Window("scrcrappy menu", (240, 72 + 15 * len(self.note)), borderless=True, utility=True)
+        self.win.position = pos
+        self.win.focus()
+        self.draw()
+
+    def handle(self, event: pygame.event.Event) -> bool:
+        if self.closed or getattr(event, "window", None) is not self.win:
+            return False
+        if event.type == pygame.WINDOWFOCUSLOST or event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.close()
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            hit = next((k for k, r in self.hits.items() if r.collidepoint(event.pos)), None)
+            if hit:
+                self.close()
+                (self.on_edit if hit == "edit" else self.on_remove)()
+        elif event.type == pygame.MOUSEMOTION:
+            self.draw(event.pos)
+        return True
+
+    def close(self) -> None:
+        if not self.closed:
+            self.closed = True
+            self.win.destroy()
+
+    def draw(self, mouse: tuple[int, int] | None = None) -> None:
+        surf = self.win.get_surface()
+        surf.fill(SURFACE)
+        for key, text in (("edit", "Edit…"), ("remove", "Remove")):
+            r = self.hits[key]
+            if mouse and r.collidepoint(mouse):
+                pygame.draw.rect(surf, ON_BG, r)
+            surf.blit(self.font.render(text, True, TEXT), (12, r.y + 8))
+        pygame.draw.line(surf, SEP, (8, 66), (232, 66))
+        for i, line in enumerate(self.note):
+            surf.blit(self.small.render(line, True, MUTED), (12, 70 + 15 * i))
+        self.win.flip()
