@@ -2,7 +2,7 @@
 
 Runs under the *system* python (needs python3-dbus + python3-gobject), as a subprocess of scrcrappy.
 stdin, one HID report per line, sent at once:
-  "dx dy buttons wheel"        mouse (dx/dy/wheel in -127..127)
+  "dx dy buttons wheel"        mouse (buttons: bits 0-4; dx/dy/wheel in -127..127)
   "k modifiers k1 k2 k3 k4 k5 k6"   keyboard: modifier bits + held key usages (0 = none)
 stdout: "ready" once advertising, "connected" when the phone subscribes to reports.
 """
@@ -35,8 +35,8 @@ REPORT_MAP = bytes.fromhex(  # keyboard first, with LED output: iOS only treats 
     "c0"
     "05010902a1018501"  # generic desktop, mouse, collection(application), report id 1
     "0901a100"  # pointer, collection(physical)
-    "05091901290315002501950375018102"  # 3 buttons
-    "950175058103"  # 5 bits padding
+    "05091901290515002501950575018102"  # 5 buttons (2-5: custom toolbar actions)
+    "950175038103"  # 3 bits padding
     "0501093009310938"  # X, Y, wheel
     "1581257f750895038106"  # int8, relative
     "c0c0"
@@ -215,7 +215,7 @@ def serve(bus, hci):
                 app.keys.notify(bytes([mods & 0xFF, 0, *(k & 0xFF for k in keys)]))
             else:
                 dx, dy, buttons, wheel = (int(v) for v in line.split())
-                app.report.notify(bytes([buttons & 0x07, dx & 0xFF, dy & 0xFF, wheel & 0xFF]))
+                app.report.notify(bytes([buttons & 0x1F, dx & 0xFF, dy & 0xFF, wheel & 0xFF]))
         return True
 
     GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_stdin)
