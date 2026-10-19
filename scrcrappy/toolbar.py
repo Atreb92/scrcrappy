@@ -81,7 +81,8 @@ BG, FG, ON_BG, ON_FG, DISABLED, SEP = (0xDF, 0xE6, 0xF1), (0x3A, 0x46, 0x56), (0
 HOVER = (0x3A, 0x46, 0x56, 26)  # FG at 10%
 TIP_BG, TIP_FG = (0x30, 0x30, 0x34), (0xF2, 0xF0, 0xF4)
 TIP_DELAY, TIP_WIDTH = 0.5, 220
-AUTOHIDE = 3.0  # s after the mouse leaves a hover-opened pill
+AUTOHIDE = 2.0  # s after the mouse leaves a hover-opened pill
+UNFOCUSED_HIDE = 0.2  # s with none of our windows focused before the pill hides
 CHEVRON_COLLAPSE, CHEVRON_KEEP = "", ""
 
 
@@ -98,6 +99,8 @@ class Pill:
         self.hover: Button | None = None
         self.hover_since = 0.0
         self.leave_at: float | None = None  # when the mouse left a hover-opened pill
+        self.visible = True
+        self.unfocused_since: float | None = None
         self.rects: list[tuple[Button, pygame.Rect]] = []
         self._fonts: dict[tuple[str, int], pygame.font.Font] = {}
         self.follow()
@@ -166,9 +169,22 @@ class Pill:
             self.actions[button.id]()
         self.main.focus()  # keep typing going to the phone
 
-    def update(self, now: float | None = None) -> None:
-        """Tooltip and auto-hide timing; call once per frame."""
+    def focused(self) -> bool:
+        return any(w is not None and w.focused for w in (self.main, self.win, self.tip_win))
+
+    def update(self, now: float | None = None, app_focused: bool | None = None) -> None:
+        """Tooltip, auto-hide and focus timing; call once per frame. The pill is a utility window that
+        window managers keep on top, so it hides while another application is active."""
         now = time.monotonic() if now is None else now
+        app_focused = self.focused() if app_focused is None else app_focused
+        if app_focused:
+            self.unfocused_since = None
+            if not self.visible:
+                self.show()
+        elif self.unfocused_since is None:
+            self.unfocused_since = now
+        elif self.visible and now - self.unfocused_since >= UNFOCUSED_HIDE:
+            self.hide()
         if self.leave_at is not None and now - self.leave_at >= AUTOHIDE:
             self.leave_at = None
             self._set_collapsed(True)
@@ -234,10 +250,12 @@ class Pill:
         self.win.flip()
 
     def hide(self) -> None:
+        self.visible = False
         self.win.hide()
         self._show_tip(None)
 
     def show(self) -> None:
+        self.visible = True
         self.win.show()
         self.follow()
 

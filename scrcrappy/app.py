@@ -112,10 +112,6 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     return True
                 if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
                     pill.follow()
-                elif event.type == pygame.WINDOWMINIMIZED:
-                    pill.hide()
-                elif event.type == pygame.WINDOWRESTORED:
-                    pill.show()
                 if controller and img:
                     controller.handle(event, fit(img.get_size(), main.size), img.get_size())
             if frame := frames.get():

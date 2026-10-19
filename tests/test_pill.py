@@ -57,16 +57,16 @@ def test_tooltip_after_hover_hides_on_leave(pill):
     assert pill.tip_text is None
 
 
-def test_collapse_then_expand_on_enter_and_recollapse_3s_after_leave(pill):
+def test_collapse_then_expand_on_enter_and_recollapse_2s_after_leave(pill):
     click(pill, "collapse")
     assert pill.collapsed and pill.win.size == TAB
     pill.handle(ev(pill, pygame.WINDOWENTER))
     assert not pill.collapsed
     pill.handle(ev(pill, pygame.WINDOWLEAVE))
     left = pill.leave_at
-    pill.update(now=left + 2.9)
+    pill.update(now=left + 1.9)
     assert not pill.collapsed
-    pill.update(now=left + 3.0)
+    pill.update(now=left + 2.0)
     assert pill.collapsed
 
 
@@ -99,3 +99,12 @@ def test_collapsing_hides_tooltip(pill):
 
 def test_events_for_other_windows_are_ignored(pill):
     assert pill.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=pill.main, button=1, pos=(1, 1))) is False
+
+
+def test_hides_when_app_loses_focus_and_returns(pill):
+    pill.update(now=0, app_focused=False)
+    assert pill.visible  # brief focus gaps (clicking the pill) don't hide it
+    pill.update(now=0.3, app_focused=False)
+    assert not pill.visible
+    pill.update(now=0.4, app_focused=True)
+    assert pill.visible
