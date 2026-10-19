@@ -7,12 +7,12 @@ from typing import Callable
 import pygame
 
 PILL_RATIO = 0.8  # of the phone window's height
-GAP = 6  # between phone window and pill
+GAP = 11  # between phone window and pill
 PAD_Y, PAD_X = 8, 4
 MAX_D = 40  # button diameter cap
 TAB = (8, 48)  # collapsed pill
 NEEDS_INPUT = "Needs --mouse ble or esp32"
-COPY_TIP = "Copy to computer needs the jailbreak backend: a Bluetooth keyboard/mouse can't read the phone's clipboard."
+COPY_TIP = "Needs jailbreak"  # a Bluetooth keyboard/mouse can't read the phone's clipboard
 
 
 @dataclass
@@ -81,6 +81,7 @@ BG, FG, ON_BG, ON_FG, DISABLED, SEP = (0xDF, 0xE6, 0xF1), (0x3A, 0x46, 0x56), (0
 HOVER = (0x3A, 0x46, 0x56, 26)  # FG at 10%
 TIP_BG, TIP_FG = (0x30, 0x30, 0x34), (0xF2, 0xF0, 0xF4)
 TIP_DELAY, TIP_WIDTH = 0.5, 220
+AUTOHIDE = 3.0  # s after the mouse leaves a hover-opened pill
 CHEVRON_COLLAPSE, CHEVRON_KEEP = "", ""
 
 
@@ -96,6 +97,7 @@ class Pill:
         self.collapsed, self.pinned = False, True
         self.hover: Button | None = None
         self.hover_since = 0.0
+        self.leave_at: float | None = None  # when the mouse left a hover-opened pill
         self.rects: list[tuple[Button, pygame.Rect]] = []
         self._fonts: dict[tuple[str, int], pygame.font.Font] = {}
         self.follow()
@@ -129,13 +131,14 @@ class Pill:
         """Consume events meant for the pill; returns False for everything else."""
         if getattr(event, "window", None) not in (self.win, self.tip_win) or self.win is None:
             return False
-        if event.type == pygame.WINDOWENTER and self.collapsed:
+        if event.type == pygame.WINDOWENTER:
+            self.leave_at = None
             self._set_collapsed(False)
         elif event.type == pygame.WINDOWLEAVE:
             self.hover = None
             self._show_tip(None)
             if not self.pinned:
-                self._set_collapsed(True)
+                self.leave_at = time.monotonic()
         elif event.type == pygame.MOUSEMOTION:
             hit = self._hit(event.pos)
             if hit is not self.hover:
@@ -156,7 +159,7 @@ class Pill:
                 self.pinned = False
                 self._set_collapsed(True)
             else:
-                self.pinned = True
+                self.pinned, self.leave_at = True, None
         else:
             if button.toggled is not None:
                 button.toggled = not button.toggled
@@ -164,8 +167,11 @@ class Pill:
         self.main.focus()  # keep typing going to the phone
 
     def update(self, now: float | None = None) -> None:
-        """Tooltip timing; call once per frame."""
+        """Tooltip and auto-hide timing; call once per frame."""
         now = time.monotonic() if now is None else now
+        if self.leave_at is not None and now - self.leave_at >= AUTOHIDE:
+            self.leave_at = None
+            self._set_collapsed(True)
         if self.hover and self.tip_text is None and now - self.hover_since >= TIP_DELAY:
             self._show_tip(self._tip_for(self.hover))
 

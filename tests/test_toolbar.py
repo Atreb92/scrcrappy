@@ -2,7 +2,7 @@ import pytest
 
 from scrcrappy.toolbar import TAB, Button, buttons, layout, pill_rect
 
-COPY_TIP = "Copy to computer needs the jailbreak backend: a Bluetooth keyboard/mouse can't read the phone's clipboard."
+COPY_TIP = "Needs jailbreak"
 
 
 def test_buttons_order_and_copy_disabled():
@@ -29,14 +29,14 @@ def test_no_input_disables_actions():
 def test_pill_is_80_percent_and_centred():
     items = buttons(True, False)
     x, y, w, h = pill_rect((100, 100), (300, 500), (1920, 1080), items)
-    assert (x, y, h) == (406, 150, 400)
+    assert (x, y, h) == (411, 150, 400)  # 11 px gap
     assert w == layout(items, 400)[0]
 
 
 def test_pill_flips_left_at_screen_edge():
     items = buttons(True, False)
     x, y, w, h = pill_rect((1600, 100), (300, 500), (1920, 1080), items)
-    assert x == 1600 - 6 - w
+    assert x == 1600 - 11 - w
 
 
 @pytest.mark.parametrize("height", range(60, 901, 7))

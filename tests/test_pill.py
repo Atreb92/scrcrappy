@@ -57,13 +57,27 @@ def test_tooltip_after_hover_hides_on_leave(pill):
     assert pill.tip_text is None
 
 
-def test_collapse_then_expand_on_enter_and_recollapse_on_leave(pill):
+def test_collapse_then_expand_on_enter_and_recollapse_3s_after_leave(pill):
     click(pill, "collapse")
     assert pill.collapsed and pill.win.size == TAB
     pill.handle(ev(pill, pygame.WINDOWENTER))
     assert not pill.collapsed
     pill.handle(ev(pill, pygame.WINDOWLEAVE))
+    left = pill.leave_at
+    pill.update(now=left + 2.9)
+    assert not pill.collapsed
+    pill.update(now=left + 3.0)
     assert pill.collapsed
+
+
+def test_coming_back_cancels_autohide(pill):
+    click(pill, "collapse")
+    pill.handle(ev(pill, pygame.WINDOWENTER))
+    pill.handle(ev(pill, pygame.WINDOWLEAVE))
+    left = pill.leave_at
+    pill.handle(ev(pill, pygame.WINDOWENTER))
+    pill.update(now=left + 5)
+    assert not pill.collapsed
 
 
 def test_pinning_while_hover_expanded_keeps_it_open(pill):
@@ -71,6 +85,7 @@ def test_pinning_while_hover_expanded_keeps_it_open(pill):
     pill.handle(ev(pill, pygame.WINDOWENTER))
     click(pill, "collapse")  # now "keep open"
     pill.handle(ev(pill, pygame.WINDOWLEAVE))
+    pill.update(now=10**9)
     assert not pill.collapsed
 
 
