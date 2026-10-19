@@ -3,19 +3,20 @@ from typing import Callable
 import pygame
 
 from .geometry import fit, inside, to_frame
+from .keyqueue import KeyQueue
 from .mouse import Pointer
 from .video import LatestFrame
 
 
-Keys = Callable[[int, list[int]], None]  # modifier bits, held key usages
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
+CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
 
 
 class Controller:
     """Window events -> phone: cursor follows the mouse (left button = tap/drag), keys go to a
     BLE keyboard by physical position (SDL scancodes are USB HID usages)."""
 
-    def __init__(self, pointer: Pointer, natural_scroll: bool = False, keys: Keys | None = None) -> None:
+    def __init__(self, pointer: Pointer, natural_scroll: bool = False, keys: KeyQueue | None = None) -> None:
         self.pointer, self.natural_scroll, self.held = pointer, natural_scroll, False
         self.keys, self.pressed = keys, []  # pressed: held non-modifier keys, oldest first
         self.modifiers = 0
@@ -30,12 +31,19 @@ class Controller:
             self.pressed.remove(usage)
         else:
             return
-        self.keys(self.modifiers, self.pressed[:6])  # >6 keys: the extra ones wait (no rollover error)
+        self.keys.report(self.modifiers, self.pressed[:6])  # >6 keys: the extra ones wait (no rollover error)
 
     def release_all(self) -> None:
         if self.keys and (self.pressed or self.modifiers):
             self.pressed, self.modifiers = [], 0
-            self.keys(0, [])
+            self.keys.report(0, [])
+
+    def paste(self) -> int:
+        """Type the computer's clipboard into the phone; returns how many characters were skipped."""
+        if not self.keys:
+            return 0
+        self.keys.report(0, [])  # let go of the modifiers held for the shortcut
+        return self.keys.type_text(pygame.scrap.get_text() or "")
 
     def handle(self, event: pygame.event.Event, rect: tuple[int, int, int, int], frame: tuple[int, int]) -> None:
         p = self.pointer
@@ -56,14 +64,17 @@ class Controller:
         elif event.type in (pygame.WINDOWLEAVE, pygame.WINDOWFOCUSLOST) and self.held:
             p.button(False)  # never leave a finger down on the phone
             self.held = False
-        if event.type in (pygame.KEYDOWN, pygame.KEYUP) and self.keys and 0 < event.scancode <= 0xE7:
+        if (event.type == pygame.KEYDOWN and self.keys and event.scancode == KEY_V
+                and self.modifiers & CTRL and self.modifiers & SHIFT):
+            self.paste()
+        elif event.type in (pygame.KEYDOWN, pygame.KEYUP) and self.keys and 0 < event.scancode <= 0xE7:
             self._key(event.scancode, event.type == pygame.KEYDOWN)
         elif event.type == pygame.WINDOWFOCUSLOST:
             self.release_all()  # keys released elsewhere never reach us
 
 
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
-        natural_scroll: bool = False, keys: Keys | None = None, title: str = "scrcrappy") -> bool:
+        natural_scroll: bool = False, keys: KeyQueue | None = None, title: str = "scrcrappy") -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known)."""
     pygame.init()

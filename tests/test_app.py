@@ -5,6 +5,7 @@ import pytest
 from scrcrappy.app import Controller
 from scrcrappy.calibrate import find_cursor
 from scrcrappy.geometry import to_frame
+from scrcrappy.keyqueue import KeyQueue
 
 RECT, FRAME = (100, 0, 375, 667), (750, 1334)  # frame drawn at half size, letterbox left of x=100
 
@@ -86,11 +87,17 @@ def test_scroll_direction(natural, flipped, expected):
 
 def keyboard():
     sent = []
-    return Controller(FakePointer(), keys=lambda mods, keys: sent.append((mods, list(keys)))), sent
+    return Controller(FakePointer(), keys=KeyQueue(lambda mods, keys: sent.append((mods, list(keys))))), sent
+
+
+def drain(c):
+    while c.keys.drain():
+        pass
 
 
 def key(c, usage, down=True):
     c.handle(ev(pygame.KEYDOWN if down else pygame.KEYUP, scancode=usage), RECT, FRAME)
+    drain(c)
 
 
 def test_key_press_and_release():
@@ -123,6 +130,7 @@ def test_focus_lost_releases_held_keys():
     key(c, 0xE0)  # ctrl
     key(c, 0x06)  # c
     c.handle(ev(pygame.WINDOWFOCUSLOST), RECT, FRAME)
+    drain(c)
     assert sent[-1] == (0, [])
 
 
@@ -130,3 +138,18 @@ def test_unknown_scancode_ignored():
     c, sent = keyboard()
     key(c, 0)
     assert sent == []
+
+
+def test_ctrl_shift_v_pastes_clipboard(monkeypatch):
+    monkeypatch.setattr(pygame.scrap, "get_text", lambda: "hi")
+    c, sent = keyboard()
+    for usage in (0xE0, 0xE1, 0x19):  # ctrl, shift, v
+        key(c, usage)
+    assert not any(0x19 in keys for _, keys in sent)  # V itself never reaches the phone
+    assert sent[-5:] == [(0, []), (0, [0x0B]), (0, []), (0, [0x0C]), (0, [])]  # modifiers released, then "hi"
+
+
+def test_paste_returns_skipped_count(monkeypatch):
+    monkeypatch.setattr(pygame.scrap, "get_text", lambda: "aè")
+    c, sent = keyboard()
+    assert c.paste() == 1

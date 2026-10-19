@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from . import app, calibrate, links, mouse, video
+from .keyqueue import KeyQueue
 
 BUNDLED_QVH = Path(__file__).resolve().parent.parent / "bin" / "qvh"  # from scripts/build-qvh.sh
 
@@ -46,7 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, RuntimeError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        send, connected, keys = link.send, link.connected, link.send_keys
+        send, connected, keys = link.send, link.connected, KeyQueue(link.send_keys)
+        keys.start()
         if not connected.wait(5):
             print("waiting for the iPhone to connect to 'scrcrappy PC' / 'scrcrappy ESP32' "
                   "(AssistiveTouch on; pair it in Settings > Bluetooth the first time)...", file=sys.stderr)
