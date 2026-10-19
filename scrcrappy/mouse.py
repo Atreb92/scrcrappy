@@ -65,6 +65,11 @@ class Pointer:
         with self.lock:
             self.pending.append(("wheel", notches))
 
+    def click(self, mask: int) -> None:
+        """Press and release `mask` buttons where the cursor is (AssistiveTouch maps 2/3 to actions)."""
+        with self.lock:
+            self.pending.append(("click", mask))
+
     def home(self) -> None:
         """Re-sync: park the cursor in the corner, where its position is known for sure."""
         with self.lock:
@@ -94,6 +99,11 @@ class Pointer:
                 self.send(0, 0, self.buttons, 0)
             elif kind == "wheel":
                 self.send(0, 0, self.buttons, arg)
+            elif kind == "click":
+                self.send(0, 0, self.buttons | arg, 0)
+                self.pending.appendleft(("release", None))
+            elif kind == "release":
+                self.send(0, 0, self.buttons, 0)
             else:  # home
                 self.homing, self.pos = HOME_REPORTS - 1, (0.0, 0.0)
                 self.send(-127, -127, self.buttons, 0)

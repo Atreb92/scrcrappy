@@ -1,3 +1,4 @@
+import sys
 from typing import Callable
 
 import pygame
@@ -5,11 +6,13 @@ import pygame
 from .geometry import fit, inside, to_frame
 from .keyqueue import KeyQueue
 from .mouse import Pointer
+from .toolbar import Pill, buttons
 from .video import LatestFrame
 
 
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
+HOME_BUTTON, APPS_BUTTON = 0x02, 0x04  # mouse buttons 2/3: mapped to Home / App Switcher in AssistiveTouch
 
 
 class Controller:
@@ -78,18 +81,43 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known)."""
     pygame.init()
-    screen = pygame.display.set_mode((375, 667), pygame.RESIZABLE)
-    pygame.display.set_caption(title)
+    main = pygame.Window(title, (375, 667), resizable=True)
     pygame.key.stop_text_input()  # raw key events only, no IME
     clock = pygame.time.Clock()
     img, controller = None, None
+    natural = [natural_scroll]  # the toolbar may flip it before the controller exists
+
+    def paste() -> None:
+        if controller and (skipped := controller.paste()):
+            print(f"paste: skipped {skipped} characters (US layout, ASCII only)", file=sys.stderr)
+
+    def toggle_natural() -> None:
+        natural[0] = not natural[0]
+        if controller:
+            controller.natural_scroll = natural[0]
+
+    pill = Pill(main, buttons(has_input=make_pointer is not None, natural=natural_scroll), {
+        "paste": paste,
+        "copy": lambda: None,
+        "home": lambda: controller and controller.pointer.click(HOME_BUTTON),
+        "apps": lambda: controller and controller.pointer.click(APPS_BUTTON),
+        "natural": toggle_natural,
+    })
     try:
         while alive():
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
+                if pill.handle(event):
+                    continue
+                if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
+                if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
+                    pill.follow()
+                elif event.type == pygame.WINDOWMINIMIZED:
+                    pill.hide()
+                elif event.type == pygame.WINDOWRESTORED:
+                    pill.show()
                 if controller and img:
-                    controller.handle(event, fit(img.get_size(), screen.get_size()), img.get_size())
+                    controller.handle(event, fit(img.get_size(), main.size), img.get_size())
             if frame := frames.get():
                 pixels, size, pitch = frame
                 img = pygame.image.frombuffer(pixels, size, "RGB", pitch)
@@ -97,12 +125,15 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     pointer = make_pointer(size)
                     pointer.home()
                     pointer.start()
-                    controller = Controller(pointer, natural_scroll, keys)
+                    controller = Controller(pointer, natural[0], keys)
+            screen = main.get_surface()
             screen.fill((0, 0, 0))
             if img:
                 x, y, w, h = fit(img.get_size(), screen.get_size())
                 screen.blit(pygame.transform.smoothscale(img, (w, h)), (x, y))
-            pygame.display.flip()
+            main.flip()
+            pill.update()
+            pill.draw()
             clock.tick(60)
         return False
     finally:
