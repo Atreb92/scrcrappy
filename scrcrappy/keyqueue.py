@@ -37,6 +37,16 @@ class KeyQueue:
         self.send_keys(modifiers, keys)
         return True
 
+    def wait_idle(self, timeout: float = 10.0) -> bool:
+        """Block until every queued report has been sent (AI control)."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            with self.lock:
+                if not self.pending:
+                    return True
+            time.sleep(self.gap)
+        return False
+
     def start(self) -> None:
         def loop() -> None:
             while self._thread:

@@ -1,4 +1,3 @@
-import dataclasses
 import os
 import sys
 import threading
@@ -269,12 +268,11 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "settings": open_settings,
         "pinned": set_pinned,
     }, pinned=cfg.pinned)
-    if cfg.ai_control or mcp:
-        saved_on, had_token = cfg.ai_control, bool(cfg.mcp_token)
-        cfg.ai_control = True  # --mcp: on for this run
+    if cfg.ai_control or mcp:  # --mcp: on for this run only, cfg.ai_control (what's saved) stays as it is
+        had_token = bool(cfg.mcp_token)
         ai.enable(cfg)
-        if not had_token:  # keep the new token, but not --mcp's "on"
-            save_or_warn(save, dataclasses.replace(cfg, ai_control=saved_on))
+        if not had_token:
+            save_or_warn(save, cfg)
         if ai.error:
             print(f"AI control: {ai.error}", file=sys.stderr)
         pill.set_items(items())

@@ -99,6 +99,8 @@ class McpServer:
 
     def handle(self, msg: dict) -> dict:
         method, params, id_ = msg.get("method"), msg.get("params") or {}, msg.get("id")
+        if not isinstance(params, dict):
+            return _error(id_, -32602, "params must be an object")
         if method == "initialize":
             return _result(id_, {"protocolVersion": params.get("protocolVersion", PROTOCOL),
                                  "capabilities": {"tools": {}},
@@ -112,12 +114,18 @@ class McpServer:
             tool = next((t for t in self.tools() if t.name == params.get("name")), None)
             if not tool:
                 return _error(id_, -32602, f"unknown tool: {params.get('name')}")
+            args = params.get("arguments") or {}
+            if not isinstance(args, dict):
+                return _error(id_, -32602, "arguments must be an object")
             with self._call_lock:
                 self.busy = True
                 try:
-                    return _result(id_, {"content": tool.run(params.get("arguments") or {})})
+                    return _result(id_, {"content": tool.run(args)})
                 except ToolError as e:
                     return _result(id_, {"content": [{"type": "text", "text": str(e)}], "isError": True})
+                except Exception as e:  # never drop the connection: the AI gets a readable failure
+                    return _result(id_, {"content": [{"type": "text", "text": f"{type(e).__name__}: {e}"}],
+                                         "isError": True})
                 finally:
                     self.busy = False
         return _error(id_, -32601, f"method not found: {method}")

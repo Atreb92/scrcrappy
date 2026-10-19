@@ -18,6 +18,7 @@ SESSION_S = 30  # "AI in a session" = any request this recent
 RING_S = 0.6
 FINGER = 4  # AI touches: the window's own drags use 1-3
 REPLY_S = 35  # agent requests may wait 30 s for a prompt on the phone
+MAX_MS = 10_000  # longest long-press / swipe: the user's input is paused meanwhile
 
 POINT = {"x": {"type": "number", "minimum": 0, "maximum": 100, "description": "percent of the screenshot width, from the left"},
          "y": {"type": "number", "minimum": 0, "maximum": 100, "description": "percent of the screenshot height, from the top"}}
@@ -34,6 +35,7 @@ class AiControl:
         self.server: McpServer | None = None
         self.error: str | None = None
         self.rings: list[tuple[float, float, float]] = []  # x %, y %, monotonic time
+        self._down: tuple | None = None  # a press that hasn't been released yet (for cleanup)
 
     # --- server
     def enable(self, cfg: Config) -> None:
@@ -112,11 +114,11 @@ class AiControl:
 
     def long_press(self, args: dict) -> list[dict]:
         x, y = _point(args, "x", "y")
-        return self._touch(actions.long_press(x, y, args.get("ms")))
+        return self._touch(actions.long_press(x, y, _ms(args)))
 
     def swipe(self, args: dict) -> list[dict]:
         (x1, y1), (x2, y2) = _point(args, "x1", "y1"), _point(args, "x2", "y2")
-        return self._touch(actions.swipe(x1, y1, x2, y2, args.get("ms")))
+        return self._touch(actions.swipe(x1, y1, x2, y2, _ms(args)))
 
     def type_text(self, args: dict) -> list[dict]:
         text = str(args.get("text", ""))
@@ -131,6 +133,7 @@ class AiControl:
         if not self.keys:
             raise ToolError("no keyboard in this mode")
         skipped = self.keys.type_text(text)
+        self.keys.wait_idle()  # typed on the phone before the AI's next screenshot
         return [{"type": "text", "text": f"typed {len(text) - skipped} characters"
                                          + (f", skipped {skipped} (US layout, ASCII only)" if skipped else "")}]
 
@@ -142,28 +145,48 @@ class AiControl:
         self.rings.append((steps[0][2], steps[0][3], time.monotonic()))
         if steps[-1][2:] != steps[0][2:]:
             self.rings.append((steps[-1][2], steps[-1][3], time.monotonic() + steps[-1][0]))
-        if self.session:
-            screen = self._call({"cmd": "screen"})
-            if not screen.get("touch_ready", True):
-                raise ToolError("touch the phone's screen once (needed after each reboot), then retry")
-            for delay, phase, x, y in steps:
-                time.sleep(delay)
-                self.session.touch((FINGER, phase, *actions.to_portrait(x, y, screen["orientation"])))
-            self._call({"cmd": "screen"})  # in order: every touch has been handled
-        else:
-            p = self.pointer()
-            frame = self.frames.peek()
-            if not p or not frame:
-                raise ToolError("the pointer isn't ready yet (no video, or calibrating)")
-            w, h = frame[1]
-            for delay, phase, x, y in steps:
-                time.sleep(delay)
-                p.move_to(x / 100 * w, y / 100 * h)
-                if phase != "move":
-                    p.wait_idle()  # press / release exactly at the point
-                    p.button(phase == "down")
-            p.wait_idle()
+        try:
+            if self.session:
+                screen = self._call({"cmd": "screen"})
+                if not screen.get("touch_ready", True):
+                    raise ToolError("touch the phone's screen once (needed after each reboot), then retry")
+                for delay, phase, x, y in steps:
+                    time.sleep(delay)
+                    point = actions.to_portrait(x, y, screen.get("orientation", 1))
+                    self.session.touch((FINGER, phase, *point))
+                    self._down = ("touch", point) if phase != "up" else None  # after it went out
+                self._call({"cmd": "screen"})  # in order: every touch has been handled
+            else:
+                p = self.pointer()
+                frame = self.frames.peek()
+                if not p or not frame:
+                    raise ToolError("the pointer isn't ready yet (no video, or calibrating)")
+                w, h = frame[1]
+                for delay, phase, x, y in steps:
+                    time.sleep(delay)
+                    p.move_to(x / 100 * w, y / 100 * h)
+                    if phase != "move":
+                        p.wait_idle()  # press / release exactly at the point
+                        p.button(phase == "down")
+                        self._down = ("button", p) if phase == "down" else None
+                p.wait_idle()
+        finally:
+            self.cleanup()
         return [{"type": "text", "text": "done"}]
+
+    def cleanup(self) -> None:
+        """Release a press an interrupted touch left behind (a finger stuck down on the phone)."""
+        if not self._down:
+            return
+        kind, what = self._down
+        try:
+            if kind == "touch":
+                self.session.touch((FINGER, "up", *what))
+            else:
+                what.button(False)
+        except OSError:
+            return  # connection gone: the agent lifts a dropped connection's fingers itself
+        self._down = None
 
     def _call(self, obj: dict) -> dict:
         """One agent request, waited for (the Session answers on the window's thread)."""
@@ -187,6 +210,18 @@ class AiControl:
 
 def _schema(props: dict, **optional) -> dict:
     return {"type": "object", "properties": {**props, **optional}, "required": list(props)}
+
+
+def _ms(args: dict) -> float | None:
+    if args.get("ms") is None:
+        return None
+    try:
+        ms = float(args["ms"])
+    except (TypeError, ValueError):
+        raise ToolError(f"ms must be a number of milliseconds, got {args['ms']!r}") from None
+    if not 0 < ms <= MAX_MS:
+        raise ToolError(f"ms must be between 1 and {MAX_MS}, got {ms:g}")
+    return ms
 
 
 def _point(args: dict, kx: str, ky: str) -> tuple[float, float]:
