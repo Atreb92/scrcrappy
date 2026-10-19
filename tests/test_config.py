@@ -61,3 +61,11 @@ def test_settings_roundtrip_and_bad_mouse(tmp_path):
     assert config.load(p) == cfg
     p.write_text(json.dumps({"mouse": "wifi"}))
     assert config.load(p).mouse == "none"
+
+
+def test_save_makes_a_stale_tmp_private(tmp_path):
+    p = tmp_path / "c.json"
+    p.with_suffix(".tmp").write_text("left over by a crash")
+    p.with_suffix(".tmp").chmod(0o644)
+    config.save(Config(mcp_token="secret"), p)
+    assert p.stat().st_mode & 0o777 == 0o600

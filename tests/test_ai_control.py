@@ -75,7 +75,7 @@ def test_agent_tap_maps_percent_and_marks_a_ring():
     tool(control, "tap").run({"x": 50, "y": 25})
     assert [e[:2] for e in s.touches] == [(ai.FINGER, "down"), (ai.FINGER, "up")]
     assert s.touches[0][2:] == pytest.approx((0.5, 0.25))
-    assert control.rings and control.rings[-1][:2] == (50, 25)
+    assert [r[:2] for r in control.current_rings(time.monotonic())] == [(50, 25)]
 
 
 def test_agent_screenshot_returns_image_and_metadata():
@@ -209,3 +209,28 @@ def test_ble_type_text_waits_until_typed():
     control = ai.AiControl(frames(), pointer=lambda: FakePointer(), keys=keys)
     tool(control, "type_text").run({"text": "abc"})
     assert keys.pending == []
+
+
+def test_stalled_pointer_is_a_tool_error():
+    p = FakePointer()
+    p.wait_idle = lambda timeout=5.0: False  # e.g. calibration stopped the pointer
+    control = ai.AiControl(frames(), pointer=lambda: p)
+    with pytest.raises(ToolError, match="pointer"):
+        tool(control, "tap").run({"x": 50, "y": 50})
+
+
+def test_rings_keep_recent_and_future_ones():
+    control = ai.AiControl(frames())
+    control.add_ring(10, 10, at=0.0)
+    control.add_ring(20, 20, at=9.9)
+    control.add_ring(30, 30, at=12.0)  # a swipe's end ring, shown later
+    assert [r[:2] for r in control.current_rings(now=10.0)] == [(20, 20)]
+    assert [r[:2] for r in control.current_rings(now=12.1)] == [(30, 30)]
+
+
+def test_input_paused_per_event_while_locked():
+    from scrcrappy.app import paused
+    assert paused(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(0, 0)), True)  # pill clicks too
+    assert paused(pygame.event.Event(pygame.KEYDOWN, scancode=4), True)
+    assert not paused(pygame.event.Event(pygame.WINDOWFOCUSLOST), True)
+    assert not paused(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(0, 0)), False)

@@ -73,6 +73,7 @@ def save(cfg: Config, path: Path = PATH) -> None:
             "ai_control": cfg.ai_control, "mcp_token": cfg.mcp_token}
     tmp = path.with_suffix(".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # holds the MCP token: private
+    os.fchmod(fd, 0o600)  # also when a crash left an older tmp behind
     with os.fdopen(fd, "w") as f:
         f.write(json.dumps(data, indent=2))
     os.replace(tmp, path)

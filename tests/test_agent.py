@@ -140,3 +140,17 @@ def test_session_reconnects_after_the_connection_drops():
     s.request({"cmd": "key", "usage": 4})
     s.request({"cmd": "key", "usage": 5})
     assert read_frame(new_phone.recv) == {"cmd": "key", "usage": 5}
+
+
+def test_request_fails_fast_when_the_connection_drops():
+    # was: the waiting AI tool sat out the full 35 s timeout
+    import time
+    ours, phone = socket.socketpair()
+    phone.close()
+    errors = []
+    s = agent.Session(ours, post=lambda fn: fn())
+    t0 = time.monotonic()
+    s.request({"cmd": "screen"}, failed=errors.append)
+    while not errors and time.monotonic() - t0 < 2:
+        time.sleep(0.01)
+    assert errors and "connection" in errors[0]

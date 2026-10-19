@@ -34,7 +34,8 @@ class AiControl:
         self.frames, self.session, self.pointer, self.keys = frames, session, pointer, keys
         self.server: McpServer | None = None
         self.error: str | None = None
-        self.rings: list[tuple[float, float, float]] = []  # x %, y %, monotonic time
+        self._rings: list[tuple[float, float, float]] = []  # x %, y %, monotonic time to show it
+        self._rings_lock = threading.Lock()  # added on the MCP thread, drawn on the window's
         self._down: tuple | None = None  # a press that hasn't been released yet (for cleanup)
 
     # --- server
@@ -142,9 +143,9 @@ class AiControl:
 
     # --- helpers
     def _touch(self, steps: list[actions.Step]) -> list[dict]:
-        self.rings.append((steps[0][2], steps[0][3], time.monotonic()))
+        self.add_ring(steps[0][2], steps[0][3])
         if steps[-1][2:] != steps[0][2:]:
-            self.rings.append((steps[-1][2], steps[-1][3], time.monotonic() + steps[-1][0]))
+            self.add_ring(steps[-1][2], steps[-1][3], time.monotonic() + sum(s[0] for s in steps))
         try:
             if self.session:
                 screen = self._call({"cmd": "screen"})
@@ -166,13 +167,23 @@ class AiControl:
                     time.sleep(delay)
                     p.move_to(x / 100 * w, y / 100 * h)
                     if phase != "move":
-                        p.wait_idle()  # press / release exactly at the point
+                        _idle(p)  # press / release exactly at the point
                         p.button(phase == "down")
                         self._down = ("button", p) if phase == "down" else None
-                p.wait_idle()
+                _idle(p)
         finally:
             self.cleanup()
         return [{"type": "text", "text": "done"}]
+
+    def add_ring(self, x: float, y: float, at: float | None = None) -> None:
+        with self._rings_lock:
+            self._rings.append((x, y, time.monotonic() if at is None else at))
+
+    def current_rings(self, now: float) -> list[tuple[float, float, float]]:
+        """Rings to draw now; drops the expired ones, keeps the ones due later."""
+        with self._rings_lock:
+            self._rings = [r for r in self._rings if now - r[2] < RING_S]
+            return [r for r in self._rings if now >= r[2]]
 
     def cleanup(self) -> None:
         """Release a press an interrupted touch left behind (a finger stuck down on the phone)."""
@@ -210,6 +221,11 @@ class AiControl:
 
 def _schema(props: dict, **optional) -> dict:
     return {"type": "object", "properties": {**props, **optional}, "required": list(props)}
+
+
+def _idle(pointer) -> None:
+    if not pointer.wait_idle():
+        raise ToolError("the pointer stopped moving (calibrating, or the Bluetooth link is gone)")
 
 
 def _ms(args: dict) -> float | None:

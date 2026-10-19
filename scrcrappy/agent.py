@@ -104,8 +104,13 @@ class Session:
                 failed: Callable[[str], None] | None = None) -> None:
         """`failed(error)` (else a printed warning) when the agent replies with an error."""
         def job() -> None:
-            self._send(obj)
-            reply = read_frame(self.sock.recv)
+            try:
+                self._send(obj)
+                reply = read_frame(self.sock.recv)
+            except (OSError, ValueError):
+                if failed:  # tell a waiting AI tool now, not after its timeout
+                    self.post(lambda: failed("agent connection lost; reconnecting"))
+                raise
             if "error" in reply and failed:
                 self.post(lambda: failed(reply["error"]))
             elif "error" in reply:

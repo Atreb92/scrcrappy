@@ -54,14 +54,14 @@ def touch(a: Agent, steps: list[actions.Step]) -> dict:
 
 
 def run(args: argparse.Namespace, a: Agent) -> dict:
-    if args.tap:
+    if args.tap is not None:
         x, y, _ = actions.parse_point(args.tap)
         return touch(a, actions.tap(x, y))
-    if args.long_press:
+    if args.long_press is not None:
         return touch(a, actions.long_press(*actions.parse_point(args.long_press)))
-    if args.swipe:
+    if args.swipe is not None:
         return touch(a, actions.swipe(*actions.parse_points(args.swipe)))
-    if args.screenshot:
+    if args.screenshot is not None:
         orientation = a.request({"cmd": "screen"})["orientation"]
         png = base64.b64decode(a.request({"cmd": "screenshot"})["png"])
         data, w, h = actions.upright_png(png, orientation)
@@ -83,11 +83,13 @@ def main(argv: list[str], out=None) -> int:
     out = out or sys.stdout
     args = parser().parse_args(argv)
     try:
-        for value in (args.tap, args.long_press):  # bad coordinates fail before touching the phone
-            if value:
+        for value in (args.tap, args.long_press):  # bad input fails before touching the phone
+            if value is not None:
                 actions.parse_point(value)
-        if args.swipe:
+        if args.swipe is not None:
             actions.parse_points(args.swipe)
+        if args.screenshot == "":
+            raise ValueError("--screenshot needs a file path")
         a = connect()
         try:
             result = run(args, a)
