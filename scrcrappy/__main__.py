@@ -1,5 +1,8 @@
 import argparse
 import os
+
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # before pygame loads: `scrcrappy agent` stdout is JSON only
+
 import shutil
 import socket
 import sys
@@ -46,6 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["agent"]:
+        from . import agent_cli
+        return agent_cli.main(argv[1:])
     if sys.platform == "linux" and os.environ.get("DISPLAY"):
         # X11 (XWayland on Wayland desktops): the toolbar window must be placed next to the phone
         # window, which native Wayland doesn't allow. SDL3-based pygame would otherwise pick Wayland.
