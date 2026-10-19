@@ -14,7 +14,7 @@
 
 ## Verify
 
-- [ ] Toolbar: first click acts (SDL focus click-through) and the pill hides while another app is focused: user to confirm.
+- [x] Toolbar: first click acts (SDL focus click-through) and the pill hides while another app is focused: confirmed by user.
 - [ ] Tooltip window may take keyboard focus on some window managers (lost keystrokes right after hovering the pill).
 - [ ] ESP32 firmware has never run on real hardware (only compiled for esp32 / -c3 / -s3).
 - [ ] macOS untested end to end: patched qvh (clear-halt removal), pill positioning, click-through.
