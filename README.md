@@ -2,7 +2,28 @@
 
 scrcpy for iOS: mirror and control an iPhone over USB.
 
-## Setup
+## Install
+
+**Linux** (Fedora shown; usbmuxd and libusb are on most desktops already):
+
+```sh
+sudo dnf install pipx usbmuxd
+pipx install https://github.com/OWNER/scrcrappy/releases/download/v0.2.0/scrcrappy-0.2.0-py3-none-manylinux_2_35_x86_64.whl
+```
+
+Until the repo is public: `scripts/build-qvh.sh && pipx install .` from a checkout (needs the
+Development packages below). Bluetooth mode also needs `sudo dnf install python3-dbus python3-gobject`.
+
+**macOS** (untested):
+
+```sh
+brew tap OWNER/scrcrappy
+brew install scrcrappy
+```
+
+Then run `scrcrappy` from anywhere. Releases: [docs/releasing.md](docs/releasing.md).
+
+## Development
 
 Fedora:
 
