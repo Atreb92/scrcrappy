@@ -81,3 +81,24 @@ approved look: tonal palette, 80% height, small chevron, collapsed tab.
 - Module split, drawing approach (pre-rendered icon surfaces), tooltip delay (~500 ms),
   exact separator spacing, collapse animation (none is fine).
 - Clipboard read via `pygame.scrap`.
+
+## Addendum (2026-10-19): custom buttons + saved config (user-approved)
+
+Replaces the fixed Home / App switcher buttons. Mockup: `.superpowers/brainstorm/…/content/custom-buttons.html`.
+
+- **Custom buttons** (BLE / ESP32 only; the jailbreak backend gets its own later): the pill shows
+  user-added buttons, then a **+**. Each custom button clicks one mouse button, 2–5 (next free
+  one assigned automatically; max 4). **+** greys out with a reason when all are used or there is
+  no mouse backend.
+- **+** opens an **Add button** window: icon grid (16 Material icons), optional name, numbered
+  binding steps naming the phone's menu path (`Settings › Accessibility › Touch › AssistiveTouch ›
+  Devices › <scrcrappy PC|scrcrappy ESP32>` › Customise Additional Buttons), a **Send button N**
+  button for iOS's "Press a button on your pointer device" step, and the hint that iOS may add a
+  *Button N* row set to Secondary Click which must be opened to pick the action. Cancel / Add.
+- **Right-click a custom button**: menu **Edit…** (same window, prefilled, same button number) and
+  **Remove** (frees the number; reminds that the phone keeps its mapping until set to None).
+- **HID**: mouse report grows from 3 to 5 buttons (helper + firmware) → one re-pair.
+- **Saved config** `~/.config/scrcrappy/config.json`, written after every change, loaded at start:
+  custom buttons per *phone serial + mouse backend*; natural scrolling; pill pinned/collapsed.
+  An explicit `--natural-scroll` overrides the saved value. Corrupt/missing file → defaults.
+- Real mouse in the phone window: unchanged (left button only).
