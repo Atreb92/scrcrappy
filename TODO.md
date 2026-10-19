@@ -15,7 +15,8 @@
 
 ## Verify
 
-- [ ] Custom buttons: Edit… from the right-click menu, Remove (then + comes back), and the saved config restoring buttons / natural scrolling / pinned state after a restart — fixed or built after the user's last manual round, not yet confirmed by the user.
+- [x] Custom buttons: Edit… and Remove confirmed by the user.
+- [ ] Saved config restoring custom buttons / natural scrolling / pinned state after a restart: not yet confirmed by the user.
 - [x] Toolbar: first click acts (SDL focus click-through) and the pill hides while another app is focused: confirmed by user.
 - [ ] Tooltip window may take keyboard focus on some window managers (lost keystrokes right after hovering the pill).
 - [ ] ESP32 firmware has never run on real hardware (only compiled for esp32 / -c3 / -s3).
