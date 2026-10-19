@@ -6,6 +6,8 @@ from typing import Callable
 
 import pygame
 
+from .config import BUTTONS, ICON_CHOICES, Custom
+
 PILL_RATIO = 0.8  # of the phone window's height
 GAP = 11  # between phone window and pill
 PAD_Y, PAD_X = 8, 4
@@ -25,17 +27,27 @@ class Button:
     small: bool = False
 
 
-def buttons(has_input: bool, natural: bool) -> list[Button | None]:
+def next_free(customs: list[Custom]) -> int | None:
+    """Lowest mouse button not used by a custom button."""
+    used = {c.button for c in customs}
+    return next((n for n in BUTTONS if n not in used), None)
+
+
+def buttons(has_input: bool, natural: bool, customs: list[Custom]) -> list[Button | None]:
     """The pill's items top to bottom; None is a separator."""
     def action(id_, icon, tip):
         return Button(id_, icon, tip if has_input else NEEDS_INPUT, enabled=has_input)
 
+    labels = dict(ICON_CHOICES)
+    add = [action("add", "\ue145", "Add a button…")] if next_free(customs) is not None else []  # gone when all used
     return [
         action("paste", "\ue14f", "Paste computer clipboard (Ctrl+Shift+V)"),
         Button("copy", "\ue14d", COPY_TIP, enabled=False),
         None,
-        action("home", "\ue9b2", "Home"),
-        action("apps", "\ue8eb", "App switcher"),
+        *(action(f"custom:{c.button}", c.icon,
+                 f"{c.name or labels.get(c.icon, 'Custom')} (button {c.button}) · right-click to edit or remove")
+          for c in sorted(customs, key=lambda c: c.button)),
+        *add,
         None,
         Button("natural", "\ue8d5", "Natural scrolling", toggled=natural),
         None,
@@ -83,19 +95,20 @@ TIP_BG, TIP_FG = (0x30, 0x30, 0x34), (0xF2, 0xF0, 0xF4)
 TIP_DELAY, TIP_WIDTH = 0.5, 220
 AUTOHIDE = 2.0  # s after the mouse leaves a hover-opened pill
 UNFOCUSED_HIDE = 0.2  # s with none of our windows focused before the pill hides
-CHEVRON_COLLAPSE, CHEVRON_KEEP = "", ""
+CHEVRON_KEEP = "\ue5cc"  # collapse button while hover-opened: click to pin
 
 
 class Pill:
     """Borderless window beside the phone window holding the buttons. Pinned open by default;
     the chevron collapses it to a tab that opens while hovered (click the chevron again to pin)."""
 
-    def __init__(self, main: pygame.Window, items: list[Button | None], actions: dict[str, Callable[[], None]]) -> None:
+    def __init__(self, main: pygame.Window, items: list[Button | None], actions: dict[str, Callable],
+                 pinned: bool = True) -> None:
         self.main, self.items, self.actions = main, items, actions
         self.win = pygame.Window("scrcrappy tools", TAB, borderless=True, utility=True)
         self.tip_win: pygame.Window | None = None
         self.tip_text: str | None = None
-        self.collapsed, self.pinned = False, True
+        self.collapsed, self.pinned = not pinned, pinned
         self.hover: Button | None = None
         self.hover_since = 0.0
         self.leave_at: float | None = None  # when the mouse left a hover-opened pill
@@ -125,6 +138,10 @@ class Pill:
             self.rects = layout(self.items, h)[1]
         self._show_tip(None)
 
+    def set_items(self, items: list[Button | None]) -> None:
+        self.items, self.hover = items, None
+        self.follow()
+
     def _set_collapsed(self, collapsed: bool) -> None:
         if collapsed != self.collapsed:
             self.collapsed, self.hover = collapsed, None
@@ -149,6 +166,9 @@ class Pill:
                 self._show_tip(None)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and (hit := self._hit(event.pos)):
             self._click(hit)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 3 and (hit := self._hit(event.pos)):
+            if hit.id.startswith("custom:"):
+                self.actions["menu"](int(hit.id[7:]))
         return True
 
     def _hit(self, pos: tuple[int, int]) -> Button | None:
@@ -163,11 +183,17 @@ class Pill:
                 self._set_collapsed(True)
             else:
                 self.pinned, self.leave_at = True, None
+            if "pinned" in self.actions:
+                self.actions["pinned"](self.pinned)
         else:
             if button.toggled is not None:
                 button.toggled = not button.toggled
-            self.actions[button.id]()
-        self.main.focus()  # keep typing going to the phone
+            if button.id.startswith("custom:"):
+                self.actions["custom"](int(button.id[7:]))
+            else:
+                self.actions[button.id]()
+        if button.id != "add":  # + opens a window of its own: leave it in front
+            self.main.focus()  # keep typing going to the phone
 
     def focused(self) -> bool:
         return any(w is not None and w.focused for w in (self.main, self.win, self.tip_win))

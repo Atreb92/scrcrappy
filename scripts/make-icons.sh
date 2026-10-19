@@ -3,7 +3,7 @@
 # as two static fonts (outline and filled). Dev-only; needs: curl, python3 with fonttools.
 set -eu
 COMMIT=49d4db35df873165d6bd6ba09b063c7dafbac2f4
-NAMES="content_paste content_copy home view_carousel swap_vert chevron_left chevron_right"
+NAMES="content_paste content_copy swap_vert chevron_left chevron_right add power_settings_new home view_carousel lock tune notifications screenshot_monitor mic volume_up volume_down volume_off screen_rotation search photo_camera vibration accessibility_new star"
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 OUT="$ROOT/scrcrappy/icons"
 TMP=$(mktemp -d)

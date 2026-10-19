@@ -94,3 +94,10 @@ def test_pointer_click_sends_mask_then_release():
     p.click(2)
     run(p)
     assert phone.sent == [(0, 0, 2, 0), (0, 0, 0, 0)]
+
+
+def test_report_pace_fits_the_bluetooth_link():
+    # measured 2026-10-19 (iPhone 8, BLE helper): ~1 report per 15 ms gets through; at 8-12 ms reports
+    # queued up and the cursor trailed behind the mouse, catching up when it stopped
+    from scrcrappy.mouse import TICK
+    assert TICK >= 0.015

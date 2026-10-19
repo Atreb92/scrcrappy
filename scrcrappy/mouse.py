@@ -11,7 +11,7 @@ import threading
 import time
 from typing import Callable
 
-TICK = 0.008  # seconds between reports
+TICK = 0.015  # seconds between reports: faster than the BLE link delivers them and they queue up (cursor lags)
 MAX_LEN = 24  # longest report used; acceleration gets steep above this
 HOME_REPORTS = 12  # (-127, -127) reports: far beyond any screen, cursor ends in the top-left corner
 

@@ -163,3 +163,41 @@ def test_first_click_on_unfocused_pill_is_delivered(monkeypatch):
     monkeypatch.delenv("SDL_MOUSE_FOCUS_CLICKTHROUGH", raising=False)
     importlib.reload(scrcrappy.app)
     assert os.environ["SDL_MOUSE_FOCUS_CLICKTHROUGH"] == "1"
+
+
+def test_failed_config_save_warns_instead_of_crashing(capsys):
+    from scrcrappy.app import save_or_warn
+    from scrcrappy.config import Config
+
+    def broken(cfg):
+        raise OSError("read-only file system")
+
+    save_or_warn(broken, Config())
+    assert "could not save settings" in capsys.readouterr().err
+
+
+def test_run_survives_failing_settings_save(capsys):
+    # toggling a toolbar setting saves at once; a broken save must not end the session
+    import os
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.toolbar import Pill
+    from scrcrappy.video import LatestFrame
+
+    def broken(cfg):
+        raise OSError("read-only file system")
+
+    orig_init = Pill.__init__
+
+    def init(self, *a, **kw):
+        orig_init(self, *a, **kw)
+        self.actions["natural"]()  # as if the user clicked the toggle right away
+
+    Pill.__init__ = init
+    try:
+        t0 = time.time()
+        app_module.run(LatestFrame(), alive=lambda: time.time() - t0 < 0.3, save=broken)
+    finally:
+        Pill.__init__ = orig_init
+    assert "could not save settings" in capsys.readouterr().err
