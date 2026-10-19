@@ -82,9 +82,14 @@ Hover a button for its name.
 One-time phone setup for Home / App switcher (iPhone has no keyboard shortcut for Home):
 1. On the phone: Settings > Accessibility > Touch > AssistiveTouch > Devices > *scrcrappy PC*
    (or *scrcrappy ESP32*) > Customise Additional Buttons.
-2. When iOS says to press a button on the device, click the toolbar's **Home** button
-   (it sends button 2) and pick **Home**.
-3. Again, click the toolbar's **App switcher** button (button 3) and pick **App Switcher**.
+2. When iOS says "Press a button on your pointer device", click the toolbar's **Home** button
+   (it sends button 2). iOS adds a **Button 2** row set to *Secondary Click*: tap that row and
+   pick **Home**.
+3. Back, Customise Additional Buttons again, click the toolbar's **App switcher** button
+   (button 3); iOS opens the action list: pick **App Switcher**.
+
+The device page then lists *Button 2: Home* and *Button 3: App Switcher*. Each Bluetooth device
+(scrcrappy PC, scrcrappy ESP32) has its own mapping.
 
 On Linux scrcrappy runs through X11 (XWayland on Wayland desktops) because Wayland doesn't let
 an app place the toolbar next to its window; set `SDL_VIDEODRIVER` yourself to override.
