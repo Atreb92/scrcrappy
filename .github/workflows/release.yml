@@ -1,0 +1,31 @@
+# Tag v<version> -> Linux x86_64 wheel with the patched qvh inside, attached to a GitHub release.
+# UNTESTED: written before the repo was on GitHub (see docs/releasing.md).
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  linux-wheel:
+    runs-on: ubuntu-22.04  # glibc 2.35: the wheel is tagged manylinux_2_35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches pyproject version
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          test "$GITHUB_REF_NAME" = "v$version" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libusb-1.0-0-dev pkg-config
+      - run: sh scripts/build-qvh.sh
+      - run: pip install build wheel pytest . && SDL_VIDEODRIVER=dummy pytest -q
+      - run: python -m build --wheel
+      - run: python -m wheel tags --python-tag py3 --abi-tag none --platform-tag manylinux_2_35_x86_64 --remove dist/*.whl
+      - run: gh release create "$GITHUB_REF_NAME" dist/*.whl --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

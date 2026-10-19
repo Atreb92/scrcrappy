@@ -6,3 +6,5 @@ bin/
 .pytest_cache/
 .pio/
 .superpowers/
+dist/
+build/
