@@ -42,7 +42,7 @@ def test_esp32_handshake_and_reports():
 
 def test_esp32_silent_port_is_an_error():
     master, slave = os.openpty()
-    with pytest.raises(RuntimeError, match="no scrcrappy mouse firmware"):
+    with pytest.raises(RuntimeError, match="no scrcrappy ESP32 firmware"):
         links.esp32(os.ttyname(slave), wait=1)
 
 

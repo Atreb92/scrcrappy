@@ -67,4 +67,4 @@ def esp32(port: str, baud: int = 115200, wait: float = 10) -> Link:
         if link.ready.wait(0.5):
             return link
     os.close(fd)
-    raise RuntimeError(f"no scrcrappy mouse firmware answering on {port}")
+    raise RuntimeError(f"no scrcrappy ESP32 firmware answering on {port}")

@@ -1,4 +1,4 @@
-"""Linux helper: the computer's Bluetooth adapter as a BLE HID mouse + keyboard (HID over GATT, via BlueZ D-Bus).
+"""Linux helper: the computer's Bluetooth adapter as a BLE HID keyboard + mouse, "scrcrappy PC" (HID over GATT, BlueZ D-Bus).
 
 Runs under the *system* python (needs python3-dbus + python3-gobject), as a subprocess of scrcrappy.
 stdin, one HID report per line, sent at once:
@@ -7,6 +7,7 @@ stdin, one HID report per line, sent at once:
 stdout: "ready" once advertising, "connected" when the phone subscribes to reports.
 """
 import os
+import signal
 import sys
 
 import dbus
@@ -14,8 +15,15 @@ import dbus.mainloop.glib
 import dbus.service
 from gi.repository import GLib
 
+try:
+    from gi.repository import GLibUnix
+    signal_add = GLibUnix.signal_add
+except ImportError:  # PyGObject < 3.52
+    signal_add = GLib.unix_signal_add
+
 BLUEZ = "org.bluez"
 PROPS = "org.freedesktop.DBus.Properties"
+NAME = "scrcrappy PC"  # the ESP32 firmware calls itself "scrcrappy ESP32"
 SVC, CHR, DSC = "org.bluez.GattService1", "org.bluez.GattCharacteristic1", "org.bluez.GattDescriptor1"
 
 REPORT_MAP = bytes.fromhex(  # keyboard first, with LED output: iOS only treats it as a keyboard like this
@@ -132,7 +140,7 @@ class Adv(Obj):
     def __init__(self, bus):
         super().__init__(bus, "/scrcrappy/adv", "org.bluez.LEAdvertisement1", {
             "Type": "peripheral", "ServiceUUIDs": ["1812"], "Appearance": dbus.UInt16(0x03C1),  # keyboard: as mouse (0x03C2) iOS never registered the keyboard part
-            "LocalName": "scrcrappy mouse", "Discoverable": True})
+            "LocalName": NAME, "Discoverable": True})
 
     @dbus.service.method("org.bluez.LEAdvertisement1")
     def Release(self):
@@ -164,9 +172,19 @@ def main():
     bus = dbus.SystemBus()
     hci = bus.get_object(BLUEZ, "/org/bluez/hci0")
     adapter = dbus.Interface(hci, PROPS)
-    for k, v in (("Powered", True), ("Pairable", True), ("Alias", "scrcrappy mouse")):
+    # the phone shows the adapter's alias once connected; put the computer's own settings back on exit
+    changed = {"Powered": True, "Pairable": True, "Alias": NAME}
+    saved = {k: adapter.Get("org.bluez.Adapter1", k) for k in changed}
+    for k, v in changed.items():
         adapter.Set("org.bluez.Adapter1", k, v)
+    try:
+        serve(bus, hci)
+    finally:
+        for k, v in saved.items():
+            adapter.Set("org.bluez.Adapter1", k, v)
 
+
+def serve(bus, hci):
     agent = Agent(bus, "/scrcrappy/agent")
     agents = dbus.Interface(bus.get_object(BLUEZ, "/org/bluez"), "org.bluez.AgentManager1")
     agents.RegisterAgent(agent, "NoInputNoOutput")
@@ -201,10 +219,9 @@ def main():
         return True
 
     GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_stdin)
-    try:
-        loop.run()
-    except KeyboardInterrupt:
-        pass
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal_add(GLib.PRIORITY_DEFAULT, sig, loop.quit)
+    loop.run()
 
 
 if __name__ == "__main__":

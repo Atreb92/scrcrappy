@@ -42,7 +42,7 @@ A BLE mouse drives the AssistiveTouch cursor. Pick where it comes from with `--m
 - `--mouse esp32 --port /dev/ttyUSB0`: an ESP32 / ESP32-C3 / ESP32-S3 running
   `firmware/esp32-mouse` (works from Linux and macOS). Flash it once with PlatformIO:
   `cd firmware/esp32-mouse && pio run -e esp32dev -t upload` (env per board in `platformio.ini`).
-  On the phone it is called "scrcrappy mouse ESP32".
+  On the phone it is called "scrcrappy ESP32" (the laptop helper: "scrcrappy PC").
 
 Either way the phone sees a BLE mouse; the phone shows it as the AssistiveTouch
 cursor, and scrcrappy steers that cursor to follow your mouse over the window.

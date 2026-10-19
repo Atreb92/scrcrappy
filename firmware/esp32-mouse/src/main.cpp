@@ -39,7 +39,7 @@ class ReportCallbacks : public NimBLECharacteristicCallbacks {
 
 void setup() {
     Serial.begin(115200);
-    NimBLEDevice::init("scrcrappy mouse ESP32");
+    NimBLEDevice::init("scrcrappy ESP32");
     NimBLEDevice::setSecurityAuth(true, false, true);  // bond, Just Works, secure connections
 
     NimBLEServer* server = NimBLEDevice::createServer();
@@ -59,7 +59,7 @@ void setup() {
     NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
     adv->setAppearance(0x03C1);  // HID keyboard (also a mouse)
     adv->addServiceUUID(hid->getHidService()->getUUID());
-    adv->setName("scrcrappy mouse ESP32");
+    adv->setName("scrcrappy ESP32");
     adv->enableScanResponse(true);
     adv->start();
     Serial.println("ready");

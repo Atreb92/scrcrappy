@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         send, connected, keys = link.send, link.connected, link.send_keys
         if not connected.wait(5):
-            print("waiting for the iPhone to connect to the scrcrappy mouse "
+            print("waiting for the iPhone to connect to 'scrcrappy PC' / 'scrcrappy ESP32' "
                   "(AssistiveTouch on; pair it in Settings > Bluetooth the first time)...", file=sys.stderr)
             connected.wait()
         gain = mouse.Gain(calibrate.load(serial))
