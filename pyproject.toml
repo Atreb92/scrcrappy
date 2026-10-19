@@ -1,0 +1,19 @@
+[project]
+name = "scrcrappy"
+version = "0.1.0"
+description = "scrcpy for iOS"
+requires-python = ">=3.11"
+dependencies = ["av", "pygame-ce", "pyusb"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+scrcrappy = "scrcrappy.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["scrcrappy"]

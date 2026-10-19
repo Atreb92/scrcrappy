@@ -199,4 +199,17 @@ Flow: `select_device()` (none → `error: no iPhone connected over USB`, return 
 
 ## Spike results
 
-_(filled in during Task 0)_
+2026-10-19, iPhone 8 (iPhone10,4), iOS 16.7.1, not jailbroken, Fedora:
+
+- **qvh video works** after two patches (`third_party/qvh.patch`, built by `scripts/build-qvh.sh`):
+  upstream clears endpoint halt before reading, which dropped the device's PING on Linux
+  (raw pyusb read right after the config switch received it); video writer was 4 KB buffered.
+- Stream: Annex-B H.264, 750×1334, ~58 fps. `qvh record <fifo> /dev/null` + PyAV
+  `CodecContext.parse` reading the FIFO; latency judged "totally usable" by the user.
+- After qvh exits the phone stays in the QuickTime config (qvh's reset fails: usbmuxd busy);
+  a libusb device reset before the next run fixes it (`video.reset_if_stuck`).
+- Task 3 is implemented accordingly (`scrcrappy/video.py`, `app.py`, `__main__.py`), screenshot
+  source still pending (needs ZXTouch).
+- **Jailbreak:** Dopamine does not support 16.7.1; palera1n (checkm8, A11) does. ZXTouch
+  steps of Task 0 pending.
+- macOS: patched qvh untested; verify the clear-halt removal does not break it there.

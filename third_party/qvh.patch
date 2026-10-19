@@ -1,0 +1,26 @@
+diff --git a/main.go b/main.go
+index bc22e68..14b6e98 100644
+--- a/main.go
++++ b/main.go
+@@ -356,7 +356,7 @@ func record(h264FilePath string, wavFilePath string, device screencapture.IosDev
+ 		log.Errorf("Could not open wav file '%s'", wavFilePath)
+ 	}
+ 
+-	writer := coremedia.NewAVFileWriter(bufio.NewWriter(h264File), bufio.NewWriter(wavFile))
++	writer := coremedia.NewAVFileWriter(h264File, bufio.NewWriter(wavFile)) // scrcrappy: unbuffered video for low latency
+ 
+ 	defer func() {
+ 		stat, err := wavFile.Stat()
+diff --git a/screencapture/usbadapter.go b/screencapture/usbadapter.go
+index 0879537..7423fcf 100644
+--- a/screencapture/usbadapter.go
++++ b/screencapture/usbadapter.go
+@@ -74,7 +74,7 @@ func (usbAdapter *UsbAdapter) StartReading(device IosDevice, receiver UsbDataRec
+ 		return err
+ 	}
+ 
+-	err = clearFeature(usbDevice, inboundBulkEndpointAddress, outboundBulkEndpointAddress)
++	_, _, err = inboundBulkEndpointAddress, outboundBulkEndpointAddress, error(nil) // scrcrappy: clearFeature dropped the queued PING on Linux
+ 	if err != nil {
+ 		return err
+ 	}
