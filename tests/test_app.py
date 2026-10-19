@@ -82,3 +82,51 @@ def test_scroll_direction(natural, flipped, expected):
     Controller(p, natural_scroll=natural).handle(
         ev(pygame.MOUSEWHEEL, y=-1 if flipped else 1, flipped=flipped), RECT, FRAME)
     assert p.calls == [("wheel", expected)]
+
+
+def keyboard():
+    sent = []
+    return Controller(FakePointer(), keys=lambda mods, keys: sent.append((mods, list(keys)))), sent
+
+
+def key(c, usage, down=True):
+    c.handle(ev(pygame.KEYDOWN if down else pygame.KEYUP, scancode=usage), RECT, FRAME)
+
+
+def test_key_press_and_release():
+    c, sent = keyboard()
+    key(c, 0x04)  # A
+    key(c, 0x04, down=False)
+    assert sent == [(0, [0x04]), (0, [])]
+
+
+def test_shift_is_a_modifier_bit_not_a_key():
+    c, sent = keyboard()
+    key(c, 0xE1)  # left shift
+    key(c, 0x04)
+    key(c, 0x04, down=False)
+    key(c, 0xE1, down=False)
+    assert sent == [(0x02, []), (0x02, [0x04]), (0x02, []), (0, [])]
+
+
+def test_at_most_six_keys_reported():
+    c, sent = keyboard()
+    for usage in range(0x04, 0x0B):  # 7 keys
+        key(c, usage)
+    assert sent[-1] == (0, [0x04, 0x05, 0x06, 0x07, 0x08, 0x09])
+    key(c, 0x04, down=False)
+    assert sent[-1] == (0, [0x05, 0x06, 0x07, 0x08, 0x09, 0x0A])  # the 7th takes the freed slot
+
+
+def test_focus_lost_releases_held_keys():
+    c, sent = keyboard()
+    key(c, 0xE0)  # ctrl
+    key(c, 0x06)  # c
+    c.handle(ev(pygame.WINDOWFOCUSLOST), RECT, FRAME)
+    assert sent[-1] == (0, [])
+
+
+def test_unknown_scancode_ignored():
+    c, sent = keyboard()
+    key(c, 0)
+    assert sent == []

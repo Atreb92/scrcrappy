@@ -54,5 +54,10 @@ cursor, and scrcrappy steers that cursor to follow your mouse over the window.
 4. Optional, once per phone or after changing AssistiveTouch tracking speed: open a plain light
    screen (e.g. Settings) and run `.venv/bin/scrcrappy --mouse ble --calibrate` (or `esp32`).
 
-Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it). The cursor re-syncs in the top-left corner whenever the
+Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it).
+
+The same BLE device is also a keyboard: keys typed in the window go to the phone by physical
+position, so set the phone's hardware layout to match your computer's
+(Settings > General > Keyboard > Hardware Keyboard). While it is connected iOS hides the on-screen
+keyboard. After updating from a mouse-only version, "Forget" the device on the phone and pair again. The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.

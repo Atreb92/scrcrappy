@@ -1,7 +1,9 @@
-"""Linux helper: the computer's Bluetooth adapter as a BLE HID mouse (HID over GATT, via BlueZ D-Bus).
+"""Linux helper: the computer's Bluetooth adapter as a BLE HID mouse + keyboard (HID over GATT, via BlueZ D-Bus).
 
 Runs under the *system* python (needs python3-dbus + python3-gobject), as a subprocess of scrcrappy.
-stdin: one HID report per line, "dx dy buttons wheel" (ints, dx/dy/wheel in -127..127), sent at once.
+stdin, one HID report per line, sent at once:
+  "dx dy buttons wheel"        mouse (dx/dy/wheel in -127..127)
+  "k modifiers k1 k2 k3 k4 k5 k6"   keyboard: modifier bits + held key usages (0 = none)
 stdout: "ready" once advertising, "connected" when the phone subscribes to reports.
 """
 import os
@@ -24,6 +26,11 @@ REPORT_MAP = bytes.fromhex(
     "0501093009310938"  # X, Y, wheel
     "1581257f750895038106"  # int8, relative
     "c0c0"
+    "05010906a1018502"  # generic desktop, keyboard, collection(application), report id 2
+    "050719e029e715002501750195088102"  # 8 modifier bits
+    "950175088101"  # reserved byte
+    "95067508150025650507190029658100"  # 6 key slots, usages 0..0x65
+    "c0"
 )
 
 
@@ -57,7 +64,7 @@ class Chr(Obj):
     @dbus.service.method(CHR)
     def StartNotify(self):
         self.notifying = True
-        if self.props["UUID"] == "2a4d":
+        if self.props["UUID"] == "2a4d" and self.path.endswith("c4"):  # the mouse report
             print("connected", flush=True)
 
     @dbus.service.method(CHR)
@@ -110,6 +117,8 @@ class App(dbus.service.Object):
         chr(s, 3, "2a4e", ["read", "write-without-response"], b"\x01")  # protocol mode: report
         self.report = chr(s, 4, "2a4d", ["read", "notify", "encrypt-read"], bytes(4))
         self.objs.append(Dsc(bus, f"{self.report.path}/d0", "2908", self.report.path, bytes([0x01, 0x01])))
+        self.keys = chr(s, 5, "2a4d", ["read", "notify", "encrypt-read"], bytes(8))
+        self.objs.append(Dsc(bus, f"{self.keys.path}/d0", "2908", self.keys.path, bytes([0x02, 0x01])))
 
     @dbus.service.method("org.freedesktop.DBus.ObjectManager", out_signature="a{oa{sa{sv}}}")
     def GetManagedObjects(self):
@@ -180,8 +189,12 @@ def main():
             return False
         *lines, buf = (buf + data).split(b"\n")
         for line in lines:
-            dx, dy, buttons, wheel = (int(v) for v in line.split())
-            app.report.notify(bytes([buttons & 0x07, dx & 0xFF, dy & 0xFF, wheel & 0xFF]))
+            if line.startswith(b"k "):
+                mods, *keys = (int(v) for v in line.split()[1:])
+                app.keys.notify(bytes([mods & 0xFF, 0, *(k & 0xFF for k in keys)]))
+            else:
+                dx, dy, buttons, wheel = (int(v) for v in line.split())
+                app.report.notify(bytes([buttons & 0x07, dx & 0xFF, dy & 0xFF, wheel & 0xFF]))
         return True
 
     GLib.io_add_watch(sys.stdin.fileno(), GLib.IO_IN | GLib.IO_HUP, on_stdin)

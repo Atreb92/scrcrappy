@@ -50,3 +50,10 @@ def test_link_handles_lines_split_across_reads():
     chunks = iter([b"rea", b"dy\ncon", b"nected\n", b""])
     link = links.Link(lambda b: None, lambda: next(chunks))
     assert link.ready.wait(1) and link.connected.wait(1)
+
+
+def test_send_keys_pads_to_six_slots():
+    out = []
+    link = links.Link(out.append, lambda: b"")
+    link.send_keys(0x02, [0x04, 0x05])
+    assert out == [b"k 2 4 5 0 0 0 0\n"]

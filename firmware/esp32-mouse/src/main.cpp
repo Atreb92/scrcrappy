@@ -1,7 +1,8 @@
-// scrcrappy BLE mouse: the ESP32 poses as a Bluetooth LE mouse for the iPhone's AssistiveTouch.
-// Serial (115200) line protocol, same as scrcrappy/blemouse.py:
-//   in:  "dx dy buttons wheel"  one HID report, notified at once (dx/dy/wheel -127..127)
-//        "?"                    status query
+// scrcrappy BLE mouse + keyboard: the ESP32 poses as a Bluetooth LE mouse (driving the iPhone's
+// AssistiveTouch cursor) and keyboard. Serial (115200) line protocol, same as scrcrappy/blemouse.py:
+//   in:  "dx dy buttons wheel"        mouse report (dx/dy/wheel -127..127)
+//        "k modifiers k1 .. k6"       keyboard report: modifier bits + held key usages (0 = none)
+//        "?"                          status query
 //   out: "ready" (advertising), "connected" (phone subscribed to reports)
 #include <Arduino.h>
 #include <NimBLEDevice.h>
@@ -15,9 +16,15 @@ static const uint8_t REPORT_MAP[] = {
     0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,  // X, Y, wheel
     0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,  // int8, relative
     0xC0, 0xC0,
+    0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x85, 0x02,  // generic desktop, keyboard, collection(application), report id 2
+    0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,  // 8 modifier bits
+    0x95, 0x01, 0x75, 0x08, 0x81, 0x01,              // reserved byte
+    0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x65, 0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00,  // 6 keys
+    0xC0,
 };
 
 static NimBLECharacteristic* input;
+static NimBLECharacteristic* keyboard;
 static bool subscribed = false;
 
 class ReportCallbacks : public NimBLECharacteristicCallbacks {
@@ -41,6 +48,7 @@ void setup() {
     hid->setReportMap((uint8_t*)REPORT_MAP, sizeof(REPORT_MAP));
     input = hid->getInputReport(1);
     input->setCallbacks(new ReportCallbacks());
+    keyboard = hid->getInputReport(2);
     hid->startServices();
     hid->setBatteryLevel(100);
 
@@ -67,6 +75,15 @@ void loop() {
         if (line[0] == '?') {
             Serial.println("ready");
             if (subscribed) Serial.println("connected");
+            continue;
+        }
+        if (line[0] == 'k') {
+            int m, k[6];
+            if (sscanf(line, "k %d %d %d %d %d %d %d", &m, &k[0], &k[1], &k[2], &k[3], &k[4], &k[5]) != 7) continue;
+            uint8_t report[8] = {(uint8_t)m, 0};
+            for (int i = 0; i < 6; i++) report[2 + i] = (uint8_t)k[i];
+            keyboard->setValue(report, sizeof(report));
+            keyboard->notify();
             continue;
         }
         int dx, dy, buttons, wheel;

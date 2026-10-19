@@ -39,14 +39,14 @@ def main(argv: list[str] | None = None) -> int:
     serial = dev.serial_number
     video.reset_if_stuck(dev)
 
-    make_pointer = None
+    make_pointer, keys = None, None
     if args.mouse != "none":
         try:
             link = links.ble(args.ble_python) if args.mouse == "ble" else links.esp32(args.port)
         except (OSError, RuntimeError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
-        send, connected = link.send, link.connected
+        send, connected, keys = link.send, link.connected, link.send_keys
         if not connected.wait(5):
             print("waiting for the iPhone to connect to the scrcrappy mouse "
                   "(AssistiveTouch on; pair it in Settings > Bluetooth the first time)...", file=sys.stderr)
@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"saved {calibrate.save(serial, table)}")
             return 0
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer,
-                                 natural_scroll=args.natural_scroll)
+                                 natural_scroll=args.natural_scroll, keys=keys)
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), qvh log: {proc.log_path}", file=sys.stderr)
         return 1

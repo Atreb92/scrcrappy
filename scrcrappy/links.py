@@ -1,6 +1,7 @@
 """Connections to the device that plays BLE mouse for the phone. All speak one line protocol:
 
-host -> device: "dx dy buttons wheel" (one HID report, sent at once), "?" (status query)
+host -> device: "dx dy buttons wheel" (mouse report), "k modifiers k1..k6" (keyboard report: modifier
+                bits + up to 6 held key usages, 0 = none), "?" (status query); reports are sent at once
 device -> host: "ready" (advertising), "connected" (phone subscribed to reports)
 """
 import os
@@ -30,8 +31,14 @@ class Link:
         threading.Thread(target=reader, daemon=True).start()
 
     def send(self, dx: int, dy: int, buttons: int, wheel: int) -> None:
+        self._line(f"{dx} {dy} {buttons} {wheel}")
+
+    def send_keys(self, modifiers: int, keys: list[int]) -> None:
+        self._line(" ".join(map(str, ["k", modifiers, *(keys + [0] * 6)[:6]])))
+
+    def _line(self, line: str) -> None:
         try:
-            self._write(f"{dx} {dy} {buttons} {wheel}\n".encode())
+            self._write(f"{line}\n".encode())  # one write per line: lines from two threads never interleave
         except OSError:
             pass  # device gone; the window loop keeps running video-only
 
