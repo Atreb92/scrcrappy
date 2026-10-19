@@ -109,7 +109,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         return buttons(has_input=make_pointer is not None, natural=cfg.natural_scroll, customs=customs)
 
     def changed() -> None:
-        save(cfg)
+        save_or_warn(save, cfg)
         pill.set_items(items())
 
     def paste() -> None:
@@ -120,11 +120,11 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         cfg.natural_scroll = not cfg.natural_scroll
         if controller:
             controller.natural_scroll = cfg.natural_scroll
-        save(cfg)
+        save_or_warn(save, cfg)
 
     def set_pinned(pinned: bool) -> None:
         cfg.pinned = pinned
-        save(cfg)
+        save_or_warn(save, cfg)
 
     def click(n: int) -> None:
         if controller:

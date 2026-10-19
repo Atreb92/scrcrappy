@@ -174,3 +174,30 @@ def test_failed_config_save_warns_instead_of_crashing(capsys):
 
     save_or_warn(broken, Config())
     assert "could not save settings" in capsys.readouterr().err
+
+
+def test_run_survives_failing_settings_save(capsys):
+    # toggling a toolbar setting saves at once; a broken save must not end the session
+    import os
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.toolbar import Pill
+    from scrcrappy.video import LatestFrame
+
+    def broken(cfg):
+        raise OSError("read-only file system")
+
+    orig_init = Pill.__init__
+
+    def init(self, *a, **kw):
+        orig_init(self, *a, **kw)
+        self.actions["natural"]()  # as if the user clicked the toggle right away
+
+    Pill.__init__ = init
+    try:
+        t0 = time.time()
+        app_module.run(LatestFrame(), alive=lambda: time.time() - t0 < 0.3, save=broken)
+    finally:
+        Pill.__init__ = orig_init
+    assert "could not save settings" in capsys.readouterr().err
