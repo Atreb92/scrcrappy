@@ -6,8 +6,8 @@ Common actions should be one click away instead of keybinds to remember. A small
 bar next to the phone window holds them. User-chosen look: Material-style, light, unobtrusive,
 can be collapsed out of the way.
 
-Mockups (visual companion, `.superpowers/brainstorm/…/content/`): `toolbar-fit.html` is the
-approved look (tonal palette, sizing); `toolbar-palette.html` shows the collapse behaviour.
+Mockup (visual companion, `.superpowers/brainstorm/…/content/toolbar-final.html`): the
+approved look: tonal palette, 80% height, small chevron, collapsed tab.
 
 ## Goals
 
@@ -33,7 +33,9 @@ approved look (tonal palette, sizing); `toolbar-palette.html` shows the collapse
   `rgba(58,70,86,.10)`, active toggle fill `#b9cbe8` / icon `#0f2a4d`, disabled icon `#a9b3c1`,
   separators `#c6cfdb`, tooltip `#303034` on text `#f2f0f4`. Soft shadow if feasible.
 - Pill height = **80% of the phone window height**, vertically centred on it (centring: my
-  call). Fully rounded ends. Buttons scale with the height (cap at ~40 px, as in the mockup).
+  call). **Square corners** (user decision, 2026-10-19): rounded ends need a see-through
+  window, which XWayland didn't keep (X Shape got reset) and native Wayland can't combine with
+  positioning the window next to the phone. Buttons scale with the height (cap at ~40 px).
 - Active toggle: filled icon + tonal circle. Hover: round translucent overlay.
 
 ## Constraints
@@ -46,9 +48,9 @@ approved look (tonal palette, sizing); `toolbar-palette.html` shows the collapse
 
 ## Decisions with risk (verify first, my calls)
 
-- **Pill follows the window**: relies on the app being allowed to position its own windows.
-  SDL2 defaults to X11 (XWayland) on Wayland, where that works. Verify on Fedora early; if
-  it fails, fall back to the bar inside the main window on the right (mockup option 2).
+- **Pill follows the window**: verified on the user's Fedora: SDL2 runs on XWayland by
+  default, where the app may position its windows, and the pill follows while dragging and
+  resizing. Forcing `SDL_VIDEODRIVER=wayland` would break this (Wayland forbids it).
 - **Home / App switcher** on iPhone 8 (physical home button, no swipe gestures): first try
   iOS hardware-keyboard shortcuts (e.g. Cmd+H style); if none work, use AssistiveTouch's
   device-button mapping: user sets mouse button 2 = Home, button 3 = App Switcher once
