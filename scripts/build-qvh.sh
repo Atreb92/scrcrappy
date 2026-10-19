@@ -12,7 +12,11 @@ else
   git clone -q https://github.com/danielpaulus/quicktime_video_hack "$SRC"
   git -C "$SRC" checkout -q "$COMMIT"
 fi
-(cd "$SRC" && git apply "$ROOT/third_party/qvh.patch")  # not `patch`: may be a different tool on PATH
+SRC=$(cd "$SRC" && pwd)
+# git apply, not `patch` (may be a different tool on PATH). The ceiling stops git from treating SRC as part of
+# an enclosing repo, where it skips every file silently; the grep catches any other silent no-op.
+(cd "$SRC" && GIT_CEILING_DIRECTORIES=$(dirname "$SRC") git apply "$ROOT/third_party/qvh.patch")
+grep -q "built without GStreamer" "$SRC/main.go" || { echo "error: qvh.patch did not apply in $SRC" >&2; exit 1; }
 mkdir -p "$ROOT/scrcrappy/bin"
 (cd "$SRC" && go build -o "$ROOT/scrcrappy/bin/qvh" .)
 echo "built $ROOT/scrcrappy/bin/qvh"

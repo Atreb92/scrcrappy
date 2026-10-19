@@ -1,6 +1,8 @@
 # Homebrew formula for the OWNER/scrcrappy tap (copy to Formula/scrcrappy.rb there; see docs/releasing.md).
 # UNTESTED: written before the repo was on GitHub and without a Mac.
 class Scrcrappy < Formula
+  include Language::Python::Virtualenv
+
   desc "Mirror and control an iPhone over USB (scrcpy for iOS)"
   homepage "https://github.com/OWNER/scrcrappy"
   url "https://github.com/OWNER/scrcrappy/archive/refs/tags/v0.2.0.tar.gz"
@@ -21,8 +23,10 @@ class Scrcrappy < Formula
     resource("qvh").stage buildpath/"qvh-src"
     system "sh", "scripts/build-qvh.sh", buildpath/"qvh-src" # patched, no GStreamer -> scrcrappy/bin/qvh
 
-    # Personal tap: dependencies come as PyPI wheels (pygame-ce bundles SDL, av bundles FFmpeg)
-    system Formula["python@3.13"].opt_bin/"python3.13", "-m", "venv", libexec
+    # Personal tap: dependencies come as PyPI wheels (pygame-ce bundles SDL, av bundles FFmpeg). virtualenv_create
+    # points the venv at python@3.13's opt path, so it survives Python patch upgrades; pip_install isn't used
+    # because it forces building every dependency from source.
+    virtualenv_create(libexec, "python3.13", without_pip: false)
     system libexec/"bin/pip", "install", buildpath
     bin.install_symlink libexec/"bin/scrcrappy"
   end
