@@ -33,3 +33,18 @@ mirroring protocol. `third_party/qvh.patch` makes two changes:
 - skip the endpoint clear-halt before reading: on Linux it dropped the PING the phone
   queues right after switching to the mirroring config, so streaming never started;
 - write video unbuffered, so a still screen doesn't sit in a 4 KB buffer.
+
+## Mouse control without jailbreak (Linux)
+
+The computer's Bluetooth adapter poses as a BLE mouse; the phone shows it as the AssistiveTouch
+cursor, and scrcrappy steers that cursor to follow your mouse over the window.
+
+1. iPhone: Settings > Accessibility > Touch > AssistiveTouch: on.
+2. `sudo dnf install python3-dbus python3-gobject` (the helper runs under the system python).
+3. `.venv/bin/scrcrappy --mouse ble`, then on the phone pair "scrcrappy mouse"
+   (AssistiveTouch > Devices > Bluetooth Devices).
+4. Optional, once per phone or after changing AssistiveTouch tracking speed: open a plain light
+   screen (e.g. Settings) and run `.venv/bin/scrcrappy --mouse ble --calibrate`.
+
+Click = tap, drag = drag, wheel = scroll (not verified yet). The cursor re-syncs in the top-left corner whenever the
+mouse enters the window.

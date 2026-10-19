@@ -3,7 +3,7 @@ name = "scrcrappy"
 version = "0.1.0"
 description = "scrcpy for iOS"
 requires-python = ">=3.11"
-dependencies = ["av", "pygame-ce", "pyusb"]
+dependencies = ["av", "numpy", "pygame-ce", "pyusb"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
