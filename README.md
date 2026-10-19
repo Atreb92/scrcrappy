@@ -75,21 +75,17 @@ Hover a button for its name.
 |---|---|
 | Paste | Types the computer's clipboard into the phone (also **Ctrl+Shift+V**). US layout, printable ASCII + Enter/Tab; other characters are skipped and reported. |
 | Copy | Greyed out: copying from the phone to the computer needs the jailbreak backend (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
-| Home / App switcher | Clicks mouse button 2 / 3, which AssistiveTouch turns into Home / App Switcher after the one-time setup below. |
-| Natural scrolling | Flips the wheel direction live (starts from `--natural-scroll`). |
+| Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
+| + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
+| Natural scrolling | Flips the wheel direction live. |
 | Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
 
-One-time phone setup for Home / App switcher (iPhone has no keyboard shortcut for Home):
-1. On the phone: Settings > Accessibility > Touch > AssistiveTouch > Devices > *scrcrappy PC*
-   (or *scrcrappy ESP32*) > Customise Additional Buttons.
-2. When iOS says "Press a button on your pointer device", click the toolbar's **Home** button
-   (it sends button 2). iOS adds a **Button 2** row set to *Secondary Click*: tap that row and
-   pick **Home**.
-3. Back, Customise Additional Buttons again, click the toolbar's **App switcher** button
-   (button 3); iOS opens the action list: pick **App Switcher**.
+Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32
+each have their own mapping on the phone). The toolbar's state is saved in
+`~/.config/scrcrappy/config.json`: custom buttons, natural scrolling, and whether the bar is pinned.
+`--natural-scroll` / `--no-natural-scroll` override the saved scrolling direction.
 
-The device page then lists *Button 2: Home* and *Button 3: App Switcher*. Each Bluetooth device
-(scrcrappy PC, scrcrappy ESP32) has its own mapping.
+After updating to the 5-button version, forget and re-pair the device on the phone once.
 
 On Linux scrcrappy runs through X11 (XWayland on Wayland desktops) because Wayland doesn't let
 an app place the toolbar next to its window; set `SDL_VIDEODRIVER` yourself to override.

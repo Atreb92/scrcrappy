@@ -6,7 +6,7 @@
 
 ## Usability
 
-- [ ] **Home / App switcher need a one-time AssistiveTouch mapping on the phone**, per Bluetooth device (scrcrappy PC, scrcrappy ESP32), and silently do a right-click / nothing until it's done. Make it discoverable: show that setup is needed, guide through it, remember per phone + device that it's done.
+- [x] AssistiveTouch actions are now user-added custom buttons with in-app binding steps (+ on the toolbar).
 - [ ] Mouse wheel doesn't scroll iOS Settings lists (works in other apps). Investigate (wheel report size/pacing? AssistiveTouch scroll mode?).
 - [ ] Long, mostly-vertical cursor moves land 5–10% short of the target. Options: calibrate the vertical axis too, or correct from the video (closed loop).
 - [ ] Paste types US layout, printable ASCII only; other characters are skipped. Other layouts / accented characters via Option dead keys.
@@ -21,6 +21,6 @@
 
 ## Housekeeping
 
-- [ ] `toolbar.py`: chevron constants are literal private-use characters (use `\u` escapes); `CHEVRON_COLLAPSE` unused.
+- [x] `toolbar.py`: chevron constants use `\u` escapes.
 - [ ] `toolbar.py`: tooltip font built twice per show.
 - [ ] Laptop Bluetooth adapter was left `Pairable: yes` by early spikes (original value unknown).
