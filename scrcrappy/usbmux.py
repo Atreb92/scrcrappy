@@ -8,14 +8,19 @@ import socket
 import struct
 
 SOCKET = "/var/run/usbmuxd"
+TIMEOUT = 5.0  # s for usbmuxd to answer; it can wedge (phone locked after a reboot, pairing stuck)
 _CLIENT = {"ClientVersionString": "scrcrappy", "ProgName": "scrcrappy"}
 
 
 def _call(sock: socket.socket, message: dict) -> dict:
     body = plistlib.dumps({**message, **_CLIENT})
-    sock.sendall(struct.pack("<IIII", 16 + len(body), 1, 8, 1) + body)
-    length = struct.unpack("<IIII", _exact(sock, 16))[0]
-    return plistlib.loads(_exact(sock, length - 16))
+    try:
+        sock.sendall(struct.pack("<IIII", 16 + len(body), 1, 8, 1) + body)
+        length = struct.unpack("<IIII", _exact(sock, 16))[0]
+        return plistlib.loads(_exact(sock, length - 16))
+    except TimeoutError:
+        raise TimeoutError(f"usbmuxd didn't answer within {TIMEOUT:g} s: unlock the phone (and tap Trust if it "
+                           "asks), or unplug and replug it") from None
 
 
 def _exact(sock: socket.socket, n: int) -> bytes:
@@ -30,6 +35,7 @@ def _exact(sock: socket.socket, n: int) -> bytes:
 
 def _open() -> socket.socket:
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(TIMEOUT)
     sock.connect(SOCKET)
     return sock
 
@@ -54,4 +60,5 @@ def connect(port: int, serial: str | None = None) -> socket.socket:
         sock.close()
         raise ConnectionRefusedError(f"nothing is listening on port {port} on the iPhone (usbmuxd result "
                                      f"{reply.get('Number')})")
+    sock.settimeout(None)  # now a tunnel to the phone: replies may legitimately take long (pairing prompt)
     return sock

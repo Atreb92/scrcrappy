@@ -35,17 +35,17 @@ HINTS = {
 
 def connect(host: str, wait: float = 10) -> Agent:
     """An authenticated connection; the first time, pairs (the user taps Allow on the phone)."""
-    deadline = time.monotonic() + wait
+    deadline, error = time.monotonic() + wait, None
     while True:  # the phone may still be re-enumerating after video.reset_if_stuck
         try:
             udid = next(iter(usbmux.devices()), None)
-        except OSError:
-            udid = None
+        except OSError as e:
+            udid, error = None, e
         if udid or time.monotonic() > deadline:
             break
         time.sleep(0.5)
     if not udid:
-        raise ConnectionError("no iPhone found through usbmuxd (is usbmuxd running?)")
+        raise error or ConnectionError("usbmuxd lists no iPhone: unlock it, or unplug and replug it")
     secret = load_secret(udid)
     try:
         a = _open(udid)

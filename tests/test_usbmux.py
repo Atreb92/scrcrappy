@@ -72,3 +72,17 @@ def test_picks_device_by_serial(tmp_path, monkeypatch):
     fake_usbmuxd(sock_path, [other, DEV], accept_port=6000)
     monkeypatch.setattr(usbmux, "SOCKET", str(sock_path))
     assert usbmux.devices() == {"zzz": 9, "abc": 7}
+
+
+def test_silent_usbmuxd_times_out_instead_of_hanging(tmp_path, monkeypatch):
+    # usbmuxd can wedge (phone locked after a reboot, stuck pairing): scrcrappy must say so, not hang forever
+    import time
+    srv = socket.socket(socket.AF_UNIX)
+    srv.bind(str(tmp_path / "mux"))
+    srv.listen()  # accepts, never answers
+    monkeypatch.setattr(usbmux, "SOCKET", str(tmp_path / "mux"))
+    monkeypatch.setattr(usbmux, "TIMEOUT", 0.3)
+    t0 = time.monotonic()
+    with pytest.raises(TimeoutError, match="usbmuxd"):
+        usbmux.devices()
+    assert time.monotonic() - t0 < 2
