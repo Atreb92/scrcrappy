@@ -93,3 +93,24 @@ def test_menu_closes_when_focus_lost():
     m = Menu((100, 100), 3, on_edit=lambda: None, on_remove=lambda: None)
     m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.win))
     assert m.closed
+
+
+def test_edit_from_menu_opens_dialog():
+    # the menu closes itself and then asks for the dialog: that must not count as "a popup is open"
+    from scrcrappy.dialog import Menu, Popups
+    popups = Popups()
+    opened = []
+
+    def edit():
+        opened.append(popups.open(lambda: Dialog(DialogState(2, "scrcrappy PC"), on_send=lambda: None, on_done=lambda r: None)))
+
+    menu = popups.open(lambda: Menu((10, 10), 2, on_edit=edit, on_remove=lambda: None))
+    popups.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=menu.win, button=1, pos=menu.hits["edit"].center))
+    assert opened and isinstance(opened[0], Dialog)
+
+
+def test_only_one_popup_at_a_time():
+    from scrcrappy.dialog import Popups
+    popups = Popups()
+    first = popups.open(lambda: Dialog(DialogState(2, "x"), on_send=lambda: None, on_done=lambda r: None))
+    assert first and popups.open(lambda: Dialog(DialogState(3, "x"), on_send=lambda: None, on_done=lambda r: None)) is None

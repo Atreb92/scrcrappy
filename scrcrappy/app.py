@@ -9,7 +9,7 @@ from .keyqueue import KeyQueue
 from .mouse import Pointer
 from . import config
 from .config import Config, Custom
-from .dialog import Dialog, DialogState, Menu
+from .dialog import Dialog, DialogState, Menu, Popups
 from .toolbar import Pill, buttons, next_free
 from .video import LatestFrame
 
@@ -95,7 +95,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     img, controller = None, None
     cfg = cfg or Config()
     customs = cfg.customs.setdefault(device_key, [])
-    popups: list = []  # open Dialog / Menu windows
+    popups = Popups()
 
     def items():
         return buttons(has_input=make_pointer is not None, natural=cfg.natural_scroll, customs=customs)
@@ -125,7 +125,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def edit(n: int | None = None) -> None:
         current = next((c for c in customs if c.button == n), None)
         button = n if current else next_free(customs)
-        if button is None or popups:
+        if button is None:
             return
 
         def done(result: Custom | None) -> None:
@@ -133,7 +133,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 customs[:] = [c for c in customs if c.button != result.button] + [result]
                 changed()
 
-        popups.append(Dialog(DialogState(button, device_name, current), on_send=lambda: click(button), on_done=done))
+        popups.open(lambda: Dialog(DialogState(button, device_name, current), on_send=lambda: click(button), on_done=done))
 
     def menu(n: int) -> None:
         def remove() -> None:
@@ -142,7 +142,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
 
         rect = next(r for b, r in pill.rects if b.id == f"custom:{n}")
         px, py = pill.win.position
-        popups.append(Menu((px + pill.win.size[0] + 4, py + rect.y), n, on_edit=lambda: edit(n), on_remove=remove))
+        popups.open(lambda: Menu((px + pill.win.size[0] + 4, py + rect.y), n, on_edit=lambda: edit(n), on_remove=remove))
 
     pill = Pill(main, items(), {
         "paste": paste,
@@ -155,9 +155,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     }, pinned=cfg.pinned)
     try:
         while alive():
-            popups[:] = [p for p in popups if not p.closed]
             for event in pygame.event.get():
-                if any(p.handle(event) for p in list(popups)) or pill.handle(event):
+                if popups.handle(event) or pill.handle(event):
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
@@ -179,7 +178,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 x, y, w, h = fit(img.get_size(), screen.get_size())
                 screen.blit(pygame.transform.smoothscale(img, (w, h)), (x, y))
             main.flip()
-            pill.update(app_focused=pill.focused() or any(not p.closed and p.win.focused for p in popups))
+            pill.update(app_focused=pill.focused() or popups.focused())
             pill.draw()
             clock.tick(60)
         return False

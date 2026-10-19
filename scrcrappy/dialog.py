@@ -203,3 +203,24 @@ class Menu:
         for i, line in enumerate(self.note):
             surf.blit(self.small.render(line, True, MUTED), (12, 70 + 15 * i))
         self.win.flip()
+
+
+class Popups:
+    """The toolbar's popup windows (Dialog / Menu); at most one open at a time."""
+
+    def __init__(self) -> None:
+        self.items: list = []
+
+    def open(self, make: Callable[[], "Dialog | Menu"]):
+        """Open the popup `make` builds, unless one is already open (then returns None)."""
+        self.items = [p for p in self.items if not p.closed]
+        if self.items:
+            return None
+        self.items.append(make())
+        return self.items[-1]
+
+    def handle(self, event: pygame.event.Event) -> bool:
+        return any(p.handle(event) for p in list(self.items))
+
+    def focused(self) -> bool:
+        return any(not p.closed and p.win.focused for p in self.items)
