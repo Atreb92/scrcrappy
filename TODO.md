@@ -2,7 +2,9 @@
 
 ## Next up
 
-- [ ] **Jailbreak controls** (ZXTouch on palera1n/Dopamine): absolute taps and multitouch, phone ↔ computer clipboard, enables the toolbar's Copy button. Plan: `docs/superpowers/plans/2026-10-19-scrcrappy-jailbreak-mvp.md`.
+- [ ] **Jailbreak controls** via our own tweak **scrcrappy-agent** (separate repo `~/source/scrcrappy-agent`, design approved 2026-10-19). ZXTouch was audited and rejected (unauthenticated root-capable socket on 0.0.0.0:6000, passwordless sudo rule, unsigned builds). The old ZXTouch plan is superseded; `scrcrappy/zxtouch.py` on the `jailbreak` branch goes away.
+- [ ] Later (advanced): full terminal over SSH (OpenSSH on the phone, through `usbmux.connect(22)`).
+- [ ] Later: hardware buttons (Home, lock, volume) and opening apps via scrcrappy-agent.
 
 ## Usability
 
