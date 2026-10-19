@@ -1,3 +1,4 @@
+import os
 import sys
 from typing import Callable
 
@@ -11,6 +12,9 @@ from .video import LatestFrame
 
 
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
+# SDL ignores the click that focuses a window by default: the toolbar would need two clicks
+os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
+
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
 HOME_BUTTON, APPS_BUTTON = 0x02, 0x04  # mouse buttons 2/3: mapped to Home / App Switcher in AssistiveTouch
 

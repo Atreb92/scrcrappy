@@ -153,3 +153,13 @@ def test_paste_returns_skipped_count(monkeypatch):
     monkeypatch.setattr(pygame.scrap, "get_text", lambda: "aè")
     c, sent = keyboard()
     assert c.paste() == 1
+
+
+def test_first_click_on_unfocused_pill_is_delivered(monkeypatch):
+    # SDL drops the click that focuses a window unless this hint is set: the pill needed 2 clicks
+    import importlib
+    import os
+    import scrcrappy.app
+    monkeypatch.delenv("SDL_MOUSE_FOCUS_CLICKTHROUGH", raising=False)
+    importlib.reload(scrcrappy.app)
+    assert os.environ["SDL_MOUSE_FOCUS_CLICKTHROUGH"] == "1"
