@@ -87,3 +87,10 @@ def test_wheel_sent_in_order():
     p.wheel(-2)
     run(p)
     assert phone.sent == [(0, 0, 0, -2)]
+
+
+def test_pointer_click_sends_mask_then_release():
+    p, phone = setup()
+    p.click(2)
+    run(p)
+    assert phone.sent == [(0, 0, 2, 0), (0, 0, 0, 0)]

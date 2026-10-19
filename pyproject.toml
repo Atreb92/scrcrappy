@@ -17,3 +17,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["scrcrappy"]
+
+[tool.setuptools.package-data]
+scrcrappy = ["icons/*"]
