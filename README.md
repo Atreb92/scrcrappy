@@ -65,3 +65,26 @@ on-screen keyboard.
 After updating scrcrappy, if the device description changed: "Forget" it on the phone, run
 `bluetoothctl remove <phone address>` (ble) or reflash (esp32), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.
+
+## Toolbar
+
+A small bar sits to the right of the phone window (left if there's no room) and follows it.
+Hover a button for its name.
+
+| Button | Does |
+|---|---|
+| Paste | Types the computer's clipboard into the phone (also **Ctrl+Shift+V**). US layout, printable ASCII + Enter/Tab; other characters are skipped and reported. |
+| Copy | Greyed out: copying from the phone to the computer needs the jailbreak backend (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
+| Home / App switcher | Clicks mouse button 2 / 3, which AssistiveTouch turns into Home / App Switcher after the one-time setup below. |
+| Natural scrolling | Flips the wheel direction live (starts from `--natural-scroll`). |
+| Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
+
+One-time phone setup for Home / App switcher (iPhone has no keyboard shortcut for Home):
+1. On the phone: Settings > Accessibility > Touch > AssistiveTouch > Devices > *scrcrappy PC*
+   (or *scrcrappy ESP32*) > Customise Additional Buttons.
+2. When iOS says to press a button on the device, click the toolbar's **Home** button
+   (it sends button 2) and pick **Home**.
+3. Again, click the toolbar's **App switcher** button (button 3) and pick **App Switcher**.
+
+On Linux scrcrappy runs through X11 (XWayland on Wayland desktops) because Wayland doesn't let
+an app place the toolbar next to its window; set `SDL_VIDEODRIVER` yourself to override.
