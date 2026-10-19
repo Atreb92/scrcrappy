@@ -7,13 +7,13 @@ scrcpy for iOS: mirror and control an iPhone over USB.
 Fedora:
 
 ```sh
-sudo dnf install golang libusb1-devel gstreamer1-devel gstreamer1-plugins-base-devel
+sudo dnf install golang libusb1-devel
 ```
 
-macOS: `brew install go libusb pkg-config gstreamer`
+macOS: `brew install go libusb pkg-config`
 
 ```sh
-scripts/build-qvh.sh            # patched qvh -> bin/qvh
+scripts/build-qvh.sh            # patched qvh -> scrcrappy/bin/qvh
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ```
 
@@ -33,6 +33,8 @@ mirroring protocol. `third_party/qvh.patch` makes two changes:
 - skip the endpoint clear-halt before reading: on Linux it dropped the PING the phone
   queues right after switching to the mirroring config, so streaming never started;
 - write video unbuffered, so a still screen doesn't sit in a 4 KB buffer.
+- drop qvh's own GStreamer window and audio commands (scrcrappy only runs `qvh record`), so it needs
+  nothing but libusb at runtime.
 
 ## Mouse control without jailbreak
 

@@ -1,8 +1,66 @@
 diff --git a/main.go b/main.go
-index bc22e68..14b6e98 100644
+index bc22e68..5af149a 100644
 --- a/main.go
 +++ b/main.go
-@@ -356,7 +356,7 @@ func record(h264FilePath string, wavFilePath string, device screencapture.IosDev
+@@ -14,7 +14,6 @@ import (
+ 	"github.com/danielpaulus/quicktime_video_hack/screencapture"
+ 	"github.com/danielpaulus/quicktime_video_hack/screencapture/coremedia"
+ 	"github.com/danielpaulus/quicktime_video_hack/screencapture/diagnostics"
+-	"github.com/danielpaulus/quicktime_video_hack/screencapture/gstadapter"
+ 	"github.com/docopt/docopt-go"
+ 	log "github.com/sirupsen/logrus"
+ )
+@@ -122,10 +121,10 @@ The commands work as following:
+ 			return
+ 		}
+ 		if ogg {
+-			recordAudioGst(outfile, device, gstadapter.OGG)
++			recordAudioGst(outfile, device, "ogg")
+ 			return
+ 		}
+-		recordAudioGst(outfile, device, gstadapter.MP3)
++		recordAudioGst(outfile, device, "mp3")
+ 		return
+ 	}
+ 
+@@ -230,13 +229,7 @@ func printExamples() {
+ }
+ 
+ func recordAudioGst(outfile string, device screencapture.IosDevice, audiotype string) {
+-	log.Debug("Starting Gstreamer with audio pipeline")
+-	gStreamer, err := gstadapter.NewWithAudioPipeline(outfile, audiotype)
+-	if err != nil {
+-		printErrJSON(err, "Failed creating custom pipeline")
+-		return
+-	}
+-	startWithConsumer(gStreamer, device, true)
++	log.Fatal("scrcrappy: qvh is built without GStreamer; use qvh record")
+ }
+ 
+ func runDiagnostics(outfile string, dump bool, dumpFile string, device screencapture.IosDevice) {
+@@ -282,19 +275,11 @@ func recordAudioWav(outfile string, device screencapture.IosDevice) {
+ }
+ 
+ func startGStreamerWithCustomPipeline(device screencapture.IosDevice, pipelineString string) {
+-	log.Debug("Starting Gstreamer with custom pipeline")
+-	gStreamer, err := gstadapter.NewWithCustomPipeline(pipelineString)
+-	if err != nil {
+-		printErrJSON(err, "Failed creating custom pipeline")
+-		return
+-	}
+-	startWithConsumer(gStreamer, device, false)
++	log.Fatal("scrcrappy: qvh is built without GStreamer; use qvh record")
+ }
+ 
+ func startGStreamer(device screencapture.IosDevice) {
+-	log.Debug("Starting Gstreamer")
+-	gStreamer := gstadapter.New()
+-	startWithConsumer(gStreamer, device, false)
++	log.Fatal("scrcrappy: qvh is built without GStreamer; use qvh record")
+ }
+ 
+ // Just dump a list of what was discovered to the console
+@@ -356,7 +341,7 @@ func record(h264FilePath string, wavFilePath string, device screencapture.IosDev
  		log.Errorf("Could not open wav file '%s'", wavFilePath)
  	}
  
