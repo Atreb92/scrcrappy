@@ -10,8 +10,8 @@ from .video import LatestFrame
 class Controller:
     """Window mouse events -> phone pointer (cursor follows the mouse, left button = tap/drag)."""
 
-    def __init__(self, pointer: Pointer) -> None:
-        self.pointer, self.held = pointer, False
+    def __init__(self, pointer: Pointer, natural_scroll: bool = False) -> None:
+        self.pointer, self.natural_scroll, self.held = pointer, natural_scroll, False
 
     def handle(self, event: pygame.event.Event, rect: tuple[int, int, int, int], frame: tuple[int, int]) -> None:
         p = self.pointer
@@ -25,7 +25,8 @@ class Controller:
             p.button(False)
             self.held = False
         elif event.type == pygame.MOUSEWHEEL:
-            p.wheel(event.y)
+            notches = -event.y if event.flipped else event.y  # undo the OS's own natural-scroll flip
+            p.wheel(-notches if self.natural_scroll else notches)
         elif event.type == pygame.WINDOWENTER and not self.held:
             p.home()  # re-sync drift; the next motion event brings the cursor back under the mouse
         elif event.type in (pygame.WINDOWLEAVE, pygame.WINDOWFOCUSLOST) and self.held:
@@ -34,7 +35,7 @@ class Controller:
 
 
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
-        title: str = "scrcrappy") -> bool:
+        natural_scroll: bool = False, title: str = "scrcrappy") -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known)."""
     pygame.init()
@@ -56,7 +57,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     pointer = make_pointer(size)
                     pointer.home()
                     pointer.start()
-                    controller = Controller(pointer)
+                    controller = Controller(pointer, natural_scroll)
             screen.fill((0, 0, 0))
             if img:
                 x, y, w, h = fit(img.get_size(), screen.get_size())

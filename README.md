@@ -54,5 +54,5 @@ cursor, and scrcrappy steers that cursor to follow your mouse over the window.
 4. Optional, once per phone or after changing AssistiveTouch tracking speed: open a plain light
    screen (e.g. Settings) and run `.venv/bin/scrcrappy --mouse ble --calibrate` (or `esp32`).
 
-Click = tap, drag = drag, wheel = scroll (not verified yet). The cursor re-syncs in the top-left corner whenever the
+Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it). The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.

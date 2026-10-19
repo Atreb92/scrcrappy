@@ -19,6 +19,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", default="/dev/ttyUSB0", help="ESP32 serial port (default: /dev/ttyUSB0)")
     parser.add_argument("--ble-python", default="/usr/bin/python3",
                         help="python with python3-dbus and python3-gobject, runs the Bluetooth helper")
+    parser.add_argument("--natural-scroll", action="store_true",
+                        help="invert the wheel: content follows the wheel like a finger (as on a touchpad)")
     parser.add_argument("--calibrate", action="store_true",
                         help="measure the pointer gain (needs --mouse; open a plain light screen first)")
     args = parser.parse_args(argv)
@@ -63,7 +65,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             print(f"saved {calibrate.save(serial, table)}")
             return 0
-        closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer)
+        closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer,
+                                 natural_scroll=args.natural_scroll)
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), qvh log: {proc.log_path}", file=sys.stderr)
         return 1

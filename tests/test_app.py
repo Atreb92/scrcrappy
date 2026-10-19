@@ -71,3 +71,14 @@ def test_find_cursor_on_plain_screen():
     img[(xx - 300) ** 2 + (yy - 500) ** 2 <= 18 ** 2] = (150, 149, 154)
     assert find_cursor(img) == pytest.approx((300, 500), abs=3)
     assert find_cursor(np.full((1334, 750, 3), 242, np.uint8)) is None
+
+
+@pytest.mark.parametrize("natural, flipped, expected", [
+    (False, False, 1), (True, False, -1),  # wheel up, OS not flipping
+    (False, True, 1), (True, True, -1),    # OS already flipped (macOS natural scrolling): same result
+])
+def test_scroll_direction(natural, flipped, expected):
+    p = FakePointer()
+    Controller(p, natural_scroll=natural).handle(
+        ev(pygame.MOUSEWHEEL, y=-1 if flipped else 1, flipped=flipped), RECT, FRAME)
+    assert p.calls == [("wheel", expected)]
