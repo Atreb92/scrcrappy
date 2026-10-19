@@ -5,6 +5,7 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 import pygame
 import pytest
 
+from scrcrappy.config import Custom
 from scrcrappy.toolbar import TAB, Pill, buttons
 
 
@@ -13,8 +14,8 @@ def pill():
     pygame.init()
     main = pygame.Window("phone", (300, 500))
     calls = []
-    actions = {i: (lambda i=i: calls.append(i)) for i in ("paste", "copy", "home", "apps", "natural")}
-    p = Pill(main, buttons(has_input=True, natural=False), actions)
+    actions = {i: (lambda *a, i=i: calls.append((i, *a))) for i in ("paste", "copy", "natural", "add", "custom", "menu")}
+    p = Pill(main, buttons(has_input=True, natural=False, customs=[Custom(2, "\ue9b2", "Home")]), actions)
     p.calls = calls
     yield p
     pygame.quit()
@@ -28,13 +29,34 @@ def ev(p, kind, **kw):
     return pygame.event.Event(kind, window=p.win, **kw)
 
 
-def click(p, button_id):
-    p.handle(ev(p, pygame.MOUSEBUTTONUP, button=1, pos=at(p, button_id)))
+def click(p, button_id, mouse_button=1):
+    p.handle(ev(p, pygame.MOUSEBUTTONUP, button=mouse_button, pos=at(p, button_id)))
 
 
-def test_click_runs_action(pill):
-    click(pill, "home")
-    assert pill.calls == ["home"]
+def test_click_custom_runs_action_with_its_button(pill):
+    click(pill, "custom:2")
+    assert pill.calls == [("custom", 2)]
+
+
+def test_click_add(pill):
+    click(pill, "add")
+    assert pill.calls == [("add",)]
+
+
+def test_right_click_custom_opens_menu(pill):
+    click(pill, "custom:2", mouse_button=3)
+    assert pill.calls == [("menu", 2)]
+
+
+def test_right_click_other_does_nothing(pill):
+    click(pill, "paste", mouse_button=3)
+    pill.handle(ev(pill, pygame.MOUSEBUTTONUP, button=3, pos=(0, 0)))
+    assert pill.calls == []
+
+
+def test_set_items_relayouts(pill):
+    pill.set_items(buttons(True, False, []))
+    assert not any(b.id.startswith("custom:") for b, _ in pill.rects)
 
 
 def test_click_on_disabled_button_does_nothing(pill):
@@ -44,14 +66,14 @@ def test_click_on_disabled_button_does_nothing(pill):
 
 def test_toggle_flips_state(pill):
     click(pill, "natural")
-    assert pill.calls == ["natural"]
+    assert pill.calls == [("natural",)]
     assert next(b for b, _ in pill.rects if b.id == "natural").toggled is True
 
 
 def test_tooltip_after_hover_hides_on_leave(pill):
-    pill.handle(ev(pill, pygame.MOUSEMOTION, pos=at(pill, "home")))
+    pill.handle(ev(pill, pygame.MOUSEMOTION, pos=at(pill, "paste")))
     pill.update(now=pill.hover_since + 0.6)
-    assert pill.tip_text == "Home"
+    assert pill.tip_text.startswith("Paste")
     pill.handle(ev(pill, pygame.WINDOWLEAVE))
     pill.update(now=pill.hover_since + 1.0 if pill.hover_since else 99)
     assert pill.tip_text is None

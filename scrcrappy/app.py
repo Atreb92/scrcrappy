@@ -16,7 +16,6 @@ MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage -
 os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
 
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
-HOME_BUTTON, APPS_BUTTON = 0x02, 0x04  # mouse buttons 2/3: mapped to Home / App Switcher in AssistiveTouch
 
 
 class Controller:
@@ -100,11 +99,12 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if controller:
             controller.natural_scroll = natural[0]
 
-    pill = Pill(main, buttons(has_input=make_pointer is not None, natural=natural_scroll), {
+    pill = Pill(main, buttons(has_input=make_pointer is not None, natural=natural_scroll, customs=[]), {
         "paste": paste,
         "copy": lambda: None,
-        "home": lambda: controller and controller.pointer.click(HOME_BUTTON),
-        "apps": lambda: controller and controller.pointer.click(APPS_BUTTON),
+        "custom": lambda n: controller and controller.pointer.click(1 << (n - 1)),
+        "add": lambda: None,
+        "menu": lambda n: None,
         "natural": toggle_natural,
     })
     try:

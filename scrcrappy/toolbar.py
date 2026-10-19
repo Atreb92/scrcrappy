@@ -6,6 +6,8 @@ from typing import Callable
 
 import pygame
 
+from .config import BUTTONS, ICON_CHOICES, Custom
+
 PILL_RATIO = 0.8  # of the phone window's height
 GAP = 11  # between phone window and pill
 PAD_Y, PAD_X = 8, 4
@@ -25,17 +27,29 @@ class Button:
     small: bool = False
 
 
-def buttons(has_input: bool, natural: bool) -> list[Button | None]:
+def next_free(customs: list[Custom]) -> int | None:
+    """Lowest mouse button not used by a custom button."""
+    used = {c.button for c in customs}
+    return next((n for n in BUTTONS if n not in used), None)
+
+
+def buttons(has_input: bool, natural: bool, customs: list[Custom]) -> list[Button | None]:
     """The pill's items top to bottom; None is a separator."""
     def action(id_, icon, tip):
         return Button(id_, icon, tip if has_input else NEEDS_INPUT, enabled=has_input)
 
+    labels = dict(ICON_CHOICES)
+    add = action("add", "\ue145", "Add a button…")
+    if has_input and next_free(customs) is None:
+        add.enabled, add.tip = False, f"All {len(BUTTONS)} custom buttons in use"
     return [
         action("paste", "\ue14f", "Paste computer clipboard (Ctrl+Shift+V)"),
         Button("copy", "\ue14d", COPY_TIP, enabled=False),
         None,
-        action("home", "\ue9b2", "Home"),
-        action("apps", "\ue8eb", "App switcher"),
+        *(action(f"custom:{c.button}", c.icon,
+                 f"{c.name or labels.get(c.icon, 'Custom')} (button {c.button}) · right-click to edit or remove")
+          for c in sorted(customs, key=lambda c: c.button)),
+        add,
         None,
         Button("natural", "\ue8d5", "Natural scrolling", toggled=natural),
         None,
@@ -125,6 +139,10 @@ class Pill:
             self.rects = layout(self.items, h)[1]
         self._show_tip(None)
 
+    def set_items(self, items: list[Button | None]) -> None:
+        self.items, self.hover = items, None
+        self.follow()
+
     def _set_collapsed(self, collapsed: bool) -> None:
         if collapsed != self.collapsed:
             self.collapsed, self.hover = collapsed, None
@@ -149,6 +167,9 @@ class Pill:
                 self._show_tip(None)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and (hit := self._hit(event.pos)):
             self._click(hit)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 3 and (hit := self._hit(event.pos)):
+            if hit.id.startswith("custom:"):
+                self.actions["menu"](int(hit.id[7:]))
         return True
 
     def _hit(self, pos: tuple[int, int]) -> Button | None:
@@ -166,7 +187,10 @@ class Pill:
         else:
             if button.toggled is not None:
                 button.toggled = not button.toggled
-            self.actions[button.id]()
+            if button.id.startswith("custom:"):
+                self.actions["custom"](int(button.id[7:]))
+            else:
+                self.actions[button.id]()
         self.main.focus()  # keep typing going to the phone
 
     def focused(self) -> bool:
