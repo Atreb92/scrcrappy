@@ -16,14 +16,22 @@ def inside(pos: tuple[int, int], rect: tuple[int, int, int, int]) -> bool:
     return x <= pos[0] < x + w and y <= pos[1] < y + h
 
 
-# UIInterfaceOrientation (ZXTouch orientation reply) -> clockwise rotation of the video frame vs portrait.
-# ponytail: 3/4 (landscape right/left) not yet checked on the phone; swap them if landscape taps mirror.
-ROTATION_BY_ORIENTATION = {1: 0, 2: 180, 3: 90, 4: 270}
+# UIInterfaceOrientation (agent `screen` reply) -> clockwise rotation of the upright app vs the portrait panel.
+# 3 = Home button on the right: the agent's screenshots need 90° counter-clockwise to be upright (seen on the
+# iPhone 8). ponytail: taps in landscape not yet checked on the phone; swap 3/4 if they land mirrored.
+ROTATION_BY_ORIENTATION = {1: 0, 2: 180, 3: 270, 4: 90}
+
+
+def rotation(orientation: int, frame: tuple[int, int]) -> int:
+    """How far the shown video frame is turned from portrait. The video turns with the app; while the frame's
+    shape doesn't match the orientation (stream hasn't turned yet, or the reply is stale) treat it as portrait."""
+    r = ROTATION_BY_ORIENTATION.get(orientation, 0)
+    return r if (r in (90, 270)) == (frame[0] > frame[1]) else 0
 
 
 def to_device(pos: tuple[int, int], rect: tuple[int, int, int, int], rotation: int,
               size: tuple[float, float]) -> tuple[float, float] | None:
-    """Window point -> portrait phone coordinates in `size` units (ZXTouch's), or None outside the frame.
+    """Window point -> portrait phone coordinates in `size` units ((1, 1): fractions), or None outside the frame.
     `rotation` is how far the shown frame is turned clockwise from portrait."""
     if not inside(pos, rect):
         return None

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from typing import Callable
 
 import pygame
@@ -7,10 +8,10 @@ import pygame
 from .geometry import fit, inside, to_frame
 from .keyqueue import KeyQueue
 from .mouse import Pointer
-from . import config
+from . import agent as agent_mod, config
 from .config import Config, Custom
-from .dialog import Dialog, DialogState, Menu, Popups
-from .toolbar import Pill, buttons, next_free
+from .dialog import Dialog, DialogState, Menu, Popups, Settings
+from .toolbar import GAP, Pill, buttons, next_free
 from .video import LatestFrame
 
 
@@ -41,6 +42,9 @@ class Controller:
         else:
             return
         self.keys.report(self.modifiers, self.pressed[:6])  # >6 keys: the extra ones wait (no rollover error)
+
+    def stop(self) -> None:
+        self.pointer.stop()
 
     def release_all(self) -> None:
         if self.keys and (self.pressed or self.modifiers):
@@ -92,9 +96,11 @@ def save_or_warn(save: Callable[[Config], None], cfg: Config) -> None:
 
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
-        save: Callable[[Config], None] = config.save, title: str = "scrcrappy") -> bool:
+        save: Callable[[Config], None] = config.save, title: str = "scrcrappy",
+        agent: agent_mod.Session | None = None) -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
-    With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known).
+    With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
+    with `agent`, clicks and keys go to scrcrappy-agent instead.
     Toolbar changes (custom buttons, natural scrolling, pinned) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667), resizable=True)
@@ -102,11 +108,18 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     clock = pygame.time.Clock()
     img, controller = None, None
     cfg = cfg or Config()
+    if agent:
+        controller = agent_mod.Controller(agent, cfg.natural_scroll)
+        controller.screenshots = cfg.screenshots
+        pygame.key.set_repeat(400, 33)  # agent keys are press+release: held keys repeat from here
     customs = cfg.customs.setdefault(device_key, [])
     popups = Popups()
+    settings: Settings | None = None
+    settings_closed_at = 0.0
 
     def items():
-        return buttons(has_input=make_pointer is not None, natural=cfg.natural_scroll, customs=customs)
+        return buttons(has_input=make_pointer is not None or agent is not None, natural=cfg.natural_scroll,
+                       customs=customs, agent=agent is not None, settings=bool(settings and not settings.closed))
 
     def changed() -> None:
         save_or_warn(save, cfg)
@@ -152,18 +165,56 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         px, py = pill.win.position
         popups.open(lambda: Menu((px + pill.win.size[0] + 4, py + rect.y), n, on_edit=lambda: edit(n), on_remove=remove))
 
+    def place(size: tuple[int, int]) -> tuple[int, int]:
+        """Beside the pill, away from the phone window, centred on the gear."""
+        (px, py), (pw, _) = pill.win.position, pill.win.size
+        x = px + pw + GAP if px > main.position[0] else px - GAP - size[0]
+        gear = next((r for b, r in pill.rects if b.id == "settings"), None)
+        y = py + (gear.centery if gear else 0) - size[1] // 2
+        return x, max(0, min(y, pygame.display.get_desktop_sizes()[0][1] - size[1]))
+
+    def settings_changed() -> None:
+        save_or_warn(save, cfg)
+        if agent and controller:
+            controller.screenshots = cfg.screenshots
+
+    def natural_from_settings() -> None:
+        toggle_natural()
+        pill.set_items(items())
+
+    def settings_done() -> None:
+        nonlocal settings_closed_at
+        settings_closed_at = time.monotonic()
+        pill.set_items(items())
+
+    def open_settings() -> None:
+        nonlocal settings
+        if settings and not settings.closed:
+            settings.close()
+        elif time.monotonic() - settings_closed_at > 0.5:  # else this click is what closed it (focus moved)
+            settings = popups.open(lambda: Settings(cfg, place, settings_changed, natural_from_settings, settings_done)) or settings
+        pill.set_items(items())
+
     pill = Pill(main, items(), {
         "paste": paste,
-        "copy": lambda: None,
+        "copy": lambda: controller.copy(),
+        "screenshot": lambda: controller.screenshot(),
+        "home": lambda: controller.home(),
+        "switcher": lambda: controller.switcher(),
+        "lock": lambda: controller.lock(),
         "custom": click,
         "add": edit,
         "menu": menu,
         "natural": toggle_natural,
+        "settings": open_settings,
         "pinned": set_pinned,
     }, pinned=cfg.pinned)
     try:
         while alive():
             for event in pygame.event.get():
+                if event.type == pygame.USEREVENT and hasattr(event, "run"):
+                    event.run()  # an agent reply, handled on this thread
+                    continue
                 if popups.handle(event) or pill.handle(event):
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
@@ -188,10 +239,12 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             main.flip()
             pill.update(app_focused=pill.focused() or popups.focused())
             pill.draw()
+            if settings:
+                settings.draw()  # natural scrolling may have changed from the pill
             clock.tick(60)
         return False
     finally:
         if controller:
             controller.release_all()
-            controller.pointer.stop()
+            controller.stop()
         pygame.quit()

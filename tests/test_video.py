@@ -40,3 +40,12 @@ def test_fit_letterboxes_tall_frame():
 def test_fit_pillarboxes_wide_window():
     assert fit((750, 1334), (375, 667)) == (0, 0, 375, 667)
     assert fit((1334, 750), (1000, 1000)) == (0, 219, 1000, 562)
+
+
+def test_libusb_found_in_homebrew_when_the_system_search_misses():
+    # macOS: ctypes.util.find_library doesn't look in /opt/homebrew/lib, so pyusb found no backend
+    from scrcrappy import video
+    assert video.libusb_path("usb-1.0", find=lambda n: None,
+                             exists=lambda p: p == "/opt/homebrew/lib/libusb-1.0.dylib") == "/opt/homebrew/lib/libusb-1.0.dylib"
+    assert video.libusb_path("usb-1.0", find=lambda n: "/usr/lib/libusb-1.0.so.0", exists=lambda p: False) == "/usr/lib/libusb-1.0.so.0"
+    assert video.libusb_path("usb-1.0", find=lambda n: None, exists=lambda p: False) is None

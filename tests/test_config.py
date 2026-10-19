@@ -52,3 +52,12 @@ def test_save_is_atomic(tmp_path, monkeypatch):
 
 def test_power_icon_offered():
     assert ("\uf8c7", "Power / Lock") in config.ICON_CHOICES
+
+
+def test_settings_roundtrip_and_bad_mouse(tmp_path):
+    p = tmp_path / "c.json"
+    cfg = Config(mouse="agent", port="/dev/ttyACM0", screenshots="~/shots")
+    config.save(cfg, p)
+    assert config.load(p) == cfg
+    p.write_text(json.dumps({"mouse": "wifi"}))
+    assert config.load(p).mouse == "none"

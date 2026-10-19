@@ -1,5 +1,6 @@
 """Phone screen capture: qvh (QuickTime USB protocol) -> named pipe -> PyAV decode."""
 import contextlib
+import ctypes.util
 import os
 import signal
 import subprocess
@@ -9,6 +10,7 @@ import time
 from typing import BinaryIO, Iterator
 
 import av
+import usb.backend.libusb1
 import usb.core
 
 APPLE = 0x05AC
@@ -33,8 +35,16 @@ class LatestFrame:
             return frame
 
 
+HOMEBREW_LIBS = ("/opt/homebrew/lib", "/usr/local/lib")  # Apple Silicon, Intel
+
+
+def libusb_path(name: str, find=ctypes.util.find_library, exists=os.path.exists) -> str | None:
+    """pyusb's libusb lookup, plus Homebrew's folders, which ctypes doesn't search on macOS."""
+    return find(name) or next((p for d in HOMEBREW_LIBS if exists(p := f"{d}/lib{name}.dylib")), None)
+
+
 def find_iphone() -> usb.core.Device | None:
-    return usb.core.find(idVendor=APPLE)
+    return usb.core.find(idVendor=APPLE, backend=usb.backend.libusb1.get_backend(find_library=libusb_path))
 
 
 def reset_if_stuck(dev: usb.core.Device) -> None:
