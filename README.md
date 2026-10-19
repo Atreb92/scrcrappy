@@ -56,6 +56,12 @@ mirroring protocol. `third_party/qvh.patch` makes two changes:
 - write video unbuffered, so a still screen doesn't sit in a 4 KB buffer.
 - drop qvh's own GStreamer window and audio commands (scrcrappy only runs `qvh record`), so it needs
   nothing but libusb at runtime.
+- drop qvh's pairing check, the only use of go-ios (AGPL-3.0), so everything shipped stays permissively
+  licensed; the licences of qvh and its Go modules ship as `scrcrappy/bin/qvh-LICENSES.txt`.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).
 
 ## Mouse control without jailbreak
 

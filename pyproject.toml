@@ -20,4 +20,4 @@ build-backend = "setuptools.build_meta"
 packages = ["scrcrappy"]
 
 [tool.setuptools.package-data]
-scrcrappy = ["icons/*", "bin/qvh"]
+scrcrappy = ["icons/*", "bin/qvh", "bin/qvh-LICENSES.txt"]

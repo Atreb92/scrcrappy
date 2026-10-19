@@ -19,4 +19,24 @@ SRC=$(cd "$SRC" && pwd)
 grep -q "built without GStreamer" "$SRC/main.go" || { echo "error: qvh.patch did not apply in $SRC" >&2; exit 1; }
 mkdir -p "$ROOT/scrcrappy/bin"
 (cd "$SRC" && go build -o "$ROOT/scrcrappy/bin/qvh" .)
+
+# Licences of qvh and every Go module compiled into it, shipped next to the binary. Copyleft must not get in:
+# scrcrappy is MIT (the patch already drops go-ios, which is AGPL-3.0).
+NOTICE="$ROOT/scrcrappy/bin/qvh-LICENSES.txt"
+MODCACHE=$(go env GOMODCACHE)
+{
+  echo "scrcrappy/bin/qvh is built from github.com/danielpaulus/quicktime_video_hack@$COMMIT"
+  echo "with scrcrappy's third_party/qvh.patch. Licences of it and of the Go modules compiled into it follow."
+  printf '\n==== quicktime_video_hack ====\n\n'
+  cat "$SRC/LICENSE"
+  go version -m "$ROOT/scrcrappy/bin/qvh" | awk '$1 == "dep" { print $2 "@" $3 }' | while read -r mod; do
+    dir="$MODCACHE/$(echo "$mod" | sed 's/[A-Z]/!&/g' | tr 'A-Z' 'a-z')"  # module cache escapes capitals
+    printf '\n==== %s ====\n\n' "$mod"
+    cat "$dir"/LICENSE* 2>/dev/null || { echo "error: no licence file for $mod" >&2; exit 1; }
+  done
+} > "$NOTICE"
+if grep -qiE "affero|gnu general public" "$NOTICE"; then
+  echo "error: copyleft licence among qvh's modules, see $NOTICE" >&2
+  exit 1
+fi
 echo "built $ROOT/scrcrappy/bin/qvh"
