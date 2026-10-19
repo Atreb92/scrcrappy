@@ -176,3 +176,20 @@ def test_calibration_section_only_with_a_mouse_and_calibrate_closes_the_panel():
     assert any("Tracking Speed" in line for line in panel.calibration_lines)
     click(panel, "calibrate")
     assert started == [1] and closed == [1] and panel.closed
+
+
+def test_ai_switch_shows_status_and_copy():
+    from scrcrappy.config import Config
+    cfg, copied = Config(), []
+
+    def toggle():
+        cfg.ai_control = not cfg.ai_control
+
+    panel, _ = settings_panel(cfg, [], on_ai=toggle, ai_status=lambda: "http://127.0.0.1:7331/mcp",
+                              on_copy=lambda: copied.append(1))
+    assert "copy" not in panel.hits
+    click(panel, "ai")
+    assert cfg.ai_control and "copy" in panel.hits and panel.win.size[1] == panel.height
+    assert panel.ai_lines == ["http://127.0.0.1:7331/mcp"]
+    click(panel, "copy")
+    assert copied == [1]

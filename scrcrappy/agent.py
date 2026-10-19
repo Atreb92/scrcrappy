@@ -100,11 +100,15 @@ class Session:
         except OSError:
             pass  # phone gone; the window loop ends when the video does
 
-    def request(self, obj: dict, done: Callable[[dict], None] | None = None) -> None:
+    def request(self, obj: dict, done: Callable[[dict], None] | None = None,
+                failed: Callable[[str], None] | None = None) -> None:
+        """`failed(error)` (else a printed warning) when the agent replies with an error."""
         def job() -> None:
             self._send(obj)
             reply = read_frame(self.sock.recv)
-            if "error" in reply:
+            if "error" in reply and failed:
+                self.post(lambda: failed(reply["error"]))
+            elif "error" in reply:
                 print(f"agent: {obj['cmd']}: {reply['error']}", file=sys.stderr)
             elif done:
                 self.post(lambda: done(reply))
@@ -199,6 +203,9 @@ class Controller:
         if self.fingers:
             self._fingers("up", self.at)
             self.fingers = 0
+
+    def release(self) -> None:
+        self.release_all()
 
     def release_all(self) -> None:
         self.lift()

@@ -33,6 +33,8 @@ class Config:
     mouse: str = "none"  # input mode used when --mouse isn't given
     port: str = "/dev/ttyUSB0"  # ESP32 serial port when --port isn't given
     screenshots: str = ""  # folder; "" = ~/Pictures, else home
+    ai_control: bool = False  # MCP server in the window (Settings)
+    mcp_token: str = ""  # created when AI control is first turned on
 
 
 def load(path: Path = PATH) -> Config:
@@ -57,7 +59,8 @@ def load(path: Path = PATH) -> Config:
         customs[str(key)] = kept
     mouse = raw.get("mouse") if raw.get("mouse") in MICE else "none"
     return Config(bool(raw.get("natural_scroll", False)), bool(raw.get("pinned", True)), customs, mouse,
-                  str(raw.get("port") or Config.port), str(raw.get("screenshots") or ""))
+                  str(raw.get("port") or Config.port), str(raw.get("screenshots") or ""),
+                  bool(raw.get("ai_control", False)), str(raw.get("mcp_token") or ""))
 
 
 def save(cfg: Config, path: Path = PATH) -> None:
@@ -66,7 +69,10 @@ def save(cfg: Config, path: Path = PATH) -> None:
     data = {"natural_scroll": cfg.natural_scroll, "pinned": cfg.pinned,
             "customs": {k: [{"button": c.button, "icon": f"{ord(c.icon):x}", "name": c.name} for c in v]
                         for k, v in cfg.customs.items()},
-            "mouse": cfg.mouse, "port": cfg.port, "screenshots": cfg.screenshots}
+            "mouse": cfg.mouse, "port": cfg.port, "screenshots": cfg.screenshots,
+            "ai_control": cfg.ai_control, "mcp_token": cfg.mcp_token}
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2))
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # holds the MCP token: private
+    with os.fdopen(fd, "w") as f:
+        f.write(json.dumps(data, indent=2))
     os.replace(tmp, path)

@@ -9,7 +9,7 @@ import pygame
 from .geometry import fit, inside, to_frame
 from .keyqueue import KeyQueue
 from .mouse import Pointer
-from . import agent as agent_mod, config
+from . import agent as agent_mod, ai as ai_mod, config
 from .calibrate import Calibrator
 from .config import Config, Custom
 from .dialog import Dialog, DialogState, Menu, Popups, Settings
@@ -47,6 +47,13 @@ class Controller:
 
     def stop(self) -> None:
         self.pointer.stop()
+
+    def release(self) -> None:
+        """Let go of everything (AI control takes over): button and keys."""
+        if self.held:
+            self.pointer.button(False)
+            self.held = False
+        self.release_all()
 
     def release_all(self) -> None:
         if self.keys and (self.pressed or self.modifiers):
@@ -99,7 +106,7 @@ def save_or_warn(save: Callable[[Config], None], cfg: Config) -> None:
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
         save: Callable[[Config], None] = config.save, title: str = "scrcrappy",
-        agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None) -> bool:
+        agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False) -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
     with `agent`, clicks and keys go to scrcrappy-agent instead. `calibrator` adds Calibrate to Settings.
@@ -120,9 +127,34 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     settings: Settings | None = None
     settings_closed_at = 0.0
     calibrating = False
+    ai = ai_mod.AiControl(frames, session=agent, keys=keys,
+                          pointer=(lambda: controller.pointer if controller else None) if make_pointer else None)
+    INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL,
+             pygame.KEYDOWN, pygame.KEYUP)
+    was_locked = False
 
     def items():
-        return buttons(has_input=make_pointer is not None or agent is not None, customs=customs, agent=agent is not None, settings=bool(settings and not settings.closed))
+        return buttons(has_input=make_pointer is not None or agent is not None, customs=customs, agent=agent is not None,
+                       settings=bool(settings and not settings.closed), led=ai.server is not None)
+
+    def toggle_ai() -> None:
+        cfg.ai_control = not cfg.ai_control
+        if cfg.ai_control:
+            ai.enable(cfg)
+        else:
+            ai.disable()
+        if ai.error:
+            print(f"AI control: {ai.error}", file=sys.stderr)
+        save_or_warn(save, cfg)
+        pill.set_items(items())
+
+    def ai_status() -> str:
+        return ai.error or (f"Listening on http://127.0.0.1:{ai_mod.PORT}/mcp (this computer only). Copy the "
+                            "setup command and run it in a terminal to give Claude Code access.")
+
+    def copy_ai_command() -> None:
+        pygame.scrap.put_text(ai.command(cfg))
+        print("AI control: setup command copied to the clipboard", file=sys.stderr)
 
     def changed() -> None:
         save_or_warn(save, cfg)
@@ -219,7 +251,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             settings.close()
         elif time.monotonic() - settings_closed_at > 0.5:  # else this click is what closed it (focus moved)
             settings = popups.open(lambda: Settings(cfg, place, settings_changed, toggle_natural, settings_done,
-                                                     calibrator.value() if calibrator else None, calibrate)) or settings
+                                                     calibrator.value() if calibrator else None, calibrate,
+                                                     toggle_ai, ai_status, copy_ai_command)) or settings
         pill.set_items(items())
 
     pill = Pill(main, items(), {
@@ -235,6 +268,14 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "settings": open_settings,
         "pinned": set_pinned,
     }, pinned=cfg.pinned)
+    if cfg.ai_control or mcp:  # --mcp: on for this run only, cfg.ai_control (what's saved) stays as it is
+        had_token = bool(cfg.mcp_token)
+        ai.enable(cfg)
+        if not had_token:
+            save_or_warn(save, cfg)
+        if ai.error:
+            print(f"AI control: {ai.error}", file=sys.stderr)
+        pill.set_items(items())
     try:
         while alive():
             for event in pygame.event.get():
@@ -247,7 +288,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     return True
                 if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
                     pill.follow()
-                if controller and img:
+                if controller and img and not (was_locked and event.type in INPUT):  # AI acting: input paused
                     controller.handle(event, fit(img.get_size(), main.size), img.get_size())
             if frame := frames.get():
                 pixels, size, pitch = frame
@@ -257,12 +298,23 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     pointer.home()
                     pointer.start()
                     controller = Controller(pointer, cfg.natural_scroll, keys)
+            if ai.locked() != was_locked:
+                was_locked = not was_locked
+                if was_locked and controller:
+                    controller.release()  # nothing of the user's stays pressed while the AI acts
             screen = main.get_surface()
             screen.fill((0, 0, 0))
             if img:
                 x, y, w, h = fit(img.get_size(), screen.get_size())
                 screen.blit(pygame.transform.smoothscale(img, (w, h)), (x, y))
+                now = time.monotonic()
+                ai.rings = [r for r in ai.rings if now - r[2] < ai_mod.RING_S]
+                for rx, ry, t in ai.rings:  # where the AI touched
+                    if now >= t:
+                        pygame.draw.circle(screen, ai_mod.RED, (x + rx / 100 * w, y + ry / 100 * h),
+                                           10 + (now - t) * 40, 3)
             main.flip()
+            pill.led_colour = ai.led()
             pill.update(app_focused=pill.focused() or popups.focused())
             pill.draw()
             if settings:
@@ -270,6 +322,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             clock.tick(60)
         return False
     finally:
+        ai.disable()
         if controller:
             controller.release_all()
             controller.stop()

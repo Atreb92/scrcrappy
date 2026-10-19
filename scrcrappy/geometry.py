@@ -36,6 +36,10 @@ def to_device(pos: tuple[int, int], rect: tuple[int, int, int, int], rotation: i
     if not inside(pos, rect):
         return None
     x, y, w, h = rect
-    u, v = (pos[0] - x) / w, (pos[1] - y) / h  # 0..1 inside the shown frame
-    px, py = {0: (u, v), 90: (v, 1 - u), 180: (1 - u, 1 - v), 270: (1 - v, u)}[rotation]
+    px, py = to_portrait((pos[0] - x) / w, (pos[1] - y) / h, rotation)
     return px * size[0], py * size[1]
+
+
+def to_portrait(u: float, v: float, rotation: int) -> tuple[float, float]:
+    """A point of the shown (upright) frame, as 0..1 fractions -> the same point on the portrait panel."""
+    return {0: (u, v), 90: (v, 1 - u), 180: (1 - u, 1 - v), 270: (1 - v, u)}[rotation]

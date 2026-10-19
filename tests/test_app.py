@@ -260,3 +260,33 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
     assert runs == [1]  # measured once, with the old pointer stopped and no new one yet
     assert ("stop",) in pointers[0].calls
     assert len(pointers) == 2  # rebuilt afterwards, with the new table
+
+
+def test_mcp_flag_is_never_saved(monkeypatch):
+    import os
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import ai
+    from scrcrappy import app as app_module
+    from scrcrappy.config import Config
+    from scrcrappy.toolbar import Pill
+    from scrcrappy.video import LatestFrame
+    monkeypatch.setattr(ai, "PORT", 0)
+    saved, pills, clicked = [], [], []
+    orig = Pill.__init__
+
+    def pill_init(self, *a, **kw):
+        orig(self, *a, **kw)
+        pills.append(self)
+
+    monkeypatch.setattr(Pill, "__init__", pill_init)
+    t0 = time.time()
+
+    def alive():
+        if pills and time.time() - t0 > 0.2 and not clicked:
+            clicked.append(1)
+            pills[0].actions["pinned"](False)  # any other setting change saves the config
+        return time.time() - t0 < 0.5
+
+    app_module.run(LatestFrame(), alive, cfg=Config(), mcp=True, save=lambda c: saved.append(c.ai_control))
+    assert clicked and len(saved) >= 2 and not any(saved)

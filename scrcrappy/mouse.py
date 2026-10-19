@@ -122,6 +122,16 @@ class Pointer:
                 best, best_err = move, err
         return best
 
+    def wait_idle(self, timeout: float = 5.0) -> bool:
+        """Block until every queued action is sent and the cursor is at its target (AI control)."""
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            with self.lock:
+                if not self.pending and not self.homing and self._next_move() is None:
+                    return True
+            time.sleep(TICK)
+        return False
+
     def start(self) -> None:
         def loop() -> None:
             next_t = time.monotonic()

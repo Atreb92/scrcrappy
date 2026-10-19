@@ -14,6 +14,7 @@ PAD_Y, PAD_X = 8, 4
 MAX_D = 40  # button diameter cap
 TAB = (8, 48)  # collapsed pill
 NEEDS_INPUT = "Needs --mouse ble, esp32 or agent"
+LED_TIP = "AI control: green = waiting, yellow = an AI is working, red = AI acting (your input is paused)"
 COPY_TIP = "Needs --mouse agent (jailbreak)"  # a Bluetooth keyboard/mouse can't read the phone's clipboard
 
 
@@ -34,7 +35,7 @@ def next_free(customs: list[Custom]) -> int | None:
 
 
 def buttons(has_input: bool, customs: list[Custom], agent: bool = False,
-            settings: bool = False) -> list[Button | None]:
+            settings: bool = False, led: bool = False) -> list[Button | None]:
     """The pill's items top to bottom; None is a separator. With the agent (jailbreak): copy, screenshot and the
     phone's buttons instead of the AssistiveTouch custom buttons."""
     def action(id_, icon, tip):
@@ -58,7 +59,9 @@ def buttons(has_input: bool, customs: list[Custom], agent: bool = False,
               for c in sorted(customs, key=lambda c: c.button)),
             *add,
         ]
+    status = [Button("led", "", LED_TIP, enabled=False, small=True)] if led else []  # AI control on
     return [
+        *status,
         *middle,
         None,
         Button("settings", "\ue8b8", "Settings", toggled=settings),
@@ -127,6 +130,7 @@ class Pill:
         self.visible = True
         self.unfocused_since: float | None = None
         self.rects: list[tuple[Button, pygame.Rect]] = []
+        self.led_colour: tuple[int, int, int] | None = None  # set by the app every frame
         self._fonts: dict[tuple[str, int], pygame.font.Font] = {}
         self.follow()
 
@@ -264,6 +268,10 @@ class Pill:
         surf.fill(BG)
         if not self.collapsed:
             for item, rect in self.rects:
+                if item.id == "led":
+                    if self.led_colour:
+                        pygame.draw.circle(surf, self.led_colour, rect.center, max(3, rect.width // 4))
+                    continue
                 filled = bool(item.toggled)
                 if item.id == "collapse" and not self.pinned:
                     icon = CHEVRON_KEEP
