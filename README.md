@@ -114,6 +114,38 @@ First run: unlock the phone; it asks *Allow “‹computer›” to control this
 check it matches the one in the terminal, tap Allow. After each phone reboot, touch its screen once
 before clicks work (the terminal says so).
 
+## AI control
+
+Let an AI agent (Claude Code, other MCP clients, any script) look at and drive the phone. Coordinates are
+**percent** (0–100, decimals ok) of the upright screenshot: x from the left, y from the top.
+
+**From any shell, jailbreak mode** (one action per call, no window needed, about half a second each):
+
+```sh
+scrcrappy agent --screenshot s.png      # {"ok": true, "path": "s.png", "width": 750, "height": 1334, "orientation": "portrait"}
+scrcrappy agent --tap 50,30
+scrcrappy agent --long-press 50,30,1500 # optional duration in ms (default 1000)
+scrcrappy agent --swipe 50,80,50,20     # optional ,ms (default 300)
+scrcrappy agent --type "hello"          # keys if a US keyboard can type it, else paste ("typed_with")
+scrcrappy agent --clipboard
+```
+
+Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit code 1.
+
+**MCP, in the running window** (any input mode): turn on *Allow AI control (MCP)* in the toolbar's Settings
+(or start with `--mcp`), click *Copy setup command* and run it in a terminal; it looks like
+`claude mcp add --transport http scrcrappy http://127.0.0.1:7331/mcp --header "Authorization: Bearer …"`.
+Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
+and `clipboard` in jailbreak mode. The server only listens on this computer and needs the token.
+
+While AI control is on, a dot at the top of the pill shows its state: **green** waiting, **yellow** an AI
+has been active in the last 30 s, **red** an AI action is running and your mouse and keyboard are paused.
+A red ring marks where the AI touched.
+
+Limits: reading the clipboard fails when the phone asks *Allow Paste* (it can't be answered remotely);
+typing accents or emoji pastes, which may ask too; in Bluetooth / ESP32 mode typing is US layout, ASCII
+only, and the orientation is just portrait or landscape.
+
 ## Toolbar
 
 A small bar sits to the right of the phone window (left if there's no room) and follows it.
@@ -125,7 +157,7 @@ Hover a button for its name.
 | Copy | Phone clipboard → computer, with `--mouse agent` only (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
-| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
+| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; AI control (MCP); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
 | Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32
