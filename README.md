@@ -142,6 +142,7 @@ scrcrappy agent --long-press 50,30,1500 # optional duration in ms (default 1000)
 scrcrappy agent --swipe 50,80,50,20     # optional ,ms (default 300)
 scrcrappy agent --type "hello"          # keys if a US keyboard can type it, else paste ("typed_with")
 scrcrappy agent --clipboard
+scrcrappy agent --home                 # also --switcher (Home twice) and --lock
 ```
 
 Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit code 1.
