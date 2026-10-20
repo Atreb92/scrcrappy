@@ -1,7 +1,7 @@
 # Releasing
 
-> The release workflow and the Homebrew formula are **untested**: they were written before the repo was
-> on GitHub and without a Mac. Expect to fix small things on the first real release.
+> The release workflow and the Linux wheel are proven (v0.2.0), and the Homebrew formula installs on Linuxbrew.
+> macOS is still untested.
 
 1. Bump `version` in `pyproject.toml` (the only place it lives) and commit.
 2. Tag and push: `git tag v<version> && git push origin v<version>`.

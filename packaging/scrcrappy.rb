@@ -1,5 +1,5 @@
 # Homebrew formula for the atreb92/scrcrappy tap (copy to Formula/scrcrappy.rb there; see docs/releasing.md).
-# UNTESTED: written before the repo was on GitHub and without a Mac. Linux (Linuxbrew) is meant to work too; usbmuxd comes from the distro.
+# Installs on Linuxbrew (x86_64); untested on macOS. usbmuxd comes from the distro on Linux.
 class Scrcrappy < Formula
   desc "Mirror and control an iPhone over USB (scrcpy for iOS)"
   homepage "https://github.com/atreb92/scrcrappy"

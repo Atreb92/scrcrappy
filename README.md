@@ -22,7 +22,7 @@ Bluetooth mode also needs the system python's bindings (`python3-dbus python3-go
 Debian, `python-dbus python-gobject` on Arch).
 
 **Homebrew, macOS and Linux** (builds qvh from source, so it takes a minute; macOS needs nothing else, Linux
-also needs usbmuxd from your distro; untested):
+also needs usbmuxd from your distro; tested on Linux, not yet on macOS):
 
 ```sh
 brew tap atreb92/scrcrappy
