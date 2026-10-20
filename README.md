@@ -26,21 +26,6 @@ brew install scrcrappy
 
 Then run `scrcrappy` from anywhere. Releases: [docs/releasing.md](docs/releasing.md).
 
-## Development
-
-Fedora:
-
-```sh
-sudo dnf install golang libusb1-devel
-```
-
-macOS: `brew install go libusb pkg-config`
-
-```sh
-scripts/build-qvh.sh            # patched qvh -> scrcrappy/bin/qvh
-python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
-```
-
 ## Run
 
 Plug in the iPhone, unlock it, trust the computer, then:
@@ -48,34 +33,6 @@ Plug in the iPhone, unlock it, trust the computer, then:
 ```sh
 .venv/bin/scrcrappy
 ```
-
-## Why a patched qvh
-
-[qvh](https://github.com/danielpaulus/quicktime_video_hack) speaks the QuickTime USB
-mirroring protocol. `third_party/qvh.patch` makes two changes:
-
-- skip the endpoint clear-halt before reading: on Linux it dropped the PING the phone
-  queues right after switching to the mirroring config, so streaming never started;
-- write video unbuffered, so a still screen doesn't sit in a 4 KB buffer.
-- drop qvh's own GStreamer window and audio commands (scrcrappy only runs `qvh record`), so it needs
-  nothing but libusb at runtime.
-- drop qvh's pairing check, the only use of go-ios (AGPL-3.0), so everything shipped stays permissively
-  licensed; the licences of qvh and its Go modules ship as `scrcrappy/bin/qvh-LICENSES.txt`.
-
-## Licence
-
-MIT, see [LICENSE](LICENSE).
-
-## Credits
-
-- [scrcpy](https://github.com/Genymobile/scrcpy): the original. scrcrappy borrows its idea and most of its
-  name, and is built and held together with glue and duct tape to make the same thing work on iOS.
-- [qvh](https://github.com/danielpaulus/quicktime_video_hack) (MIT): the QuickTime USB protocol behind
-  the video; scrcrappy ships a patched build (`third_party/qvh.patch`).
-- [Inter](https://github.com/rsms/inter) (SIL OFL 1.1): the interface font, subset to Latin
-  (`scrcrappy/fonts/`, licence in `OFL.txt` there; rebuilt by `scripts/make-fonts.sh`).
-- [Material Symbols](https://github.com/google/material-design-icons) (Apache 2.0): the toolbar icons
-  (`scrcrappy/icons/`, licence in `LICENSE` there).
 
 ## Mouse control without jailbreak
 
@@ -117,7 +74,7 @@ only) and run `.venv/bin/scrcrappy --mouse agent` (or pick Agent in the toolbar'
 
 - Click / drag = touch at that exact spot; **Ctrl+drag** = two-finger pinch around the screen centre;
   wheel = short swipe (`--natural-scroll` applies).
-- Keys go to the phone by physical position (same Hardware Keyboard layout note as below); held keys repeat.
+- Keys go to the phone by physical position (same Hardware Keyboard layout note as above); held keys repeat.
 - Paste (**Ctrl+Shift+V**) types any text, accents and emoji included. iOS shows *Allow Paste* in the app
   (Settings › ‹app› › Paste from Other Apps › Allow stops it); the text stays on the phone's clipboard.
 - Toolbar: Copy (phone clipboard → computer), Screenshot (PNG in your Pictures folder, or the folder in Settings), Home, App switcher, Lock.
@@ -228,3 +185,46 @@ the phone is locked. Unlock the phone and replug it; scrcrappy gives up after 5 
 
 **The connection dropped for a second when the video started.** Expected: starting the video resets the USB
 link and the agent connection reconnects by itself.
+
+## Why a patched qvh
+
+[qvh](https://github.com/danielpaulus/quicktime_video_hack) speaks the QuickTime USB
+mirroring protocol. `third_party/qvh.patch` makes two changes:
+
+- skip the endpoint clear-halt before reading: on Linux it dropped the PING the phone
+  queues right after switching to the mirroring config, so streaming never started;
+- write video unbuffered, so a still screen doesn't sit in a 4 KB buffer.
+- drop qvh's own GStreamer window and audio commands (scrcrappy only runs `qvh record`), so it needs
+  nothing but libusb at runtime.
+- drop qvh's pairing check, the only use of go-ios (AGPL-3.0), so everything shipped stays permissively
+  licensed; the licences of qvh and its Go modules ship as `scrcrappy/bin/qvh-LICENSES.txt`.
+
+## Development
+
+Fedora:
+
+```sh
+sudo dnf install golang libusb1-devel
+```
+
+macOS: `brew install go libusb pkg-config`
+
+```sh
+scripts/build-qvh.sh            # patched qvh -> scrcrappy/bin/qvh
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+```
+
+## Credits
+
+- [scrcpy](https://github.com/Genymobile/scrcpy): the original. scrcrappy borrows its idea and most of its
+  name, and is built and held together with glue and duct tape to make the same thing work on iOS.
+- [qvh](https://github.com/danielpaulus/quicktime_video_hack) (MIT): the QuickTime USB protocol behind
+  the video; scrcrappy ships a patched build (`third_party/qvh.patch`).
+- [Inter](https://github.com/rsms/inter) (SIL OFL 1.1): the interface font, subset to Latin
+  (`scrcrappy/fonts/`, licence in `OFL.txt` there; rebuilt by `scripts/make-fonts.sh`).
+- [Material Symbols](https://github.com/google/material-design-icons) (Apache 2.0): the toolbar icons
+  (`scrcrappy/icons/`, licence in `LICENSE` there).
+
+## Licence
+
+MIT, see [LICENSE](LICENSE).
