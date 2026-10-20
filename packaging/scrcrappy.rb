@@ -1,8 +1,6 @@
 # Homebrew formula for the atreb92/scrcrappy tap (copy to Formula/scrcrappy.rb there; see docs/releasing.md).
 # UNTESTED: written before the repo was on GitHub and without a Mac. Linux (Linuxbrew) is meant to work too; usbmuxd comes from the distro.
 class Scrcrappy < Formula
-  include Language::Python::Virtualenv
-
   desc "Mirror and control an iPhone over USB (scrcpy for iOS)"
   homepage "https://github.com/atreb92/scrcrappy"
   url "https://github.com/atreb92/scrcrappy/archive/refs/tags/v0.2.0.tar.gz"
@@ -24,10 +22,10 @@ class Scrcrappy < Formula
     resource("qvh").stage buildpath/"qvh-src"
     system "sh", "scripts/build-qvh.sh", buildpath/"qvh-src" # patched, no GStreamer -> scrcrappy/bin/qvh
 
-    # Personal tap: dependencies come as PyPI wheels (pygame-ce bundles SDL, av bundles FFmpeg). virtualenv_create
-    # points the venv at python@3.13's opt path, so it survives Python patch upgrades; pip_install isn't used
-    # because it forces building every dependency from source.
-    virtualenv_create(libexec, "python3.13")
+    # Personal tap: dependencies come as PyPI wheels (pygame-ce bundles SDL, av bundles FFmpeg). A plain venv from
+    # python@3.13's opt path survives Python patch upgrades; Homebrew's virtualenv_create makes it without pip, and
+    # pip_install forces building every dependency from source.
+    system Formula["python@3.13"].opt_bin/"python3.13", "-m", "venv", libexec
     system libexec/"bin/pip", "install", buildpath
     bin.install_symlink libexec/"bin/scrcrappy"
   end
