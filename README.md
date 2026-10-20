@@ -153,7 +153,7 @@ server entry most clients take:
 (the token is created once and kept in `config.json`; some clients also have their own add command that
 takes the same URL and header).
 Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
-`clipboard` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
+`clipboard`, `home`, `switcher` and `lock` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
 clicking, report how far the cursor landed from the target) and `calibrate`; both need a plain, light screen
 (Settings scrolled to the top) open on the phone; on a busy screen `check_pointer` can mistake a grey icon for
 the cursor and report a bogus error. The server only listens on this computer and needs the token.

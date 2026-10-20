@@ -8,7 +8,8 @@
 - [ ] Later (advanced): full terminal over SSH (OpenSSH on the phone, through `usbmux.connect(22)`).
 - [ ] Later: volume buttons and opening apps via scrcrappy-agent (Home / switcher / lock are on the toolbar).
 
-- [ ] AI control, later: phone buttons (Home / lock / switcher), single keys, pinch, "wait until the screen settles", opening apps, on-screen element lists (agent features needed for the last two).
+- [x] AI control, agent mode: `home`, `switcher` and `lock` tools.
+- [ ] AI control, later: single keys, pinch, "wait until the screen settles", opening apps, on-screen element lists (agent features needed for the last two).
 - [ ] usbmuxd wedges (lockdown error -8) after scrcrappy's USB reset while the phone is locked; only unlocking / replugging helps. Investigate avoiding the reset or waiting for unlock.
 
 ## Usability

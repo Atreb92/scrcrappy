@@ -26,6 +26,7 @@ SWIPE = 0.1  # wheel notch = swipe of this fraction of the shown frame's height
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
 MODIFIERS = range(0xE0, 0xE8)
 BUTTONS, HOME, LOCK = 0x0C, 0x40, 0x30  # HID consumer page: the phone's buttons
+SWITCHER_GAP = 0.15  # s between the two Home presses that open the app switcher
 
 HINTS = {
     "denied": "pairing was denied on the phone (or not answered within 30 s)",
@@ -305,7 +306,7 @@ class Controller:
 
     def switcher(self) -> None:
         self.button(HOME)
-        self.s.pause(0.15)
+        self.s.pause(SWITCHER_GAP)
         self.button(HOME)
 
     def lock(self) -> None:
