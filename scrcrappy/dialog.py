@@ -160,56 +160,87 @@ class Dialog:
 
 
 class Menu:
-    """Right-click menu of a custom button: Edit… / Remove. Closes when it loses focus."""
+    """Right-click menu of a custom button, an overlay in the phone window like Settings (`where(size)` puts it):
+    Edit… / Remove. Takes every mouse and key event while open; closes on a choice, Esc, a click outside or
+    losing focus."""
+    W = 240
 
-    def __init__(self, pos: tuple[int, int], button: int, on_edit: Callable[[], None], on_remove: Callable[[], None]) -> None:
-        self.button, self.on_edit, self.on_remove = button, on_edit, on_remove
+    def __init__(self, window: pygame.Window, where: Callable[[tuple[int, int]], pygame.Rect], button: int,
+                 on_edit: Callable[[], None], on_remove: Callable[[], None],
+                 on_close: Callable[[], None] = lambda: None) -> None:
+        self.window, self.where, self.button, self.on_edit, self.on_remove, self.on_close = (
+            window, where, button, on_edit, on_remove, on_close)
         self.font, self.small = ui_font(14), ui_font(11)
         self.note = _wrap(f"Removing keeps the phone's Button {button} mapping: set it to None there "
                           "(AssistiveTouch › Devices) if you don't want it.", self.small, 220)
-        self.hits = {"edit": pygame.Rect(0, 4, 240, 30), "remove": pygame.Rect(0, 34, 240, 30)}
+        self.hits = {"edit": pygame.Rect(6, 6, self.W - 12, 30), "remove": pygame.Rect(6, 36, self.W - 12, 30)}
+        self.height = 78 + 15 * len(self.note)
         self.closed = False
-        self.win = pygame.Window("scrcrappy menu", (240, 72 + 15 * len(self.note)), borderless=True, utility=True)
-        self.win.position = pos
-        self.win.focus()
-        self.draw()
+        self.hover: str | None = None
+
+    @property
+    def rect(self) -> pygame.Rect:
+        return self.where((self.W, self.height))
 
     def handle(self, event: pygame.event.Event) -> bool:
-        if self.closed or getattr(event, "window", None) is not self.win:
+        if self.closed or getattr(event, "window", None) is not self.window:
             return False
-        if event.type == pygame.WINDOWFOCUSLOST or event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+        if event.type == pygame.WINDOWFOCUSLOST:
             self.close()
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            hit = next((k for k, r in self.hits.items() if r.collidepoint(event.pos)), None)
-            if hit:
-                self.close()
-                (self.on_edit if hit == "edit" else self.on_remove)()
+            return False
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self.close()
         elif event.type == pygame.MOUSEMOTION:
-            self.draw(event.pos)
-        return True
+            self.hover = self._hit(event.pos)
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            hit = self._hit(event.pos)
+            self.close()  # a click outside just closes it
+            if hit:
+                (self.on_edit if hit == "edit" else self.on_remove)()
+        return event.type in INPUT
+
+    def _hit(self, pos: tuple[int, int]) -> str | None:
+        rect = self.rect
+        local = (pos[0] - rect.x, pos[1] - rect.y)
+        return next((k for k, r in self.hits.items() if r.collidepoint(local)), None)
 
     def close(self) -> None:
         if not self.closed:
             self.closed = True
-            self.win.destroy()
+            self.on_close()
 
-    def draw(self, mouse: tuple[int, int] | None = None) -> None:
-        surf = self.win.get_surface()
-        surf.fill(SURFACE)
+    def draw(self, screen: pygame.Surface, dim_height: int) -> None:
+        if self.closed:
+            return
+        dim = pygame.Surface((screen.get_width(), dim_height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 60))
+        screen.blit(dim, (0, 0))
+        rect = self.rect
+        surf = pygame.Surface((self.W, self.height), pygame.SRCALPHA)
+        surf.blit(_glass(screen, rect), (0, 0))
         for key, text in (("edit", "Edit…"), ("remove", "Remove")):
             r = self.hits[key]
-            if mouse and r.collidepoint(mouse):
-                pygame.draw.rect(surf, ON_BG, r)
-            surf.blit(self.font.render(text, True, TEXT), (12, r.y + 8))
-        pygame.draw.line(surf, SEP, (8, 66), (232, 66))
+            if key == self.hover:
+                pygame.draw.rect(surf, ON_BG, r, border_radius=8)
+            surf.blit(self.font.render(text, True, TEXT), (r.x + 10, r.y + 6))
+        pygame.draw.line(surf, SEP, (14, 70), (self.W - 14, 70))
         for i, line in enumerate(self.note):
-            surf.blit(self.small.render(line, True, MUTED), (12, 70 + 15 * i))
-        self.win.flip()
+            surf.blit(self.small.render(line, True, MUTED), (14, 76 + 15 * i))
+        _round(surf, MENU_R)
+        screen.blit(surf, rect.topleft)
 
 
 INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL, pygame.KEYDOWN,
          pygame.KEYUP, pygame.TEXTINPUT)
-PANEL_R = 20
+PANEL_R, MENU_R = 20, 16
+
+
+def _round(surf: pygame.Surface, radius: int) -> None:
+    """Round `surf`'s corners and give it a thin light edge."""
+    mask = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+    pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=radius)
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+    pygame.draw.rect(surf, (255, 255, 255, 46), surf.get_rect(), 1, border_radius=radius)
 
 
 def _glass(screen: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
@@ -479,22 +510,19 @@ class Settings:
             pygame.draw.rect(surf, ACCENT, c, border_radius=c.height // 2)
             label = self.small.render("Calibrate", True, (255, 255, 255))
             surf.blit(label, label.get_rect(center=c.center))
-        mask = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
-        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=PANEL_R)
-        surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)  # round the corners
-        pygame.draw.rect(surf, (255, 255, 255, 46), surf.get_rect(), 1, border_radius=PANEL_R)
+        _round(surf, PANEL_R)
         screen.blit(surf, rect.topleft, area=pygame.Rect(0, 0, rect.w, rect.h))
         if text := self.tip():
             draw_tip(screen, self.small, text, self.hits[self.hover].move(rect.topleft), 260)
 
 
 class Popups:
-    """The toolbar's popup windows (Dialog / Menu); at most one open at a time."""
+    """The toolbar's popup windows (the Add/Edit dialog); at most one open at a time."""
 
     def __init__(self) -> None:
         self.items: list = []
 
-    def open(self, make: Callable[[], "Dialog | Menu"]):
+    def open(self, make: Callable[[], "Dialog"]):
         """Open the popup `make` builds, unless one is already open (then returns None)."""
         self.items = [p for p in self.items if not p.closed]
         if self.items:

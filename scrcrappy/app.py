@@ -134,6 +134,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     customs = cfg.customs.setdefault(device_key, [])
     popups = Popups()
     settings: Settings | None = None
+    context_menu: Menu | None = None
     calibrating = False
     ai = ai_mod.AiControl(frames, session=agent, keys=keys,
                           pointer=(lambda: controller.pointer if controller else None) if make_pointer else None,
@@ -194,15 +195,21 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
 
         popups.open(lambda: Dialog(DialogState(button, device_name, current), on_send=lambda: click(button), on_done=done))
 
-    def menu(n: int) -> None:
+    def open_menu(n: int) -> None:
+        nonlocal context_menu
+
         def remove() -> None:
             customs[:] = [c for c in customs if c.button != n]
             changed()
 
-        rect = next(r for b, r in bar.rects if b.id == f"custom:{n}")
-        mx, my = main.position
-        where = (mx + rect.x, my + bar.top - 120)  # just above the strip (a window of its own for now)
-        popups.open(lambda: Menu(where, n, on_edit=lambda: edit(n), on_remove=remove))
+        button = next(r for b, r in bar.rects if b.id == f"custom:{n}")
+
+        def where(size: tuple[int, int]) -> pygame.Rect:
+            """Just above the strip, over its button, kept inside the window."""
+            x = min(max(8, button.centerx - size[0] // 2), main.size[0] - size[0] - 8)
+            return pygame.Rect(x, bar.top - PANEL_MARGIN - size[1], *size)
+
+        context_menu = Menu(main, where, n, on_edit=lambda: edit(n), on_remove=remove)
 
     def settings_rect(size: tuple[int, int]) -> pygame.Rect:
         """The Settings panel: centred above the strip, clipped to the room there is."""
@@ -277,7 +284,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "lock": lambda: controller.lock(),
         "custom": click,
         "add": edit,
-        "menu": menu,
+        "menu": open_menu,
         "settings": open_settings,
     })
     if cfg.ai_control or mcp:  # --mcp: on for this run only, cfg.ai_control (what's saved) stays as it is
@@ -296,7 +303,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     continue
                 if paused(event, ai.locked()):  # checked per event: the lock starts the moment a tool does
                     continue
-                if (settings and settings.handle(event)) or popups.handle(event) or bar.handle(event):
+                if any(o and o.handle(event) for o in (settings, context_menu)) or popups.handle(event) or bar.handle(event):
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
@@ -329,8 +336,9 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                                        10 + (now - t) * 40, 3)
             bar.led_colour = ai.led()
             bar.update()
-            if settings:
-                settings.draw(screen, bar.top)
+            for overlay in (settings, context_menu):
+                if overlay:
+                    overlay.draw(screen, bar.top)
             bar.draw(screen)
             main.flip()
             clock.tick(60)

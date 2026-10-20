@@ -7,6 +7,7 @@ import shutil
 import socket
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 from . import agent, app, calibrate, config, links, mouse, video
@@ -44,9 +45,24 @@ def build_parser() -> argparse.ArgumentParser:
                              "default: last setting from the toolbar")
     parser.add_argument("--mcp", action="store_true",
                         help="allow AI control (MCP server on 127.0.0.1:7331) for this run; see Settings")
+    parser.add_argument("--x11", action="store_true",
+                        help="use X11 (XWayland on a Wayland desktop) instead of native Wayland, which is the default there")
     parser.add_argument("--calibrate", action="store_true",
                         help="measure the pointer gain (needs --mouse; open a plain light screen first)")
     return parser
+
+
+def pick_video_driver(env: Mapping[str, str], platform: str, x11: bool = False) -> str | None:
+    """SDL's video driver list for this session, or None to leave it to SDL: on Linux native Wayland when there is
+    a Wayland session (X11 if that fails to start), X11 when asked for or when there is no Wayland. A
+    SDL_VIDEODRIVER set by the user always wins."""
+    if platform != "linux" or "SDL_VIDEODRIVER" in env:
+        return None
+    if x11:
+        return "x11" if env.get("DISPLAY") else None
+    if env.get("WAYLAND_DISPLAY"):
+        return "wayland,x11"
+    return "x11" if env.get("DISPLAY") else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,11 +70,10 @@ def main(argv: list[str] | None = None) -> int:
     if argv[:1] == ["agent"]:
         from . import agent_cli
         return agent_cli.main(argv[1:])
-    if sys.platform == "linux" and os.environ.get("DISPLAY"):
-        # X11 (XWayland on Wayland desktops): the toolbar window must be placed next to the phone
-        # window, which native Wayland doesn't allow. SDL3-based pygame would otherwise pick Wayland.
-        os.environ.setdefault("SDL_VIDEODRIVER", "x11")
     args = build_parser().parse_args(argv)
+    if driver := pick_video_driver(os.environ, sys.platform, args.x11):
+        os.environ["SDL_VIDEODRIVER"] = driver
+    os.environ.setdefault("SDL_VIDEO_WAYLAND_WMCLASS", "scrcrappy")  # the Wayland app id (icon via scrcrappy.desktop)
     cfg = config.load()  # flags win over saved settings for this run, without changing them
     args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
 

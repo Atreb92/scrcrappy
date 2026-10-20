@@ -80,32 +80,62 @@ def test_click_send_calls_on_send():
     assert sent == [1] and done == []
 
 
-def test_menu_remove_calls_back():
+def menu_overlay(**kw):
     from scrcrappy.dialog import Menu
+    closed = []
+    window = pygame.Window("phone", (375, 715))
+    menu = Menu(window, lambda size: pygame.Rect(40, 300, *size), 3, on_edit=kw.get("on_edit", lambda: None),
+                on_remove=kw.get("on_remove", lambda: None), on_close=lambda: closed.append(1))
+    return menu, closed
+
+
+def menu_event(menu, kind, key=None, **kw):
+    pos = (menu.rect.x + menu.hits[key].centerx, menu.rect.y + menu.hits[key].centery) if key else kw.pop("pos", (0, 0))
+    return pygame.event.Event(kind, window=menu.window, button=1, pos=pos, **kw)
+
+
+def test_menu_remove_calls_back_and_closes():
     calls = []
-    m = Menu((100, 100), 3, on_edit=lambda: calls.append("edit"), on_remove=lambda: calls.append("remove"))
-    m.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=m.win, button=1, pos=m.hits["remove"].center))
-    assert calls == ["remove"] and m.closed
+    m, closed = menu_overlay(on_remove=lambda: calls.append("remove"))
+    assert m.handle(menu_event(m, pygame.MOUSEBUTTONUP, "remove")) is True
+    assert calls == ["remove"] and m.closed and closed == [1]
 
 
-def test_menu_closes_when_focus_lost():
-    from scrcrappy.dialog import Menu
-    m = Menu((100, 100), 3, on_edit=lambda: None, on_remove=lambda: None)
-    m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.win))
+def test_menu_closes_on_focus_loss_esc_and_outside_click_and_takes_input():
+    m, closed = menu_overlay()
+    assert m.handle(menu_event(m, pygame.MOUSEMOTION, pos=(5, 5))) is True  # the phone never sees the mouse
+    assert m.handle(menu_event(m, pygame.MOUSEBUTTONDOWN, pos=(5, 5))) is True and not closed
+    m.handle(menu_event(m, pygame.MOUSEBUTTONUP, pos=(5, 5)))
     assert m.closed
+    m, _ = menu_overlay()
+    m.handle(pygame.event.Event(pygame.KEYDOWN, window=m.window, key=pygame.K_ESCAPE))
+    assert m.closed
+    m, _ = menu_overlay()
+    assert m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.window)) is False
+    assert m.closed
+    m, _ = menu_overlay()
+    assert m.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=None, button=1, pos=(5, 5))) is False and not m.closed
+
+
+def test_menu_draws_over_the_window():
+    m, _ = menu_overlay()
+    screen = pygame.Surface((375, 715))
+    screen.fill((255, 255, 255))
+    m.hover = "edit"
+    m.draw(screen, 667)
+    assert screen.get_at((m.rect.centerx, m.rect.y + 3))[:3] != (255, 255, 255)
 
 
 def test_edit_from_menu_opens_dialog():
-    # the menu closes itself and then asks for the dialog: that must not count as "a popup is open"
-    from scrcrappy.dialog import Menu, Popups
-    popups = Popups()
-    opened = []
+    # the menu closes itself and then asks for the dialog
+    from scrcrappy.dialog import Popups
+    popups, opened = Popups(), []
 
     def edit():
         opened.append(popups.open(lambda: Dialog(DialogState(2, "scrcrappy PC"), on_send=lambda: None, on_done=lambda r: None)))
 
-    menu = popups.open(lambda: Menu((10, 10), 2, on_edit=edit, on_remove=lambda: None))
-    popups.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=menu.win, button=1, pos=menu.hits["edit"].center))
+    menu, _ = menu_overlay(on_edit=edit)
+    menu.handle(menu_event(menu, pygame.MOUSEBUTTONUP, "edit"))
     assert opened and isinstance(opened[0], Dialog)
 
 
