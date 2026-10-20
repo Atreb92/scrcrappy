@@ -145,6 +145,7 @@ scrcrappy agent --clipboard
 scrcrappy agent --home                 # also --switcher (Home twice) and --lock
 scrcrappy agent --apps                 # {"ok": true, "apps": [{"id": "com.apple.mobilenotes", "name": "Notes", "running": false}, …]}
 scrcrappy agent --open Notes           # by name (any case) or bundle id; replies before the app has drawn
+scrcrappy agent --open-url https://example.com   # any scheme: https:, tel:, maps:, app deeplinks (agent 0.5.0)
 ```
 
 Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit code 1.
@@ -156,7 +157,7 @@ server entry most clients take:
 (the token is created once and kept in `config.json`; some clients also have their own add command that
 takes the same URL and header).
 Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
-`clipboard`, `home`, `switcher`, `lock`, `list_apps` and `open_app` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
+`clipboard`, `home`, `switcher`, `lock`, `list_apps`, `open_app` and `open_url` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
 clicking, report how far the cursor landed from the target) and `calibrate`; both need a plain, light screen
 (Settings scrolled to the top) open on the phone; on a busy screen `check_pointer` can mistake a grey icon for
 the cursor and report a bogus error. The server only listens on this computer and needs the token.

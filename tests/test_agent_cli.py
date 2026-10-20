@@ -51,11 +51,13 @@ class FakePhone:
                              touch_ready=self.touch_ready, fingers_down=0)
             elif cmd == "screenshot":
                 reply["png"] = png(750, 1334)
-            elif cmd in ("apps", "open") and self.old_agent:
+            elif cmd in ("apps", "open", "open_url") and self.old_agent:
                 reply = {"error": "unknown command"}
             elif cmd == "apps":
                 reply["apps"] = APPS
-            elif cmd == "open" and self.open_error:
+            elif cmd == "open_url" and not self.open_error and "://" not in msg["url"] and ":" not in msg["url"]:
+                reply = {"error": "bad url"}
+            elif cmd in ("open", "open_url") and self.open_error:
                 reply = {"error": self.open_error}
             elif cmd == "clipboard_get":
                 reply = {"ok": True, "text": self.clipboard} if self.clipboard is not None else {"error": "clipboard timeout"}
@@ -199,3 +201,23 @@ def test_find_app_prefers_exact_matches():
     apps = [{"id": "a.mail", "name": "Mail"}, {"id": "a.mailbox", "name": "Mailbox"}]
     assert agent_cli.find_app(apps, "mail")["id"] == "a.mail"  # exact name beats the substring match
     assert agent_cli.find_app(apps, "a.mailbox")["name"] == "Mailbox"
+
+
+def test_open_url_sends_it_as_given(monkeypatch, capsys):
+    phone = FakePhone(monkeypatch)
+    assert run(["--open-url", "https://example.com/a?b=1"], capsys) == (0, {"ok": True, "url": "https://example.com/a?b=1"})
+    assert [m for m in phone.seen if m["cmd"] == "open_url"] == [{"cmd": "open_url", "url": "https://example.com/a?b=1"}]
+    FakePhone(monkeypatch)
+    assert run(["--open-url", "tel:+390212345678"], capsys)[0] == 0  # any scheme: tel:, maps:, app deeplinks
+
+
+def test_open_url_errors_are_readable(monkeypatch, capsys):
+    FakePhone(monkeypatch)
+    code, out = run(["--open-url", "example.com"], capsys)
+    assert code == 1 and "scheme" in out["error"]
+    FakePhone(monkeypatch, open_error="locked")
+    assert "unlock" in run(["--open-url", "https://example.com"], capsys)[1]["error"]
+    FakePhone(monkeypatch, open_error="open failed")
+    assert "nothing" in run(["--open-url", "foo://bar"], capsys)[1]["error"]
+    FakePhone(monkeypatch, old_agent=True)
+    assert "0.5.0" in run(["--open-url", "https://example.com"], capsys)[1]["error"]

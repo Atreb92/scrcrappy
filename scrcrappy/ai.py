@@ -115,6 +115,9 @@ class AiControl:
                      self.list_apps),
                 Tool("open_app", "Open an app, like tapping its icon: by name (any case) or bundle id, see list_apps. "
                      "Fails if the phone is locked.", _schema({"app": {"type": "string"}}), self.open_app),
+                Tool("open_url", "Open a URL or deeplink like tapping a link (https:, tel:, maps:, app schemes…) in "
+                     "whatever app handles it. Needs a scheme. Fails if the phone is locked.",
+                     _schema({"url": {"type": "string"}}), self.open_url),
                 Tool("home", "Press the Home button: go to the home screen.", nothing, self.home),
                 Tool("switcher", "Open the app switcher (Home pressed twice).", nothing, self.switcher),
                 Tool("lock", "Press the Lock button. The phone stays locked, and taps do nothing, until it is unlocked "
@@ -208,6 +211,12 @@ class AiControl:
         self._call({"cmd": "open", "id": app["id"]})
         time.sleep(APP_SETTLE_S)
         return [{"type": "text", "text": f"opened {app['name']}"}]
+
+    def open_url(self, args: dict) -> list[dict]:
+        url = str(args.get("url", ""))
+        self._call({"cmd": "open_url", "url": url})
+        time.sleep(APP_SETTLE_S)
+        return [{"type": "text", "text": f"opened {url}"}]
 
     def home(self, args: dict) -> list[dict]:
         return self._buttons(HOME)

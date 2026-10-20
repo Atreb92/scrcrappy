@@ -118,5 +118,9 @@ class Agent:
     def open_app(self, bundle_id: str) -> None:
         self.request({"cmd": "open", "id": bundle_id})
 
+    def open_url(self, url: str) -> None:
+        """Opens a URL or deeplink, the way tapping a link would."""
+        self.request({"cmd": "open_url", "url": url})
+
     def close(self) -> None:
         self.sock.close()

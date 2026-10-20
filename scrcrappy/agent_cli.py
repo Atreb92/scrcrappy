@@ -19,10 +19,11 @@ from .agent_client import Agent, AgentError
 
 ERRORS = {"clipboard timeout": "the phone is asking Allow Paste for this clipboard, which can't be answered "
                                "remotely; tap it on the phone or set the text from this computer",
-          "unknown command": "this scrcrappy-agent is too old for that: update it on the phone (apps and open need 0.3.0)",
+          "unknown command": "this scrcrappy-agent is too old for that: update it on the phone (apps and open need 0.3.0, open_url 0.5.0)",
           "locked": "the phone is locked: unlock it first",
           "unknown app": "that app is not installed (see the app list)",
-          "open failed": "the phone could not open the app"}
+          "open failed": "the phone could not open it (nothing handles it, or no answer in 5 s)",
+          "bad url": "that is not a URL: it needs a scheme, e.g. https://example.com"}
 
 
 def listed(apps: list[dict]) -> list[dict]:
@@ -62,6 +63,8 @@ def parser() -> argparse.ArgumentParser:
     g.add_argument("--clipboard", action="store_true", help="print the phone's clipboard text")
     g.add_argument("--apps", action="store_true", help="list the apps the phone can open (name, id, running)")
     g.add_argument("--open", metavar="APP", help="open an app by name or bundle id (replies before it has drawn)")
+    g.add_argument("--open-url", metavar="URL", help="open a URL or deeplink (https:, tel:, maps:, app schemes…) like "
+                   "tapping a link; replies before the app has drawn")
     g.add_argument("--home", action="store_true", help="press the Home button")
     g.add_argument("--switcher", action="store_true", help="open the app switcher (Home pressed twice)")
     g.add_argument("--lock", action="store_true", help="press the Lock button (the phone stays locked until unlocked)")
@@ -101,6 +104,9 @@ def run(args: argparse.Namespace, a: Agent) -> dict:
         app = find_app(a.apps(), args.open)
         a.open_app(app["id"])
         return {"id": app["id"], "name": app["name"]}
+    if args.open_url is not None:
+        a.open_url(args.open_url)
+        return {"url": args.open_url}
     if args.home or args.switcher or args.lock:
         usages = (agent_mod.LOCK,) if args.lock else (agent_mod.HOME,) * (2 if args.switcher else 1)
         for i, usage in enumerate(usages):
