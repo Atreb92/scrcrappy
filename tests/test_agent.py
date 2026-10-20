@@ -186,3 +186,11 @@ def test_screenshot_failure_is_shown_too(tmp_path):
     c.screenshot()
     c.s.done(png_reply())
     assert shown and shown[0].startswith("Screenshot not saved")
+
+
+def test_save_screenshot_never_overwrites_one_taken_in_the_same_second(tmp_path, monkeypatch):
+    monkeypatch.setattr(agent.time, "strftime", lambda fmt: "scrcrappy-20261020-120000.png")
+    surf = pygame.Surface((10, 20))
+    first, second = agent.save_screenshot(surf, str(tmp_path)), agent.save_screenshot(surf, str(tmp_path))
+    assert first.name == "scrcrappy-20261020-120000.png" and second.name == "scrcrappy-20261020-120000-2.png"
+    assert first.exists() and second.exists()

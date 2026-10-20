@@ -5,6 +5,7 @@ toolbar gets paste of any text, copy from the phone, screenshots and the phone's
 """
 import base64
 import io
+import itertools
 import queue
 import socket
 import sys
@@ -188,6 +189,18 @@ def screenshot_dir(folder: str = "") -> Path:
     return pictures if pictures.is_dir() else Path.home()
 
 
+def save_screenshot(img: pygame.Surface, folder: str = "") -> Path:
+    """Save `img` as scrcrappy-<date>-<time>.png in the screenshot folder (-2, -3, … if that second is taken)."""
+    name = time.strftime("scrcrappy-%Y%m%d-%H%M%S.png")
+    path = screenshot_dir(folder) / name
+    for n in itertools.count(2):
+        if not path.exists():
+            break
+        path = path.with_name(f"{Path(name).stem}-{n}.png")
+    pygame.image.save(img, path)
+    return path
+
+
 class Controller:
     """Window events -> agent: left drag = one finger, Ctrl+drag = pinch (second finger mirrored through
     the screen centre), wheel = short swipe, keys = HID usages by physical position."""
@@ -274,8 +287,7 @@ class Controller:
             img = pygame.image.load(io.BytesIO(base64.b64decode(reply["png"])), "screen.png")
             img = pygame.transform.rotate(img, -ROTATION_BY_ORIENTATION.get(self.s.orientation, 0))  # upright
             try:
-                path = screenshot_dir(self.screenshots) / time.strftime("scrcrappy-%Y%m%d-%H%M%S.png")
-                pygame.image.save(img, path)
+                path = save_screenshot(img, self.screenshots)
             except (OSError, pygame.error) as e:
                 print(f"screenshot not saved: {e}", file=sys.stderr)
                 self.notify(f"Screenshot not saved: {e}")

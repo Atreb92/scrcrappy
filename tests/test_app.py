@@ -310,3 +310,69 @@ def test_mcp_flag_is_never_saved(monkeypatch):
 
     app_module.run(LatestFrame(), alive, cfg=Config(), mcp=True, save=lambda c: saved.append(c.ai_control))
     assert clicked and len(saved) >= 2 and not any(saved)
+
+
+def test_screenshot_button_without_the_agent_saves_the_video_frame(tmp_path):
+    import os
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.config import Config
+    from scrcrappy.toolbar import Bar
+    from scrcrappy.video import LatestFrame
+    bars, orig = [], Bar.__init__
+
+    def bar_init(self, *a, **kw):
+        orig(self, *a, **kw)
+        bars.append(self)
+
+    Bar.__init__ = bar_init
+    try:
+        frames, t0, loops = LatestFrame(), time.time(), []
+
+        def alive():
+            loops.append(1)
+            frames.put((bytes(30 * 60 * 3), (30, 60), 90))
+            if len(loops) == 3:
+                bars[0].actions["screenshot"]()
+            return time.time() - t0 < 0.5
+
+        shown = []
+        app_module.run(frames, alive, cfg=Config(screenshots=str(tmp_path)), save=lambda c: None)
+        shown.append(bars[0].toast_text)
+    finally:
+        Bar.__init__ = orig
+    [saved] = list(tmp_path.glob("scrcrappy-*.png"))
+    assert pygame.image.load(str(saved)).get_size() == (30, 60)  # the frame as mirrored
+    assert shown[0].startswith("Screenshot saved: ") and shown[0].endswith(saved.name)
+
+
+def test_screenshot_button_before_any_video_says_so(tmp_path):
+    import os
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.config import Config
+    from scrcrappy.toolbar import Bar
+    from scrcrappy.video import LatestFrame
+    bars, orig, shown = [], Bar.__init__, []
+
+    def bar_init(self, *a, **kw):
+        orig(self, *a, **kw)
+        bars.append(self)
+
+    Bar.__init__ = bar_init
+    try:
+        t0, clicked = time.time(), []
+
+        def alive():
+            if bars and not clicked:
+                clicked.append(1)
+                bars[0].actions["screenshot"]()
+                shown.append(bars[0].toast_text)
+            return time.time() - t0 < 0.3
+
+        app_module.run(LatestFrame(), alive, cfg=Config(screenshots=str(tmp_path)), save=lambda c: None)
+    finally:
+        Bar.__init__ = orig
+    assert shown == ["No video yet: no screenshot"] and not list(tmp_path.iterdir())
