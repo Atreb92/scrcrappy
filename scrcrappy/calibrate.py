@@ -49,7 +49,7 @@ def calibrate(send: Send, frames: LatestFrame) -> dict[int, float]:
         n = max(3, round(250 / (length * guess(length))))  # ~250 px travel
         b = paced([(length, 0)] * n)
         if not (a and b):
-            raise RuntimeError("can't see the cursor: open a plain light screen (e.g. Settings) and retry")
+            raise RuntimeError("can't see the cursor: open a plain light screen (e.g. Settings scrolled to the top) and retry")
         table[length] = round((b[0] - a[0]) / (n * length), 3)
         print(f"  length {length:2}: {table[length]} px/count", flush=True)
     return table

@@ -97,12 +97,12 @@ class AiControl:
         ]
         if self.pointer:
             found.append(Tool("check_pointer", "Move the phone's pointer to a point without clicking and report how far "
-                              "the cursor landed from it, in pixels. Needs a plain, light screen (e.g. Settings) "
-                              f"where the grey cursor disk is visible. {COORDS}", _schema(POINT), self.check_pointer))
+                              "the cursor landed from it, in pixels. Needs a plain, light screen "
+                              f"(e.g. Settings scrolled to the top) where the grey cursor disk is visible. {COORDS}", _schema(POINT), self.check_pointer))
             if self.calibrate_pointer:
                 found.append(Tool("calibrate", "Recalibrate the pointer (about half a minute; the cursor moves by "
                                   "itself). Use when check_pointer shows taps landing off target. Needs a plain, "
-                                  "light screen (e.g. Settings) open on the phone.",
+                                  "light screen (e.g. Settings scrolled to the top) open on the phone.",
                                   {"type": "object", "properties": {}}, self.calibrate))
         if self.session:
             found.append(Tool("clipboard", "The phone's clipboard text. Fails if the phone asks Allow Paste.",
@@ -140,7 +140,7 @@ class AiControl:
         time.sleep(SETTLE_S)
         found = find_cursor(to_array(self.frames.peek()))
         if not found:
-            raise ToolError("can't see the cursor: open a plain, light screen (e.g. Settings) and retry")
+            raise ToolError("can't see the cursor: open a plain, light screen (e.g. Settings scrolled to the top) and retry")
         err = math.hypot(found[0] - target[0], found[1] - target[1])
         report = {"target_px": [round(target[0]), round(target[1])], "cursor_px": [round(found[0]), round(found[1])],
                   "error_px": round(err, 1), "error_percent_of_width": round(100 * err / frame[1][0], 1)}
