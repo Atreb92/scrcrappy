@@ -72,8 +72,6 @@ MIT, see [LICENSE](LICENSE).
   name, and is built and held together with glue and duct tape to make the same thing work on iOS.
 - [qvh](https://github.com/danielpaulus/quicktime_video_hack) (MIT): the QuickTime USB protocol behind
   the video; scrcrappy ships a patched build (`third_party/qvh.patch`).
-- ZXTouch: showed how touches can be injected from SpringBoard on a jailbroken iPhone. crappytouch
-  follows the same approach as a clean rewrite and contains none of its code.
 - [Inter](https://github.com/rsms/inter) (SIL OFL 1.1): the interface font, subset to Latin
   (`scrcrappy/fonts/`, licence in `OFL.txt` there; rebuilt by `scripts/make-fonts.sh`).
 - [Material Symbols](https://github.com/google/material-design-icons) (Apache 2.0): the toolbar icons
@@ -230,16 +228,3 @@ the phone is locked. Unlock the phone and replug it; scrcrappy gives up after 5 
 
 **The connection dropped for a second when the video started.** Expected: starting the video resets the USB
 link and the agent connection reconnects by itself.
-
-**`scrcrappy agent --apps` prints JSON, not a table.** Every `scrcrappy agent` call prints exactly one JSON
-object (`{"ok": true, …}`), so scripts can parse it; pipe it through `jq` for a table. `--open` takes a bundle
-id or an app name.
-
-**`--open-url prefs:…` fails with "open failed".** iOS refuses some schemes (`prefs:`) from outside; the
-others (`https:`, `tel:`, `sms:`, `maps:`, app deeplinks) work. `--open` and `--open-url` also fail while the phone is locked.
-
-**`--apps` / `--open` / `--open-url` say the agent is too old.** Update crappytouch on the phone: apps and
-open need 0.3.0, open_url 0.5.0.
-
-**The phone locks while I work.** Turn on Settings › crappytouch › *Keep Awake While Connected* on the phone;
-it won't auto-lock while scrcrappy is connected.
