@@ -119,14 +119,17 @@ def test_only_one_popup_at_a_time():
 def settings_panel(cfg, changes, **kw):
     from scrcrappy.dialog import Settings
     closed = []
-    panel = Settings(cfg, place=lambda size: (0, 0), on_change=lambda: changes.append(1),
+    window = pygame.Window("phone", (375, 715))
+    panel = Settings(window, lambda size: pygame.Rect(20, 30, *size), cfg, on_change=lambda: changes.append(1),
                      on_natural=lambda: setattr(cfg, "natural_scroll", not cfg.natural_scroll),
                      on_close=lambda: closed.append(1), **kw)
     return panel, closed
 
 
 def click(panel, key):
-    panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=panel.hits[key].center, window=panel.win))
+    x, y = panel.hits[key].center
+    panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(x + panel.rect.x, y + panel.rect.y),
+                                    window=panel.window))
 
 
 def test_settings_mode_saves_at_once_and_esp32_shows_port():
@@ -136,7 +139,7 @@ def test_settings_mode_saves_at_once_and_esp32_shows_port():
     assert "port" not in panel.hits
     click(panel, "mode:2")
     assert cfg.mouse == "esp32" and changes and "port" in panel.hits
-    assert panel.win.size[1] == panel.height
+    assert panel.rect.height == panel.height
 
 
 def test_settings_typed_folder_kept_on_enter_and_on_close():
@@ -144,12 +147,12 @@ def test_settings_typed_folder_kept_on_enter_and_on_close():
     cfg, changes = Config(), []
     panel, closed = settings_panel(cfg, changes)
     click(panel, "screenshots")
-    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="~/shots", window=panel.win))
-    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN, window=panel.win))
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="~/shots", window=panel.window))
+    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN, window=panel.window))
     assert cfg.screenshots == "~/shots" and len(changes) == 1
     click(panel, "screenshots")
-    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="2", window=panel.win))
-    panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.win))  # clicked back on the phone
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="2", window=panel.window))
+    panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.window))  # clicked back on the phone
     assert cfg.screenshots == "~/shots2" and closed == [1]
 
 
@@ -161,7 +164,7 @@ def test_settings_natural_switch_and_empty_port_falls_back():
     assert cfg.natural_scroll is True
     click(panel, "port")
     for _ in range(6):
-        panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, window=panel.win))
+        panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, window=panel.window))
     panel.close()
     assert cfg.port == "/dev/ttyUSB0"
 
@@ -189,7 +192,44 @@ def test_ai_switch_shows_status_and_copy():
                               on_copy=lambda: copied.append(1))
     assert "copy" not in panel.hits
     click(panel, "ai")
-    assert cfg.ai_control and "copy" in panel.hits and panel.win.size[1] == panel.height
+    assert cfg.ai_control and "copy" in panel.hits and panel.rect.height == panel.height
     assert panel.ai_lines == ["http://127.0.0.1:7331/mcp"]
     click(panel, "copy")
     assert copied == [1]
+
+
+def test_settings_overlay_takes_all_input_and_closes_on_outside_click_or_esc():
+    from scrcrappy.config import Config
+    panel, closed = settings_panel(Config(), [])
+    w = panel.window
+    for kind in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN, pygame.KEYUP, pygame.TEXTINPUT):
+        assert panel.handle(pygame.event.Event(kind, window=w, pos=(5, 5), button=1, key=pygame.K_a, text="a"))
+    assert not closed  # a press outside doesn't close: the release does, so the toolbar never sees the click
+    assert panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(5, 5), window=w))
+    assert closed == [1]
+    panel, closed = settings_panel(Config(), [])
+    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, window=panel.window))
+    assert closed == [1]
+
+
+def test_settings_overlay_ignores_other_windows_and_stays_open_for_the_folder_picker():
+    from scrcrappy.config import Config
+    panel, closed = settings_panel(Config(), [])
+    assert panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_a, window=None)) is False
+    panel.picking = True
+    panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.window))
+    assert not closed
+    panel.picking = False
+    assert panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.window)) is False  # phone sees it too
+    assert closed == [1]
+
+
+def test_settings_overlay_draws_onto_the_window_surface():
+    from scrcrappy.config import Config
+    panel, _ = settings_panel(Config(mouse="esp32"), [], calibration=1.5)
+    screen = pygame.Surface((375, 715))
+    screen.fill((255, 255, 255))
+    panel.draw(screen, 667)
+    assert screen.get_at((370, 10))[:3] != (255, 255, 255)  # dimmed
+    assert screen.get_at((30 + 5, 30 + 5))[:3] != (255, 255, 255)  # the panel's own colour, not the image's
+    assert screen.get_at((370, 700))[:3] == (255, 255, 255)  # the bar's area is left alone

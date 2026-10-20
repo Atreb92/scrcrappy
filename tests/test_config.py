@@ -15,7 +15,7 @@ def test_missing_file_gives_defaults(tmp_path):
 
 def test_roundtrip(tmp_path):
     p = tmp_path / "c.json"
-    cfg = Config(natural_scroll=True, pinned=False, customs={"abc/ble": [Custom(2, HOME, "Home")]})
+    cfg = Config(natural_scroll=True, customs={"abc/ble": [Custom(2, HOME, "Home")]})
     config.save(cfg, p)
     assert json.loads(p.read_text())["customs"]["abc/ble"][0]["icon"] == "e9b2"  # readable hex in the file
     assert config.load(p) == cfg
@@ -69,3 +69,9 @@ def test_save_makes_a_stale_tmp_private(tmp_path):
     p.with_suffix(".tmp").chmod(0o644)
     config.save(Config(mcp_token="secret"), p)
     assert p.stat().st_mode & 0o777 == 0o600
+
+
+def test_old_pinned_setting_is_ignored(tmp_path):
+    p = tmp_path / "c.json"
+    p.write_text('{"natural_scroll": true, "pinned": false}')
+    assert config.load(p) == Config(natural_scroll=True)

@@ -182,24 +182,35 @@ def test_run_survives_failing_settings_save(capsys):
     import time
     os.environ["SDL_VIDEODRIVER"] = "dummy"
     from scrcrappy import app as app_module
-    from scrcrappy.toolbar import Pill
+    from scrcrappy.toolbar import Bar
     from scrcrappy.video import LatestFrame
 
     def broken(cfg):
         raise OSError("read-only file system")
 
-    orig_init = Pill.__init__
+    bars, orig_bar, orig_settings = [], Bar.__init__, app_module.Settings.__init__
 
-    def init(self, *a, **kw):
-        orig_init(self, *a, **kw)
-        self.actions["pinned"](False)  # as if the user clicked the chevron right away
+    def bar_init(self, *a, **kw):
+        orig_bar(self, *a, **kw)
+        bars.append(self)
 
-    Pill.__init__ = init
+    def settings_init(self, *a, **kw):
+        orig_settings(self, *a, **kw)
+        self._click("natural")  # as if the switch was clicked right away: saves
+
+    app_module.Bar.__init__, app_module.Settings.__init__ = bar_init, settings_init
     try:
-        t0 = time.time()
-        app_module.run(LatestFrame(), alive=lambda: time.time() - t0 < 0.3, save=broken)
+        t0, opened = time.time(), []
+
+        def alive():
+            if bars and not opened:
+                opened.append(1)
+                bars[0].actions["settings"]()
+            return time.time() - t0 < 0.3
+
+        app_module.run(LatestFrame(), alive=alive, save=broken)
     finally:
-        Pill.__init__ = orig_init
+        app_module.Bar.__init__, app_module.Settings.__init__ = orig_bar, orig_settings
     assert "could not save settings" in capsys.readouterr().err
 
 
@@ -219,7 +230,7 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
     import time
     os.environ["SDL_VIDEODRIVER"] = "dummy"
     from scrcrappy import app as app_module
-    from scrcrappy.toolbar import Pill
+    from scrcrappy.toolbar import Bar
     from scrcrappy.video import LatestFrame
 
     pointers, runs, pills = [], [], []
@@ -235,7 +246,7 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
         def run(self):
             runs.append(len(pointers))  # pointers built so far when the measurement runs
 
-    orig_pill, orig_settings = Pill.__init__, app_module.Settings.__init__
+    orig_pill, orig_settings = Bar.__init__, app_module.Settings.__init__
 
     def pill_init(self, *a, **kw):
         orig_pill(self, *a, **kw)
@@ -245,7 +256,7 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
         orig_settings(self, *a, **kw)
         self._click("calibrate")
 
-    monkeypatch.setattr(Pill, "__init__", pill_init)
+    monkeypatch.setattr(Bar, "__init__", pill_init)
     monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
     frames, t0, loops = LatestFrame(), time.time(), []
 
@@ -269,23 +280,28 @@ def test_mcp_flag_is_never_saved(monkeypatch):
     from scrcrappy import ai
     from scrcrappy import app as app_module
     from scrcrappy.config import Config
-    from scrcrappy.toolbar import Pill
+    from scrcrappy.toolbar import Bar
     from scrcrappy.video import LatestFrame
     monkeypatch.setattr(ai, "PORT", 0)
     saved, pills, clicked = [], [], []
-    orig = Pill.__init__
+    orig, orig_settings = Bar.__init__, app_module.Settings.__init__
 
     def pill_init(self, *a, **kw):
         orig(self, *a, **kw)
         pills.append(self)
 
-    monkeypatch.setattr(Pill, "__init__", pill_init)
+    def settings_init(self, *a, **kw):
+        orig_settings(self, *a, **kw)
+        self._click("natural")  # any other setting change saves the config
+
+    monkeypatch.setattr(Bar, "__init__", pill_init)
+    monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
     t0 = time.time()
 
     def alive():
         if pills and time.time() - t0 > 0.2 and not clicked:
             clicked.append(1)
-            pills[0].actions["pinned"](False)  # any other setting change saves the config
+            pills[0].actions["settings"]()
         return time.time() - t0 < 0.5
 
     app_module.run(LatestFrame(), alive, cfg=Config(), mcp=True, save=lambda c: saved.append(c.ai_control))

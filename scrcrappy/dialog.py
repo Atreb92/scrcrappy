@@ -1,4 +1,4 @@
-"""Small windows opened from the toolbar: add/edit a custom button, its right-click menu, and Settings."""
+"""Opened from the toolbar: windows for add/edit a custom button and its right-click menu, and the Settings\noverlay inside the phone window."""
 import subprocess
 import sys
 import threading
@@ -208,6 +208,8 @@ class Menu:
         self.win.flip()
 
 
+INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL, pygame.KEYDOWN,
+         pygame.KEYUP, pygame.TEXTINPUT)
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
 
@@ -227,18 +229,22 @@ def pick_folder(initial: str) -> str | None:
 
 
 class Settings:
-    """The settings fly-out beside the pill. Choices are written to `cfg` and `on_change` runs at once; typed
-    text (port, folder) is kept on Enter, on clicking elsewhere in the panel, or when the panel closes. Closes
-    when it loses focus (except while the folder picker is open). `place(size)` says where the panel goes."""
+    """The settings overlay: a panel inside the phone window (`window`) over a dimmed phone image, where `where(size)`
+    puts it (a Rect in window coordinates). While open it takes every mouse and key event. Choices are written to
+    `cfg` and `on_change` runs at once; typed text (port, folder) is kept on Enter, on clicking elsewhere in the
+    panel, or when it closes. Closes on Esc, a click outside the panel, losing focus (except while the folder
+    picker is open) and Calibrate. A window shorter than the panel clips its bottom (ponytail: scroll if it matters)."""
 
-    def __init__(self, cfg: Config, place: Callable[[tuple[int, int]], tuple[int, int]], on_change: Callable[[], None],
-                 on_natural: Callable[[], None], on_close: Callable[[], None], calibration: float | None = None,
-                 on_calibrate: Callable[[], None] | None = None, on_ai: Callable[[], None] | None = None,
-                 ai_status: Callable[[], str] = lambda: "", on_copy: Callable[[], None] | None = None) -> None:
+    def __init__(self, window: pygame.Window, where: Callable[[tuple[int, int]], pygame.Rect], cfg: Config,
+                 on_change: Callable[[], None], on_natural: Callable[[], None], on_close: Callable[[], None],
+                 calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
+                 on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
+                 on_copy: Callable[[], None] | None = None) -> None:
         """`calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
-        self.cfg, self.place, self.on_change, self.on_natural, self.on_close = cfg, place, on_change, on_natural, on_close
+        self.window, self.where, self.cfg, self.on_change, self.on_natural, self.on_close = (
+            window, where, cfg, on_change, on_natural, on_close)
         self.on_calibrate, self.on_ai, self.ai_status, self.on_copy = on_calibrate, on_ai, ai_status, on_copy
         self.font, self.small = pygame.font.Font(None, 20), pygame.font.Font(None, 18)
         self.calibration_lines = [] if calibration is None else _wrap(
@@ -252,10 +258,10 @@ class Settings:
         self.closed = self.picking = False
         self.hits: dict[str, pygame.Rect] = {}
         self._layout()
-        self.win = pygame.Window("scrcrappy settings", (PANEL_W, self.height), borderless=True, utility=True)
-        self.win.position = place(self.win.size)
-        self.win.focus()
-        self.draw()
+
+    @property
+    def rect(self) -> pygame.Rect:
+        return self.where((PANEL_W, self.height))
 
     def _layout(self) -> None:
         self.hits = {}
@@ -288,11 +294,14 @@ class Settings:
         self.height = y + PAD
 
     def handle(self, event: pygame.event.Event) -> bool:
-        if self.closed or getattr(event, "window", None) is not self.win:
+        """True for every mouse and key event while open: nothing reaches the phone or the toolbar."""
+        if self.closed or getattr(event, "window", None) is not self.window:
             return False
-        if event.type == pygame.WINDOWFOCUSLOST and not self.picking:
-            self.close()
-        elif event.type == pygame.TEXTINPUT and self.editing:
+        if event.type == pygame.WINDOWFOCUSLOST:
+            if not self.picking:
+                self.close()
+            return False  # the phone window still releases what is held
+        if event.type == pygame.TEXTINPUT and self.editing:
             self.text[self.editing] = (self.text[self.editing] + event.text)[:300]
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_BACKSPACE and self.editing:
             self.text[self.editing] = self.text[self.editing][:-1]
@@ -301,8 +310,13 @@ class Settings:
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.close()
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            self._click(next((k for k, r in self.hits.items() if r.collidepoint(event.pos)), None))
-        return True
+            rect = self.rect
+            if rect.collidepoint(event.pos):
+                local = (event.pos[0] - rect.x, event.pos[1] - rect.y)
+                self._click(next((k for k, r in self.hits.items() if r.collidepoint(local)), None))
+            else:
+                self.close()  # on release: the press that started it never reached the phone either
+        return event.type in INPUT
 
     def _click(self, hit: str | None) -> None:
         if hit not in ("port", "screenshots"):
@@ -336,8 +350,6 @@ class Settings:
 
     def _relayout(self) -> None:
         self._layout()
-        self.win.size = (PANEL_W, self.height)
-        self.win.position = self.place(self.win.size)
 
     def _picked(self, path: str | None) -> None:
         self.picking = False
@@ -345,8 +357,6 @@ class Settings:
             self.text["screenshots"] = path
             self.editing = "screenshots"
             self._commit()
-        if not self.closed:
-            self.win.focus()
 
     def _commit(self) -> None:
         if not self.editing:
@@ -365,7 +375,6 @@ class Settings:
         if not self.closed:
             self._commit()
             self.closed = True
-            self.win.destroy()
             self.on_close()
 
     def _switch(self, surf: pygame.Surface, key: str, label: str, on: bool) -> None:
@@ -385,12 +394,16 @@ class Settings:
                                 min(label.get_width(), r.width - 12), label.get_height())
         surf.blit(clip, (r.x + 6, r.y + 7))
 
-    def draw(self) -> None:
+    def draw(self, screen: pygame.Surface, dim_height: int) -> None:
+        """Dim the top `dim_height` px of the window (the phone image), then draw the panel at `rect`."""
         if self.closed:
             return
-        surf = self.win.get_surface()
-        surf.fill(SURFACE)
-        pygame.draw.rect(surf, SEP, surf.get_rect(), 1)
+        dim = pygame.Surface((screen.get_width(), dim_height), pygame.SRCALPHA)
+        dim.fill((0, 0, 0, 90))
+        screen.blit(dim, (0, 0))
+        surf = pygame.Surface((PANEL_W, self.height), pygame.SRCALPHA)
+        pygame.draw.rect(surf, SURFACE, surf.get_rect(), border_radius=14)
+        pygame.draw.rect(surf, SEP, surf.get_rect(), 1, border_radius=14)
         surf.blit(self.font.render("Input", True, FG), (PAD, 14))
         tag = self.small.render("next launch", True, (0x8A, 0x5A, 0x00))
         tag_bg = tag.get_rect(topleft=(PAD + 50, 13)).inflate(10, 4)
@@ -431,11 +444,12 @@ class Settings:
             pygame.draw.rect(surf, ACCENT, c)
             label = self.small.render("Calibrate", True, (255, 255, 255))
             surf.blit(label, label.get_rect(center=c.center))
-        self.win.flip()
+        rect = self.rect
+        screen.blit(surf, rect.topleft, area=pygame.Rect(0, 0, rect.w, rect.h))
 
 
 class Popups:
-    """The toolbar's popup windows (Dialog / Menu / Settings); at most one open at a time."""
+    """The toolbar's popup windows (Dialog / Menu); at most one open at a time."""
 
     def __init__(self) -> None:
         self.items: list = []

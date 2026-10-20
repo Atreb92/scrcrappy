@@ -151,7 +151,7 @@ clicking, report how far the cursor landed from the target) and `calibrate`; bot
 (Settings scrolled to the top) open on the phone; on a busy screen `check_pointer` can mistake a grey icon for
 the cursor and report a bogus error. The server only listens on this computer and needs the token.
 
-While AI control is on, a dot at the top of the pill shows its state: **green** waiting, **yellow** an AI
+While AI control is on, a dot at the left of the toolbar shows its state: **green** waiting, **yellow** an AI
 has been active in the last 30 s, **red** an AI action is running and your mouse and keyboard are paused.
 A red ring marks where the AI touched.
 
@@ -161,8 +161,7 @@ only, and the orientation is just portrait or landscape.
 
 ## Toolbar
 
-A small bar sits to the right of the phone window (left if there's no room) and follows it.
-Hover a button for its name.
+A bar along the bottom of the phone window holds the buttons. Hover a button for its name.
 
 | Button | Does |
 |---|---|
@@ -170,15 +169,15 @@ Hover a button for its name.
 | Copy | Phone clipboard → computer, with `--mouse agent` only (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
-| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; AI control (MCP); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
-| Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
+| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; AI control (MCP); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Opens as a panel over the phone image; closes with Esc, a click outside it, or when the window loses focus. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32
 each have their own mapping on the phone). The toolbar's state is saved in
-`~/.config/scrcrappy/config.json`: custom buttons, whether the bar is pinned and the Settings (input mode, natural scrolling, screenshot folder).
+`~/.config/scrcrappy/config.json`: custom buttons and the Settings (input mode, natural scrolling, screenshot folder).
 `--natural-scroll` / `--no-natural-scroll` override the saved scrolling direction.
 
 After updating to the 5-button version, forget and re-pair the device on the phone once.
 
-On Linux scrcrappy runs through X11 (XWayland on Wayland desktops) because Wayland doesn't let
-an app place the toolbar next to its window; set `SDL_VIDEODRIVER` yourself to override.
+On Linux scrcrappy runs through X11 (XWayland on Wayland desktops) because the add-button dialog and the
+right-click menu are windows placed next to the toolbar, which native Wayland doesn't allow; set
+`SDL_VIDEODRIVER` yourself to override.
