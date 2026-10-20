@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import os
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # before pygame loads: `scrcrappy agent` stdout is JSON only
@@ -80,8 +81,9 @@ def main(argv: list[str] | None = None) -> int:
     cfg = config.load()  # flags win over saved settings for this run, without changing them
     args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
 
-    qvh = find_qvh(args.qvh)
-    if not qvh:
+    mac = sys.platform == "darwin"  # macOS captures through AVFoundation, no qvh
+    qvh = None if mac else find_qvh(args.qvh)
+    if not mac and not qvh:
         print(f"error: qvh not found{f' at {args.qvh!r}' if args.qvh else ''}, build it with scripts/build-qvh.sh",
               file=sys.stderr)
         return 1
@@ -92,8 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     if not dev:
         print("error: no iPhone connected over USB", file=sys.stderr)
         return 1
-    serial = dev.serial_number
-    video.reset_if_stuck(dev)
+    serial = video.serial_number(dev)
+    if not mac:
+        video.reset_if_stuck(dev)
 
     make_pointer, keys, session, calibrator = None, None, None, None
     frames = video.LatestFrame()
@@ -110,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, RuntimeError) as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
+        atexit.register(link.close)
         send, connected, keys = link.send, link.connected, KeyQueue(link.send_keys)
         keys.start()
         if not connected.wait(5):
@@ -119,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         make_pointer = lambda size: mouse.Pointer(send, mouse.Gain(calibrate.load(serial)), size)  # noqa: E731
         calibrator = calibrate.Calibrator(serial, send, frames)  # loaded again after Settings › Calibrate
 
-    with video.capture(qvh, frames) as proc:
+    with (video.capture_avf(frames, serial) if mac else video.capture(qvh, frames)) as proc:
         if args.calibrate:
             time.sleep(3)  # stream start-up
             try:
@@ -135,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
                                  cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator, mcp=args.mcp,
                                  device_name="scrcrappy ESP32" if args.mouse == "esp32" else "scrcrappy PC")
     if not closed_by_user:
-        print(f"error: video capture stopped (phone unplugged?), qvh log:\n{proc.log}", file=sys.stderr)
+        print(f"error: video capture stopped (phone unplugged?), {'log' if mac else 'qvh log'}:\n{proc.log}", file=sys.stderr)
         return 1
     return 0
 

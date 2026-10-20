@@ -1,11 +1,20 @@
 import plistlib
 import socket
 import struct
+import tempfile
 import threading
+from pathlib import Path
 
 import pytest
 
 from scrcrappy import usbmux
+
+
+@pytest.fixture
+def tmp_path():
+    # shadows pytest's: its paths are too long for an AF_UNIX socket on macOS (104 chars)
+    with tempfile.TemporaryDirectory(dir="/tmp") as d:
+        yield Path(d)
 
 
 def fake_usbmuxd(path, devices, accept_port):

@@ -1,4 +1,15 @@
+import shutil
+
+import pytest
+
 from scrcrappy import __main__ as cli
+
+TRUE = shutil.which("true")  # /bin/true on Linux, /usr/bin/true on macOS
+
+
+@pytest.fixture(autouse=True)
+def linux(monkeypatch):
+    monkeypatch.setattr(cli.sys, "platform", "linux")  # the qvh path; macOS captures through AVFoundation
 
 
 def test_missing_qvh_exits_1(capsys):
@@ -6,9 +17,16 @@ def test_missing_qvh_exits_1(capsys):
     assert "qvh not found" in capsys.readouterr().err
 
 
+def test_macos_needs_no_qvh(capsys, monkeypatch):
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: None)
+    assert cli.main(["--qvh", "/nonexistent/qvh"]) == 1
+    assert "no iPhone connected" in capsys.readouterr().err
+
+
 def test_no_iphone_exits_1(capsys, monkeypatch):
     monkeypatch.setattr(cli.video, "find_iphone", lambda: None)
-    assert cli.main(["--qvh", "/bin/true"]) == 1
+    assert cli.main(["--qvh", TRUE]) == 1
     assert "no iPhone connected" in capsys.readouterr().err
 
 
@@ -40,9 +58,9 @@ def test_saved_input_mode_used_unless_flag_given(monkeypatch, capsys):
     from scrcrappy.config import Config
     monkeypatch.setattr(cli.config, "load", lambda: Config(mouse="agent"))
     monkeypatch.setattr(cli.video, "find_iphone", lambda: None)
-    assert cli.main(["--qvh", "/bin/true", "--calibrate"]) == 1  # saved agent: no calibration
+    assert cli.main(["--qvh", TRUE, "--calibrate"]) == 1  # saved agent: no calibration
     assert "--calibrate needs" in capsys.readouterr().err
-    assert cli.main(["--qvh", "/bin/true", "--calibrate", "--mouse", "ble"]) == 1  # flag wins: gets past the check
+    assert cli.main(["--qvh", TRUE, "--calibrate", "--mouse", "ble"]) == 1  # flag wins: gets past the check
     assert "no iPhone connected" in capsys.readouterr().err
 
 
@@ -51,7 +69,7 @@ def test_find_qvh_prefers_flag_then_package_then_path(tmp_path, monkeypatch):
     pkg.parent.mkdir()
     pkg.write_text("")
     pkg.chmod(0o755)
-    assert cli.find_qvh("/bin/true", pkg) == "/bin/true"
+    assert cli.find_qvh(TRUE, pkg) == TRUE
     assert cli.find_qvh(None, pkg) == str(pkg)
     pkg.unlink()
     monkeypatch.setenv("PATH", str(tmp_path))
@@ -73,3 +91,17 @@ def test_missing_qvh_names_build_script(capsys, monkeypatch, tmp_path):
     monkeypatch.setattr(cli.video, "find_iphone", lambda: None)  # never reach a real phone if this regresses
     assert cli.main([]) == 1
     assert "scripts/build-qvh.sh" in capsys.readouterr().err
+
+
+def test_macos_skips_qvh_and_the_usb_reset(monkeypatch, capsys):
+    import contextlib
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
+    monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
+    monkeypatch.setattr(cli, "find_qvh", lambda flag: pytest.fail("macOS has no qvh"))
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev: pytest.fail("macOS never enters the QuickTime config"))
+    cap = type("Cap", (), {"poll": lambda self: 0, "log": "boom"})()
+    monkeypatch.setattr(cli.video, "capture_avf", lambda frames, serial: contextlib.nullcontext(cap))
+    monkeypatch.setattr(cli.app, "run", lambda *a, **k: False)
+    assert cli.main(["--mouse", "none"]) == 1
+    assert "boom" in capsys.readouterr().err

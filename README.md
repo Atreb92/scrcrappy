@@ -7,7 +7,7 @@ duct tape, and it works anyway.
 
 ## Install
 
-Pick one. All of them ship the patched qvh inside; the only system pieces are libusb and, on Linux, usbmuxd.
+Pick one. On Linux they ship the patched qvh inside; the only system pieces are libusb and, on Linux, usbmuxd. macOS has no qvh: it reads the phone's screen through AVFoundation, as QuickTime Player does.
 
 **Linux, pipx** (x86_64; the wheel is on the [releases page](https://github.com/atreb92/scrcrappy/releases)):
 
@@ -21,8 +21,9 @@ pipx install "$(curl -s https://api.github.com/repos/atreb92/scrcrappy/releases/
 Bluetooth mode also needs the system python's bindings (`python3-dbus python3-gobject` on Fedora and
 Debian, `python-dbus python-gobject` on Arch).
 
-**Homebrew, macOS and Linux** (builds qvh from source, so it takes a minute; macOS needs nothing else, Linux
-also needs usbmuxd from your distro; tested on Linux, not yet on macOS):
+**Homebrew, macOS and Linux** (on Linux it builds qvh from source, so it takes a minute, and needs usbmuxd
+from your distro; on macOS nothing else is needed; the video path is tested on macOS from source, the formula not
+yet):
 
 ```sh
 brew tap atreb92/scrcrappy
@@ -33,10 +34,12 @@ brew install scrcrappy
 **From a checkout** (needs the Development packages below):
 
 ```sh
-scripts/build-qvh.sh && pipx install .
+scripts/build-qvh.sh && pipx install .   # macOS: just pipx install . (no qvh)
 ```
 
 Then run `scrcrappy` from anywhere. Releases: [docs/releasing.md](docs/releasing.md).
+
+**macOS first run:** unlock the phone, tap Trust, and allow camera access for your terminal app when macOS asks (System Settings › Privacy & Security › Camera). The phone shows up there as a capture device. If the window says no iPhone was found, one of those three is missing.
 
 ## Run
 
@@ -200,7 +203,9 @@ the phone is locked. Unlock the phone and replug it; scrcrappy gives up after 5 
 **The connection dropped for a second when the video started.** Expected: starting the video resets the USB
 link and the agent connection reconnects by itself.
 
-## Why a patched qvh
+## Why a patched qvh (Linux)
+
+macOS doesn't use qvh: its libusb can't claim the QuickTime interface (`out of resources`), so `video.capture_avf` reads the phone through AVFoundation instead.
 
 [qvh](https://github.com/danielpaulus/quicktime_video_hack) speaks the QuickTime USB
 mirroring protocol. `third_party/qvh.patch` makes two changes:
@@ -221,10 +226,10 @@ Fedora:
 sudo dnf install golang libusb1-devel
 ```
 
-macOS: `brew install go libusb pkg-config`
+macOS: `brew install libusb` (no qvh, so no Go)
 
 ```sh
-scripts/build-qvh.sh            # patched qvh -> scrcrappy/bin/qvh
+scripts/build-qvh.sh            # Linux only: patched qvh -> scrcrappy/bin/qvh
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ```
 
