@@ -6,7 +6,7 @@ from typing import Callable
 
 import pygame
 
-from .geometry import fit, inside, to_frame
+from .geometry import aspect_size, fit, inside, reshaped_size, to_frame
 from .keyqueue import KeyQueue
 from .mouse import Pointer
 from . import agent as agent_mod, ai as ai_mod, config
@@ -122,7 +122,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip
-    main.minimum_size = (240, BAR_H + 150)  # below this the image area would reach zero
+    main.minimum_size = (240, BAR_H + 150)
+    last_size, shaped_for = main.size, None  # the size before the latest resize; the frame size the window was shaped for  # below this the image area would reach zero
     main.set_icon(pygame.image.load(ICONS / "scrcrappy.png"))  # rendered from icons/scrcrappy.svg
     pygame.key.stop_text_input()  # raw key events only, no IME
     clock = pygame.time.Clock()
@@ -234,6 +235,12 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         room = max(0, bar.top - 2 * PANEL_MARGIN)
         return pygame.Rect((main.size[0] - size[0]) // 2, bar.top - PANEL_MARGIN - min(size[1], room), size[0], min(size[1], room))
 
+    def reshape(target: tuple[int, int]) -> None:
+        """Resize the window to `target`, unless it is as big as the desktop (maximized, tiled): then it stays."""
+        desktop = pygame.display.get_desktop_sizes()[0]
+        if target != main.size and main.size[0] < desktop[0] and main.size[1] < desktop[1]:
+            main.size = target
+
     def settings_changed() -> None:
         save_or_warn(save, cfg)
         if agent and controller:
@@ -328,6 +335,10 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
+                if event.type in (pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
+                    if img and main.size != last_size:  # keep the phone's aspect ratio while the window is resized
+                        reshape(aspect_size(img.get_size(), main.size, last_size, BAR_H))
+                    last_size = main.size
                 if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
                     bar.follow()
                 if popups.is_open() and event.type in INPUT[:4]:
@@ -337,6 +348,10 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             if frame := frames.get():
                 pixels, size, pitch = frame
                 img = pygame.image.frombuffer(pixels, size, "RGB", pitch)
+                if size != shaped_for:  # the first frame, or the phone was rotated
+                    shaped_for = size
+                    reshape(reshaped_size(size, main.size, BAR_H))
+                    last_size = main.size
             if img and make_pointer and not controller and not calibrating:  # (also after calibrating on a still screen)
                 pointer = make_pointer(img.get_size())
                 pointer.home()

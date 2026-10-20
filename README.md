@@ -169,6 +169,7 @@ only, and the orientation is just portrait or landscape.
 ## Toolbar
 
 A bar along the bottom of the phone window holds the buttons. Hover a button for its name.
+The window keeps the phone's aspect ratio when you resize it, and follows the phone when it rotates.
 
 | Button | Does |
 |---|---|
