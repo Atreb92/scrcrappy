@@ -32,7 +32,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
   homebrew:
-    # UNTESTED. Needs the repo secret TAP_TOKEN: a token with write access to atreb92/homebrew-scrcrappy.
+    # UNTESTED. Needs the repo secret TAP_DEPLOY_KEY: the private half of a write deploy key on atreb92/homebrew-scrcrappy.
     needs: linux-wheel
     runs-on: ubuntu-22.04
     steps:
@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: atreb92/homebrew-scrcrappy
-          token: ${{ secrets.TAP_TOKEN }}
+          ssh-key: ${{ secrets.TAP_DEPLOY_KEY }}
           path: tap
       - name: Point the formula at this tag
         run: |
