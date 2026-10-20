@@ -5,6 +5,24 @@ def fit(frame: tuple[int, int], window: tuple[int, int]) -> tuple[int, int, int,
     return (window[0] - w) // 2, (window[1] - h) // 2, w, h
 
 
+def aspect_size(frame: tuple[int, int], size: tuple[int, int], last: tuple[int, int], bar_h: int) -> tuple[int, int]:
+    """The window size, after a resize from `last` to `size`, whose image area (the window minus a `bar_h` strip at the
+    bottom) has the frame's aspect ratio. The side the user dragged most is kept, the other follows."""
+    w, h = size
+    if abs(w - last[0]) >= abs(h - last[1]):
+        return w, max(1, round(w * frame[1] / frame[0])) + bar_h
+    return max(1, round((h - bar_h) * frame[0] / frame[1])), h
+
+
+def reshaped_size(frame: tuple[int, int], size: tuple[int, int], bar_h: int) -> tuple[int, int]:
+    """The window size for a new frame shape (first frame, phone rotated): the image area takes the frame's aspect and
+    keeps its long side, so a rotation swaps width and height instead of shrinking the window."""
+    long_side = max(size[0], size[1] - bar_h)
+    if frame[0] >= frame[1]:
+        return long_side, max(1, round(long_side * frame[1] / frame[0])) + bar_h
+    return max(1, round(long_side * frame[0] / frame[1])), long_side + bar_h
+
+
 def to_frame(pos: tuple[int, int], rect: tuple[int, int, int, int], frame: tuple[int, int]) -> tuple[float, float]:
     """Window point -> frame pixel (may fall outside the frame for points in the letterbox)."""
     x, y, w, h = rect

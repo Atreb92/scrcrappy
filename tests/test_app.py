@@ -376,3 +376,35 @@ def test_screenshot_button_before_any_video_says_so(tmp_path):
     finally:
         Bar.__init__ = orig
     assert shown == ["No video yet: no screenshot"] and not list(tmp_path.iterdir())
+
+
+def test_window_takes_the_phones_aspect_when_the_first_frame_arrives():
+    import os
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.toolbar import BAR_H, Bar
+    from scrcrappy.video import LatestFrame
+    bars, orig = [], Bar.__init__
+
+    def bar_init(self, *a, **kw):
+        orig(self, *a, **kw)
+        bars.append(self)
+
+    Bar.__init__ = bar_init
+    try:
+        frames, t0, loops = LatestFrame(), time.time(), []
+
+        def alive():
+            loops.append(1)
+            if len(loops) == 2:
+                frames.put((bytes(40 * 20 * 3), (40, 20), 120))  # a landscape frame
+            if len(loops) == 6:
+                loops.append(bars[0].main.size)
+            return time.time() - t0 < 0.4
+
+        app_module.run(frames, alive, save=lambda c: None)
+    finally:
+        Bar.__init__ = orig
+    size = next(x for x in loops if isinstance(x, tuple))
+    assert size == (667, round(667 * 20 / 40) + BAR_H)  # long side kept (667), landscape 2:1 image area above the bar
