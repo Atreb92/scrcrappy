@@ -118,7 +118,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False) -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
-    with `agent`, clicks and keys go to scrcrappy-agent instead. `calibrator` adds Calibrate to Settings.
+    with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings.
     Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip

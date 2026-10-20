@@ -72,7 +72,7 @@ MIT, see [LICENSE](LICENSE).
   name, and is built and held together with glue and duct tape to make the same thing work on iOS.
 - [qvh](https://github.com/danielpaulus/quicktime_video_hack) (MIT): the QuickTime USB protocol behind
   the video; scrcrappy ships a patched build (`third_party/qvh.patch`).
-- ZXTouch: showed how touches can be injected from SpringBoard on a jailbroken iPhone. scrcrappy-agent
+- ZXTouch: showed how touches can be injected from SpringBoard on a jailbroken iPhone. crappytouch
   follows the same approach as a clean rewrite and contains none of its code.
 - [Inter](https://github.com/rsms/inter) (SIL OFL 1.1): the interface font, subset to Latin
   (`scrcrappy/fonts/`, licence in `OFL.txt` there; rebuilt by `scripts/make-fonts.sh`).
@@ -112,9 +112,9 @@ After updating scrcrappy, if the device description changed: "Forget" it on the 
 `bluetoothctl remove <phone address>` (ble) or reflash (esp32), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.
 
-## Control with a jailbreak (scrcrappy-agent)
+## Control with a jailbreak (crappytouch)
 
-On a jailbroken phone, install [scrcrappy-agent](../scrcrappy-agent) (a SpringBoard tweak, reached over USB
+On a jailbroken phone, install [crappytouch](https://github.com/Atreb92/crappytouch) (a SpringBoard tweak, reached over USB
 only) and run `.venv/bin/scrcrappy --mouse agent` (or pick Agent in the toolbar's Settings once). No Bluetooth, no AssistiveTouch, no calibration:
 
 - Click / drag = touch at that exact spot; **Ctrl+drag** = two-finger pinch around the screen centre;
@@ -123,6 +123,8 @@ only) and run `.venv/bin/scrcrappy --mouse agent` (or pick Agent in the toolbar'
 - Paste (**Ctrl+Shift+V**) types any text, accents and emoji included. iOS shows *Allow Paste* in the app
   (Settings › ‹app› › Paste from Other Apps › Allow stops it); the text stays on the phone's clipboard.
 - Toolbar: Copy (phone clipboard → computer), Screenshot (PNG in your Pictures folder, or the folder in Settings), Home, App switcher, Lock.
+
+On the phone, Settings › crappytouch › *Keep Awake While Connected* stops auto-lock while scrcrappy is connected.
 
 First run: unlock the phone; it asks *Allow “‹computer›” to control this iPhone?* with a 6-digit code —
 check it matches the one in the terminal, tap Allow. After each phone reboot, touch its screen once

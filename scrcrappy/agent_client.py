@@ -1,4 +1,4 @@
-"""Reference client for the scrcrappy-agent protocol (PROTOCOL.md). Python stdlib only.
+"""Reference client for the crappytouch protocol (PROTOCOL.md). Python stdlib only.
 
 scrcrappy vendors this file; keep it self-contained.
 """

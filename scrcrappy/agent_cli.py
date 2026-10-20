@@ -1,4 +1,4 @@
-"""`scrcrappy agent --<action>`: one AI action per call, straight to scrcrappy-agent (no window, no video).
+"""`scrcrappy agent --<action>`: one AI action per call, straight to crappytouch (no window, no video).
 
 Prints exactly one JSON object on stdout ({"ok": true, ...} or {"ok": false, "error": ...}, exit 1);
 pairing prompts and hints go to stderr. Coordinates are percent of the upright screenshot.
@@ -19,7 +19,7 @@ from .agent_client import Agent, AgentError
 
 ERRORS = {"clipboard timeout": "the phone is asking Allow Paste for this clipboard, which can't be answered "
                                "remotely; tap it on the phone or set the text from this computer",
-          "unknown command": "this scrcrappy-agent is too old for that: update it on the phone (apps and open need 0.3.0, open_url 0.5.0)",
+          "unknown command": "this crappytouch is too old for that: update it on the phone (apps and open need 0.3.0, open_url 0.5.0)",
           "locked": "the phone is locked: unlock it first",
           "unknown app": "that app is not installed (see the app list)",
           "open failed": "the phone could not open it (nothing handles it, or no answer in 5 s)",
@@ -52,7 +52,7 @@ def connect() -> Agent:
 
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="scrcrappy agent", description="One action on a jailbroken iPhone running "
-                                "scrcrappy-agent. Coordinates: percent (0-100, decimals ok) of the upright "
+                                "crappytouch. Coordinates: percent (0-100, decimals ok) of the upright "
                                 "screenshot, x left to right, y top to bottom. Prints one JSON object.")
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--screenshot", metavar="PATH", help="save a PNG (long edge at most 1568 px); "
