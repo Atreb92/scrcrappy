@@ -3,8 +3,8 @@
 class Scrcrappy < Formula
   desc "Mirror and control an iPhone over USB (scrcpy for iOS)"
   homepage "https://github.com/atreb92/scrcrappy"
-  url "https://github.com/atreb92/scrcrappy/archive/refs/tags/v0.2.0.tar.gz"
-  sha256 "7cf05a47bc46a8913c0d1f91a7bca8caa3cb6a6a59c27bda5891687a5ef6154e"
+  url "https://github.com/atreb92/scrcrappy/archive/refs/tags/v0.2.1.tar.gz"
+  sha256 "726383997f2a92a31cbe6d8dfdc822b7205407907f5da8dcf94fe3514ad96019"
   license "MIT"
 
   depends_on "go" => :build
