@@ -319,3 +319,40 @@ def test_switcher_is_two_home_presses_and_a_failure_is_a_tool_error(monkeypatch)
     broken = ai.AiControl(frames(), session=FakeSession({"key": {"error": "agent not connected"}}))
     with pytest.raises(ToolError, match="agent not connected"):
         tool(broken, "home").run({})
+
+
+APPS = {"apps": {"ok": True, "apps": [{"id": "com.apple.Preferences", "name": "Settings", "pid": 7},
+                                      {"id": "com.apple.mobilenotes", "name": "Notes"}]}}
+
+
+def test_agent_mode_lists_and_opens_apps_and_ble_mode_does_not():
+    assert {"list_apps", "open_app"} <= {t.name for t in ai.AiControl(frames(), session=FakeSession(APPS)).tools()}
+    assert not {"list_apps", "open_app"} & {t.name for t in ai.AiControl(frames(), pointer=lambda: FakePointer()).tools()}
+
+
+def test_list_apps_is_name_id_running():
+    control = ai.AiControl(frames(), session=FakeSession(APPS))
+    [block] = tool(control, "list_apps").run({})
+    assert json.loads(block["text"]) == [{"name": "Settings", "id": "com.apple.Preferences", "running": True},
+                                         {"name": "Notes", "id": "com.apple.mobilenotes", "running": False}]
+
+
+def test_open_app_by_name_sends_the_bundle_id_then_lets_it_draw(monkeypatch):
+    waited = []
+    monkeypatch.setattr(ai.time, "sleep", waited.append)
+    s = FakeSession(APPS)
+    [block] = tool(ai.AiControl(frames(), session=s), "open_app").run({"app": "notes"})
+    assert [r for r in s.sent if r["cmd"] == "open"] == [{"cmd": "open", "id": "com.apple.mobilenotes"}]
+    assert "Notes" in block["text"] and waited == [ai.APP_SETTLE_S]  # the reply comes before the app has drawn
+
+
+def test_open_app_unknown_name_locked_phone_and_old_agent_are_tool_errors():
+    control = ai.AiControl(frames(), session=FakeSession(APPS))
+    with pytest.raises(ToolError, match="no app"):
+        tool(control, "open_app").run({"app": "Calendar"})
+    locked = ai.AiControl(frames(), session=FakeSession({**APPS, "open": {"error": "locked"}}))
+    with pytest.raises(ToolError, match="unlock"):
+        tool(locked, "open_app").run({"app": "Settings"})
+    old = ai.AiControl(frames(), session=FakeSession({"apps": {"error": "unknown command"}}))
+    with pytest.raises(ToolError, match="0.3.0"):
+        tool(old, "list_apps").run({})

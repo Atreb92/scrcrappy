@@ -111,5 +111,12 @@ class Agent:
         """Shows the Allow prompt on the phone; blocks until the user answers (or 30 s)."""
         self.request({"cmd": "pair", "host": host, "secret": secret.hex()})
 
+    def apps(self) -> list[dict]:
+        """Openable apps sorted by name: {"id", "name", "pid" (only when running)}."""
+        return self.request({"cmd": "apps"})["apps"]
+
+    def open_app(self, bundle_id: str) -> None:
+        self.request({"cmd": "open", "id": bundle_id})
+
     def close(self) -> None:
         self.sock.close()
