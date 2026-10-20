@@ -315,3 +315,141 @@ def _wrap(text: str, font: pygame.font.Font, width: int) -> list[str]:
         else:
             line = f"{line} {word}".strip()
     return lines + [line]
+
+
+# --- the bar: the same buttons as a strip under the phone image, drawn in the phone window itself -------
+
+BAR_H = 48
+TIP_GAP = 6
+_bar_fonts: dict[tuple[bool, int], pygame.font.Font] = {}
+
+
+def _icon_font(filled: bool, size: int) -> pygame.font.Font:
+    if (filled, size) not in _bar_fonts:
+        _bar_fonts[(filled, size)] = pygame.font.Font(
+            ICONS / f"MaterialSymbolsRounded-{'filled' if filled else 'outline'}.ttf", size)
+    return _bar_fonts[(filled, size)]
+
+
+def hlayout(items: list[Button | None], width: int) -> list[tuple[Button, pygame.Rect]]:
+    """Each button's rect along a horizontal strip of `width` x BAR_H: `layout`, turned on its side."""
+    cross, rects = layout(items, width)
+    top = (BAR_H - cross) // 2
+    return [(b, pygame.Rect(r.y, top + r.x, r.h, r.w)) for b, r in rects]
+
+
+class Bar:
+    """What Pill is, without the extra windows: the buttons sit in a BAR_H strip at the bottom of the phone window
+    (draw it onto the window's surface each frame, before flip) and tooltips pop up above it."""
+
+    def __init__(self, main: pygame.Window, items: list[Button | None], actions: dict[str, Callable],
+                 pinned: bool = True) -> None:
+        self.main, self.actions = main, actions
+        self.hover: Button | None = None
+        self.hover_since = 0.0
+        self.tip_text: str | None = None
+        self.led_colour: tuple[int, int, int] | None = None
+        self.items: list[Button | None] = []
+        self.rects: list[tuple[Button, pygame.Rect]] = []
+        self.set_items(items)
+
+    @property
+    def top(self) -> int:
+        return self.main.size[1] - BAR_H
+
+    def set_items(self, items: list[Button | None]) -> None:
+        self.items = _without_collapse(items)
+        self.hover, self.tip_text = None, None
+        self.follow()
+
+    def follow(self) -> None:
+        self.rects = [(b, r.move(0, self.top)) for b, r in hlayout(self.items, self.main.size[0])]
+
+    def focused(self) -> bool:
+        return self.main.focused
+
+    def _hit(self, pos: tuple[int, int]) -> Button | None:
+        return next((b for b, r in self.rects if r.collidepoint(pos)), None)
+
+    def handle(self, event: pygame.event.Event) -> bool:
+        """Consume the mouse events that land on the strip; everything else goes on to the phone."""
+        if event.type == pygame.WINDOWLEAVE and getattr(event, "window", None) is self.main:
+            self.hover, self.tip_text = None, None
+            return False
+        if event.type not in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
+            return False
+        if getattr(event, "window", None) is not self.main or event.pos[1] < self.top:
+            if event.type == pygame.MOUSEMOTION:
+                self.hover, self.tip_text = None, None
+            return False
+        if event.type == pygame.MOUSEMOTION:
+            hit = self._hit(event.pos)
+            if hit is not self.hover:
+                self.hover, self.hover_since, self.tip_text = hit, time.monotonic(), None
+        elif event.type == pygame.MOUSEBUTTONUP and (hit := self._hit(event.pos)):
+            if event.button == 1:
+                self._click(hit)
+            elif event.button == 3 and hit.id.startswith("custom:"):
+                self.actions["menu"](int(hit.id[7:]))
+        return True
+
+    def _click(self, button: Button) -> None:
+        if not button.enabled:
+            return
+        if button.toggled is not None:
+            button.toggled = not button.toggled
+        if button.id.startswith("custom:"):
+            self.actions["custom"](int(button.id[7:]))
+        else:
+            self.actions[button.id]()
+
+    def update(self, now: float | None = None, app_focused: bool | None = None) -> None:
+        now = time.monotonic() if now is None else now
+        if self.hover and self.tip_text is None and now - self.hover_since >= TIP_DELAY:
+            b = self.hover
+            self.tip_text = f"{b.tip}: {'on' if b.toggled else 'off'}" if b.toggled is not None and b.id != "settings" else b.tip
+
+    def draw(self, surf: pygame.Surface) -> None:
+        w = surf.get_width()
+        pygame.draw.rect(surf, BG, (0, self.top, w, BAR_H))
+        for item, rect in self.rects:
+            if item.id == "led":
+                if self.led_colour:
+                    pygame.draw.circle(surf, self.led_colour, rect.center, max(3, rect.width // 4))
+                continue
+            if item.toggled:
+                pygame.draw.circle(surf, ON_BG, rect.center, rect.width // 2)
+            if item is self.hover and item.enabled:
+                overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
+                pygame.draw.circle(overlay, HOVER, (rect.width // 2, rect.height // 2), rect.width // 2)
+                surf.blit(overlay, rect)
+            color = DISABLED if not item.enabled else ON_FG if item.toggled else FG
+            glyph = _icon_font(bool(item.toggled), max(8, int(rect.width * 0.6))).render(item.icon, True, color)
+            surf.blit(glyph, glyph.get_rect(center=rect.center))
+        for i, item in enumerate(self.items):  # separators between the neighbours
+            if item is None:
+                a = next(r for b, r in self.rects if b is self.items[i - 1])
+                b = next(r for b, r in self.rects if b is self.items[i + 1])
+                x = (a.right + b.left) // 2
+                pygame.draw.line(surf, SEP, (x, self.top + BAR_H * 0.28), (x, self.top + BAR_H * 0.72))
+        if self.tip_text and self.hover:
+            self._draw_tip(surf)
+
+    def _draw_tip(self, surf: pygame.Surface) -> None:
+        font = pygame.font.Font(None, 18)
+        lines = _wrap(self.tip_text, font, min(TIP_WIDTH, surf.get_width() - 24) - 16)
+        size = (16 + max(font.size(l)[0] for l in lines), 10 + 18 * len(lines))
+        rect = next(r for b, r in self.rects if b is self.hover)
+        x = min(max(6, rect.centerx - size[0] // 2), surf.get_width() - size[0] - 6)
+        box = pygame.Rect(x, self.top - TIP_GAP - size[1], *size)
+        pygame.draw.rect(surf, TIP_BG, box, border_radius=6)
+        for i, line in enumerate(lines):
+            surf.blit(font.render(line, True, TIP_FG), (box.x + 8, box.y + 5 + 18 * i))
+
+
+def _without_collapse(items: list[Button | None]) -> list[Button | None]:
+    """The strip is always visible: no collapse button (and no separator left dangling next to it)."""
+    kept = [b for b in items if b is None or b.id != "collapse"]
+    while kept and kept[-1] is None:
+        kept.pop()
+    return kept

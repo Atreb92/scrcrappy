@@ -13,7 +13,7 @@ from . import agent as agent_mod, ai as ai_mod, config
 from .calibrate import Calibrator
 from .config import Config, Custom
 from .dialog import Dialog, DialogState, Menu, Popups, Settings
-from .toolbar import GAP, ICONS, Pill, buttons, next_free
+from .toolbar import BAR_H, GAP, ICONS, Bar, Pill, buttons, next_free
 from .video import LatestFrame
 
 
@@ -114,13 +114,14 @@ def save_or_warn(save: Callable[[Config], None], cfg: Config) -> None:
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
         save: Callable[[Config], None] = config.save, title: str = "scrcrappy",
-        agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False) -> bool:
+        agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False, ui: str = "pill") -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
     with `agent`, clicks and keys go to scrcrappy-agent instead. `calibrator` adds Calibrate to Settings.
     Toolbar and Settings changes (custom buttons, natural scrolling, pinned, …) are written to `cfg` and saved at once."""
     pygame.init()
-    main = pygame.Window(title, (375, 667), resizable=True)
+    bar_h = BAR_H if ui == "bar" else 0  # the strip under the phone image (ui "bar"), else the pill is its own window
+    main = pygame.Window(title, (375, 667 + bar_h), resizable=True)
     main.set_icon(pygame.image.load(ICONS / "scrcrappy.png"))  # rendered from icons/scrcrappy.svg
     pygame.key.stop_text_input()  # raw key events only, no IME
     clock = pygame.time.Clock()
@@ -204,11 +205,21 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             changed()
 
         rect = next(r for b, r in pill.rects if b.id == f"custom:{n}")
-        px, py = pill.win.position
-        popups.open(lambda: Menu((px + pill.win.size[0] + 4, py + rect.y), n, on_edit=lambda: edit(n), on_remove=remove))
+        if bar_h:
+            mx, my = main.position
+            where = (mx + rect.x, my + pill.top - 100)  # just above the strip
+        else:
+            px, py = pill.win.position
+            where = (px + pill.win.size[0] + 4, py + rect.y)
+        popups.open(lambda: Menu(where, n, on_edit=lambda: edit(n), on_remove=remove))
 
     def place(size: tuple[int, int]) -> tuple[int, int]:
-        """Beside the pill, away from the phone window, centred on the gear."""
+        """Beside the pill, away from the phone window, centred on the gear (ui bar: beside the window, bottom-aligned)."""
+        if bar_h:
+            (mx, my), (mw, mh) = main.position, main.size
+            desktop = pygame.display.get_desktop_sizes()[0]
+            x = mx + mw + GAP if mx + mw + GAP + size[0] <= desktop[0] else mx - GAP - size[0]
+            return x, max(0, my + mh - size[1])
         (px, py), (pw, _) = pill.win.position, pill.win.size
         x = px + pw + GAP if px > main.position[0] else px - GAP - size[0]
         gear = next((r for b, r in pill.rects if b.id == "settings"), None)
@@ -277,7 +288,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                                                      toggle_ai, ai_status, copy_ai_command)) or settings
         pill.set_items(items())
 
-    pill = Pill(main, items(), {
+    pill = (Bar if bar_h else Pill)(main, items(), {
         "paste": paste,
         "copy": lambda: controller.copy(),
         "screenshot": lambda: controller.screenshot(),
@@ -313,7 +324,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
                     pill.follow()
                 if controller and img:
-                    controller.handle(event, fit(img.get_size(), main.size), img.get_size())
+                    controller.handle(event, fit(img.get_size(), (main.size[0], main.size[1] - bar_h)), img.get_size())
             if frame := frames.get():
                 pixels, size, pitch = frame
                 img = pygame.image.frombuffer(pixels, size, "RGB", pitch)
@@ -329,16 +340,20 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             screen = main.get_surface()
             screen.fill((0, 0, 0))
             if img:
-                x, y, w, h = fit(img.get_size(), screen.get_size())
+                x, y, w, h = fit(img.get_size(), (screen.get_width(), screen.get_height() - bar_h))
                 screen.blit(pygame.transform.smoothscale(img, (w, h)), (x, y))
                 now = time.monotonic()
                 for rx, ry, t in ai.current_rings(now):  # where the AI touched
                     pygame.draw.circle(screen, ai_mod.RED, (x + rx / 100 * w, y + ry / 100 * h),
                                        10 + (now - t) * 40, 3)
-            main.flip()
             pill.led_colour = ai.led()
             pill.update(app_focused=pill.focused() or popups.focused())
-            pill.draw()
+            if bar_h:
+                pill.draw(screen)
+                main.flip()
+            else:
+                main.flip()
+                pill.draw()
             if settings:
                 settings.draw()
             clock.tick(60)

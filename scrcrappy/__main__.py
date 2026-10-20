@@ -44,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "default: last setting from the toolbar")
     parser.add_argument("--mcp", action="store_true",
                         help="allow AI control (MCP server on 127.0.0.1:7331) for this run; see Settings")
+    parser.add_argument("--ui", choices=("pill", "bar"), default="pill",
+                        help="toolbar: pill = its own window beside the phone (X11), bar = a strip under the image")
     parser.add_argument("--calibrate", action="store_true",
                         help="measure the pointer gain (needs --mouse; open a plain light screen first)")
     return parser
@@ -114,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.natural_scroll is not None:
             cfg.natural_scroll = args.natural_scroll
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer, keys=keys,
-                                 cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator, mcp=args.mcp,
+                                 cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator, mcp=args.mcp, ui=args.ui,
                                  device_name="scrcrappy ESP32" if args.mouse == "esp32" else "scrcrappy PC")
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), qvh log: {proc.log_path}", file=sys.stderr)
