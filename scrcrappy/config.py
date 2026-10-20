@@ -28,7 +28,6 @@ class Custom:
 @dataclass
 class Config:
     natural_scroll: bool = False
-    pinned: bool = True
     customs: dict[str, list[Custom]] = field(default_factory=dict)  # "<phone serial>/<ble|esp32>" -> buttons
     mouse: str = "none"  # input mode used when --mouse isn't given
     port: str = "/dev/ttyUSB0"  # ESP32 serial port when --port isn't given
@@ -58,7 +57,7 @@ def load(path: Path = PATH) -> Config:
                 kept.append(c)
         customs[str(key)] = kept
     mouse = raw.get("mouse") if raw.get("mouse") in MICE else "none"
-    return Config(bool(raw.get("natural_scroll", False)), bool(raw.get("pinned", True)), customs, mouse,
+    return Config(bool(raw.get("natural_scroll", False)), customs, mouse,
                   str(raw.get("port") or Config.port), str(raw.get("screenshots") or ""),
                   bool(raw.get("ai_control", False)), str(raw.get("mcp_token") or ""))
 
@@ -66,7 +65,7 @@ def load(path: Path = PATH) -> Config:
 def save(cfg: Config, path: Path = PATH) -> None:
     """Write via a temp file + rename, so an interrupted save leaves the old file intact."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = {"natural_scroll": cfg.natural_scroll, "pinned": cfg.pinned,
+    data = {"natural_scroll": cfg.natural_scroll,
             "customs": {k: [{"button": c.button, "icon": f"{ord(c.icon):x}", "name": c.name} for c in v]
                         for k, v in cfg.customs.items()},
             "mouse": cfg.mouse, "port": cfg.port, "screenshots": cfg.screenshots,

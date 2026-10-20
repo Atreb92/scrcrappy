@@ -63,9 +63,10 @@ class AiControl:
             self.server.stop()
         self.server = None
 
-    def command(self, cfg: Config) -> str:
-        return (f"claude mcp add --transport http scrcrappy http://127.0.0.1:{PORT}/mcp "
-                f"--header \"Authorization: Bearer {cfg.mcp_token}\"")
+    def client_config(self, cfg: Config) -> str:
+        """The server entry in the JSON most MCP clients take (`mcpServers`), with the token in it."""
+        return json.dumps({"mcpServers": {"scrcrappy": {"type": "http", "url": f"http://127.0.0.1:{PORT}/mcp",
+                                                        "headers": {"Authorization": f"Bearer {cfg.mcp_token}"}}}}, indent=2)
 
     def led(self, now: float | None = None) -> tuple[int, int, int] | None:
         if not self.server:

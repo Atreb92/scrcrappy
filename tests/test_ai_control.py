@@ -156,7 +156,8 @@ def test_enable_creates_token_and_reports_busy_port(monkeypatch):
     taken.close()
     control.enable(cfg)
     assert control.server and control.error is None
-    assert cfg.mcp_token in control.command(cfg)
+    config = json.loads(control.client_config(cfg))["mcpServers"]["scrcrappy"]  # the usual MCP client format
+    assert config["url"].endswith("/mcp") and config["headers"]["Authorization"] == f"Bearer {cfg.mcp_token}"
     control.disable()
     assert control.server is None
 
@@ -232,6 +233,7 @@ def test_rings_keep_recent_and_future_ones():
 
 def test_input_paused_per_event_while_locked():
     from scrcrappy.app import paused
+    assert paused(pygame.event.Event(pygame.TEXTINPUT, text="a"), True)  # a Settings field is not typed into either
     assert paused(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(0, 0)), True)  # pill clicks too
     assert paused(pygame.event.Event(pygame.KEYDOWN, scancode=4), True)
     assert not paused(pygame.event.Event(pygame.WINDOWFOCUSLOST), True)

@@ -12,11 +12,12 @@ from .mouse import Pointer
 from . import agent as agent_mod, ai as ai_mod, config
 from .calibrate import Calibrator
 from .config import Config, Custom
-from .dialog import Dialog, DialogState, Menu, Popups, Settings
-from .toolbar import GAP, ICONS, Pill, buttons, next_free
+from .dialog import PANEL_W, Dialog, DialogState, Menu, Popups, Settings, post_run
+from .toolbar import BAR_H, ICONS, Bar, buttons, next_free
 from .video import LatestFrame
 
 
+PANEL_MARGIN = 8  # between the Settings panel and the strip / the window's top
 CALIBRATE_WAIT_S = 120  # the AI's calibrate tool gives up waiting (a run takes well under a minute)
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
 # SDL ignores the click that focuses a window by default: the toolbar would need two clicks
@@ -24,7 +25,7 @@ os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
 
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
 INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL,
-         pygame.KEYDOWN, pygame.KEYUP)
+         pygame.KEYDOWN, pygame.KEYUP, pygame.TEXTINPUT)
 
 
 def paused(event: pygame.event.Event, locked: bool) -> bool:
@@ -118,9 +119,10 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
     with `agent`, clicks and keys go to scrcrappy-agent instead. `calibrator` adds Calibrate to Settings.
-    Toolbar and Settings changes (custom buttons, natural scrolling, pinned, …) are written to `cfg` and saved at once."""
+    Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
     pygame.init()
-    main = pygame.Window(title, (375, 667), resizable=True)
+    main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip
+    main.minimum_size = (240, BAR_H + 150)  # below this the image area would reach zero
     main.set_icon(pygame.image.load(ICONS / "scrcrappy.png"))  # rendered from icons/scrcrappy.svg
     pygame.key.stop_text_input()  # raw key events only, no IME
     clock = pygame.time.Clock()
@@ -133,7 +135,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     customs = cfg.customs.setdefault(device_key, [])
     popups = Popups()
     settings: Settings | None = None
-    settings_closed_at = 0.0
+    context_menu: Menu | None = None
     calibrating = False
     ai = ai_mod.AiControl(frames, session=agent, keys=keys,
                           pointer=(lambda: controller.pointer if controller else None) if make_pointer else None,
@@ -153,19 +155,19 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if ai.error:
             print(f"AI control: {ai.error}", file=sys.stderr)
         save_or_warn(save, cfg)
-        pill.set_items(items())
+        bar.set_items(items())
 
     def ai_status() -> str:
         return ai.error or (f"Listening on http://127.0.0.1:{ai_mod.PORT}/mcp (this computer only). Copy the "
-                            "setup command and run it in a terminal to give Claude Code access.")
+                            "MCP config and add it to your AI client.")
 
-    def copy_ai_command() -> None:
-        pygame.scrap.put_text(ai.command(cfg))
-        print("AI control: setup command copied to the clipboard", file=sys.stderr)
+    def copy_ai_config() -> None:
+        pygame.scrap.put_text(ai.client_config(cfg))
+        print("AI control: MCP config copied to the clipboard", file=sys.stderr)
 
     def changed() -> None:
         save_or_warn(save, cfg)
-        pill.set_items(items())
+        bar.set_items(items())
 
     def paste() -> None:
         if controller and (skipped := controller.paste()):
@@ -175,10 +177,6 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         cfg.natural_scroll = not cfg.natural_scroll
         if controller:
             controller.natural_scroll = cfg.natural_scroll
-        save_or_warn(save, cfg)
-
-    def set_pinned(pinned: bool) -> None:
-        cfg.pinned = pinned
         save_or_warn(save, cfg)
 
     def click(n: int) -> None:
@@ -198,22 +196,29 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
 
         popups.open(lambda: Dialog(DialogState(button, device_name, current), on_send=lambda: click(button), on_done=done))
 
-    def menu(n: int) -> None:
+    def open_menu(n: int) -> None:
+        nonlocal context_menu
+
         def remove() -> None:
             customs[:] = [c for c in customs if c.button != n]
             changed()
 
-        rect = next(r for b, r in pill.rects if b.id == f"custom:{n}")
-        px, py = pill.win.position
-        popups.open(lambda: Menu((px + pill.win.size[0] + 4, py + rect.y), n, on_edit=lambda: edit(n), on_remove=remove))
+        button = next(r for b, r in bar.rects if b.id == f"custom:{n}")
 
-    def place(size: tuple[int, int]) -> tuple[int, int]:
-        """Beside the pill, away from the phone window, centred on the gear."""
-        (px, py), (pw, _) = pill.win.position, pill.win.size
-        x = px + pw + GAP if px > main.position[0] else px - GAP - size[0]
-        gear = next((r for b, r in pill.rects if b.id == "settings"), None)
-        y = py + (gear.centery if gear else 0) - size[1] // 2
-        return x, max(0, min(y, pygame.display.get_desktop_sizes()[0][1] - size[1]))
+        def where(size: tuple[int, int]) -> pygame.Rect:
+            """Just above the strip, over its button, kept inside the window."""
+            x = min(max(8, button.centerx - size[0] // 2), main.size[0] - size[0] - 8)
+            return pygame.Rect(x, bar.top - PANEL_MARGIN - size[1], *size)
+
+        if controller:
+            controller.release()
+        context_menu = Menu(main, where, n, on_edit=lambda: edit(n), on_remove=remove,
+                            on_close=lambda: bar.set_items(items()))  # the strip forgets what the mouse was over
+
+    def settings_rect(size: tuple[int, int]) -> pygame.Rect:
+        """The Settings panel: centred above the strip, clipped to the room there is."""
+        room = max(0, bar.top - 2 * PANEL_MARGIN)
+        return pygame.Rect((main.size[0] - size[0]) // 2, bar.top - PANEL_MARGIN - min(size[1], room), size[0], min(size[1], room))
 
     def settings_changed() -> None:
         save_or_warn(save, cfg)
@@ -221,9 +226,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             controller.screenshots = cfg.screenshots
 
     def settings_done() -> None:
-        nonlocal settings_closed_at
-        settings_closed_at = time.monotonic()
-        pill.set_items(items())
+        bar.set_items(items())
 
     def calibrate(on_done: Callable[[str | None], None] | None = None) -> None:
         """Settings › Calibrate: the pointer stops while the calibrator drives the cursor, then is rebuilt
@@ -241,9 +244,9 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             try:
                 calibrator.run()
                 error = None
-            except RuntimeError as e:
-                error = str(e)
-            pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: calibrated(error, on_done)))
+            except Exception as e:  # whatever went wrong, the pointer must come back
+                error = str(e) or type(e).__name__
+            post_run(lambda: calibrated(error, on_done))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -259,8 +262,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def ai_calibrate() -> str:
         """The AI's calibrate tool (MCP thread): run calibrate() on the window's thread and wait for it."""
         done, result = threading.Event(), []
-        pygame.event.post(pygame.event.Event(
-            pygame.USEREVENT, run=lambda: calibrate(lambda error: (result.append(error), done.set()))))
+        post_run(lambda: calibrate(lambda error: (result.append(error), done.set())))
         if not done.wait(CALIBRATE_WAIT_S):
             raise RuntimeError("calibration is taking too long; check the window")
         if result[0]:
@@ -271,13 +273,14 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         nonlocal settings
         if settings and not settings.closed:
             settings.close()
-        elif time.monotonic() - settings_closed_at > 0.5:  # else this click is what closed it (focus moved)
-            settings = popups.open(lambda: Settings(cfg, place, settings_changed, toggle_natural, settings_done,
-                                                     calibrator.value() if calibrator else None, calibrate,
-                                                     toggle_ai, ai_status, copy_ai_command)) or settings
-        pill.set_items(items())
+        else:
+            if controller:
+                controller.release()  # a key held right now would otherwise stay down on the phone: the overlay eats its release
+            settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
+                                calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config)
+        bar.set_items(items())
 
-    pill = Pill(main, items(), {
+    bar = Bar(main, items(), {
         "paste": paste,
         "copy": lambda: controller.copy(),
         "screenshot": lambda: controller.screenshot(),
@@ -286,10 +289,11 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "lock": lambda: controller.lock(),
         "custom": click,
         "add": edit,
-        "menu": menu,
+        "menu": open_menu,
         "settings": open_settings,
-        "pinned": set_pinned,
-    }, pinned=cfg.pinned)
+    })
+    if agent and controller:
+        controller.notify = bar.toast  # "Screenshot saved: …", "Copied N characters"
     if cfg.ai_control or mcp:  # --mcp: on for this run only, cfg.ai_control (what's saved) stays as it is
         had_token = bool(cfg.mcp_token)
         ai.enable(cfg)
@@ -297,7 +301,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             save_or_warn(save, cfg)
         if ai.error:
             print(f"AI control: {ai.error}", file=sys.stderr)
-        pill.set_items(items())
+        bar.set_items(items())
     try:
         while alive():
             for event in pygame.event.get():
@@ -306,22 +310,24 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     continue
                 if paused(event, ai.locked()):  # checked per event: the lock starts the moment a tool does
                     continue
-                if popups.handle(event) or pill.handle(event):
+                if any(o and o.handle(event) for o in (settings, context_menu)) or popups.handle(event) or bar.handle(event):
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
                 if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
-                    pill.follow()
+                    bar.follow()
+                if popups.is_open() and event.type in INPUT[:4]:
+                    continue  # a dialog or menu is up: the mouse over the phone window doesn't steer the phone cursor
                 if controller and img:
-                    controller.handle(event, fit(img.get_size(), main.size), img.get_size())
+                    controller.handle(event, fit(img.get_size(), (main.size[0], bar.top)), img.get_size())
             if frame := frames.get():
                 pixels, size, pitch = frame
                 img = pygame.image.frombuffer(pixels, size, "RGB", pitch)
-                if make_pointer and not controller and not calibrating:
-                    pointer = make_pointer(size)
-                    pointer.home()
-                    pointer.start()
-                    controller = Controller(pointer, cfg.natural_scroll, keys)
+            if img and make_pointer and not controller and not calibrating:  # (also after calibrating on a still screen)
+                pointer = make_pointer(img.get_size())
+                pointer.home()
+                pointer.start()
+                controller = Controller(pointer, cfg.natural_scroll, keys)
             if ai.locked() != was_locked:
                 was_locked = not was_locked
                 if was_locked and controller:
@@ -329,18 +335,19 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             screen = main.get_surface()
             screen.fill((0, 0, 0))
             if img:
-                x, y, w, h = fit(img.get_size(), screen.get_size())
+                x, y, w, h = fit(img.get_size(), (screen.get_width(), bar.top))
                 screen.blit(pygame.transform.smoothscale(img, (w, h)), (x, y))
                 now = time.monotonic()
                 for rx, ry, t in ai.current_rings(now):  # where the AI touched
                     pygame.draw.circle(screen, ai_mod.RED, (x + rx / 100 * w, y + ry / 100 * h),
                                        10 + (now - t) * 40, 3)
+            bar.led_colour = ai.led()
+            bar.update()
+            for overlay in (settings, context_menu):
+                if overlay:
+                    overlay.draw(screen, bar.top)
+            bar.draw(screen)
             main.flip()
-            pill.led_colour = ai.led()
-            pill.update(app_focused=pill.focused() or popups.focused())
-            pill.draw()
-            if settings:
-                settings.draw()
             clock.tick(60)
         return False
     finally:

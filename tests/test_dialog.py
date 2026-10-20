@@ -80,32 +80,62 @@ def test_click_send_calls_on_send():
     assert sent == [1] and done == []
 
 
-def test_menu_remove_calls_back():
+def menu_overlay(**kw):
     from scrcrappy.dialog import Menu
+    closed = []
+    window = pygame.Window("phone", (375, 715))
+    menu = Menu(window, lambda size: pygame.Rect(40, 300, *size), 3, on_edit=kw.get("on_edit", lambda: None),
+                on_remove=kw.get("on_remove", lambda: None), on_close=lambda: closed.append(1))
+    return menu, closed
+
+
+def menu_event(menu, kind, key=None, **kw):
+    pos = (menu.rect.x + menu.hits[key].centerx, menu.rect.y + menu.hits[key].centery) if key else kw.pop("pos", (0, 0))
+    return pygame.event.Event(kind, window=menu.window, button=1, pos=pos, **kw)
+
+
+def test_menu_remove_calls_back_and_closes():
     calls = []
-    m = Menu((100, 100), 3, on_edit=lambda: calls.append("edit"), on_remove=lambda: calls.append("remove"))
-    m.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=m.win, button=1, pos=m.hits["remove"].center))
-    assert calls == ["remove"] and m.closed
+    m, closed = menu_overlay(on_remove=lambda: calls.append("remove"))
+    assert m.handle(menu_event(m, pygame.MOUSEBUTTONUP, "remove")) is True
+    assert calls == ["remove"] and m.closed and closed == [1]
 
 
-def test_menu_closes_when_focus_lost():
-    from scrcrappy.dialog import Menu
-    m = Menu((100, 100), 3, on_edit=lambda: None, on_remove=lambda: None)
-    m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.win))
+def test_menu_closes_on_focus_loss_esc_and_outside_click_and_takes_input():
+    m, closed = menu_overlay()
+    assert m.handle(menu_event(m, pygame.MOUSEMOTION, pos=(5, 5))) is True  # the phone never sees the mouse
+    assert m.handle(menu_event(m, pygame.MOUSEBUTTONDOWN, pos=(5, 5))) is True and not closed
+    m.handle(menu_event(m, pygame.MOUSEBUTTONUP, pos=(5, 5)))
     assert m.closed
+    m, _ = menu_overlay()
+    m.handle(pygame.event.Event(pygame.KEYDOWN, window=m.window, key=pygame.K_ESCAPE))
+    assert m.closed
+    m, _ = menu_overlay()
+    assert m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.window)) is False
+    assert m.closed
+    m, _ = menu_overlay()
+    assert m.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=None, button=1, pos=(5, 5))) is False and not m.closed
+
+
+def test_menu_draws_over_the_window():
+    m, _ = menu_overlay()
+    screen = pygame.Surface((375, 715))
+    screen.fill((255, 255, 255))
+    m.hover = "edit"
+    m.draw(screen, 667)
+    assert screen.get_at((m.rect.centerx, m.rect.y + 3))[:3] != (255, 255, 255)
 
 
 def test_edit_from_menu_opens_dialog():
-    # the menu closes itself and then asks for the dialog: that must not count as "a popup is open"
-    from scrcrappy.dialog import Menu, Popups
-    popups = Popups()
-    opened = []
+    # the menu closes itself and then asks for the dialog
+    from scrcrappy.dialog import Popups
+    popups, opened = Popups(), []
 
     def edit():
         opened.append(popups.open(lambda: Dialog(DialogState(2, "scrcrappy PC"), on_send=lambda: None, on_done=lambda r: None)))
 
-    menu = popups.open(lambda: Menu((10, 10), 2, on_edit=edit, on_remove=lambda: None))
-    popups.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, window=menu.win, button=1, pos=menu.hits["edit"].center))
+    menu, _ = menu_overlay(on_edit=edit)
+    menu.handle(menu_event(menu, pygame.MOUSEBUTTONUP, "edit"))
     assert opened and isinstance(opened[0], Dialog)
 
 
@@ -119,14 +149,17 @@ def test_only_one_popup_at_a_time():
 def settings_panel(cfg, changes, **kw):
     from scrcrappy.dialog import Settings
     closed = []
-    panel = Settings(cfg, place=lambda size: (0, 0), on_change=lambda: changes.append(1),
+    window = pygame.Window("phone", (375, 715))
+    panel = Settings(window, lambda size: pygame.Rect(20, 30, *size), cfg, on_change=lambda: changes.append(1),
                      on_natural=lambda: setattr(cfg, "natural_scroll", not cfg.natural_scroll),
                      on_close=lambda: closed.append(1), **kw)
     return panel, closed
 
 
 def click(panel, key):
-    panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=panel.hits[key].center, window=panel.win))
+    x, y = panel.hits[key].center
+    panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(x + panel.rect.x, y + panel.rect.y),
+                                    window=panel.window))
 
 
 def test_settings_mode_saves_at_once_and_esp32_shows_port():
@@ -136,7 +169,7 @@ def test_settings_mode_saves_at_once_and_esp32_shows_port():
     assert "port" not in panel.hits
     click(panel, "mode:2")
     assert cfg.mouse == "esp32" and changes and "port" in panel.hits
-    assert panel.win.size[1] == panel.height
+    assert panel.rect.height == panel.height
 
 
 def test_settings_typed_folder_kept_on_enter_and_on_close():
@@ -144,12 +177,12 @@ def test_settings_typed_folder_kept_on_enter_and_on_close():
     cfg, changes = Config(), []
     panel, closed = settings_panel(cfg, changes)
     click(panel, "screenshots")
-    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="~/shots", window=panel.win))
-    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN, window=panel.win))
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="~/shots", window=panel.window))
+    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RETURN, window=panel.window))
     assert cfg.screenshots == "~/shots" and len(changes) == 1
     click(panel, "screenshots")
-    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="2", window=panel.win))
-    panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.win))  # clicked back on the phone
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="2", window=panel.window))
+    panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.window))  # clicked back on the phone
     assert cfg.screenshots == "~/shots2" and closed == [1]
 
 
@@ -161,7 +194,7 @@ def test_settings_natural_switch_and_empty_port_falls_back():
     assert cfg.natural_scroll is True
     click(panel, "port")
     for _ in range(6):
-        panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, window=panel.win))
+        panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, window=panel.window))
     panel.close()
     assert cfg.port == "/dev/ttyUSB0"
 
@@ -173,7 +206,8 @@ def test_calibration_section_only_with_a_mouse_and_calibrate_closes_the_panel():
     started = []
     panel, closed = settings_panel(Config(), [], calibration=1.859, on_calibrate=lambda: started.append(1))
     assert any("1.86" in line for line in panel.calibration_lines)
-    assert any("Tracking Speed" in line for line in panel.calibration_lines)
+    assert len(panel.calibration_lines) == 1  # short; the explanation is the Calibrate button's tooltip
+    assert "Tracking Speed" in panel.tips["calibrate"]
     click(panel, "calibrate")
     assert started == [1] and closed == [1] and panel.closed
 
@@ -189,7 +223,74 @@ def test_ai_switch_shows_status_and_copy():
                               on_copy=lambda: copied.append(1))
     assert "copy" not in panel.hits
     click(panel, "ai")
-    assert cfg.ai_control and "copy" in panel.hits and panel.win.size[1] == panel.height
+    assert cfg.ai_control and "copy" in panel.hits and panel.rect.height == panel.height
     assert panel.ai_lines == ["http://127.0.0.1:7331/mcp"]
     click(panel, "copy")
     assert copied == [1]
+
+
+def test_settings_overlay_takes_all_input_and_closes_on_outside_click_or_esc():
+    from scrcrappy.config import Config
+    panel, closed = settings_panel(Config(), [])
+    w = panel.window
+    for kind in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN, pygame.KEYUP, pygame.TEXTINPUT):
+        assert panel.handle(pygame.event.Event(kind, window=w, pos=(5, 5), button=1, key=pygame.K_a, text="a"))
+    assert not closed  # a press outside doesn't close: the release does, so the toolbar never sees the click
+    assert panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(5, 5), window=w))
+    assert closed == [1]
+    panel, closed = settings_panel(Config(), [])
+    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE, window=panel.window))
+    assert closed == [1]
+
+
+def test_settings_overlay_ignores_other_windows_and_stays_open_for_the_folder_picker():
+    from scrcrappy.config import Config
+    panel, closed = settings_panel(Config(), [])
+    assert panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_a, window=None)) is False
+    panel.picking = True
+    panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.window))
+    assert not closed
+    panel.picking = False
+    assert panel.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=panel.window)) is False  # phone sees it too
+    assert closed == [1]
+
+
+def test_settings_overlay_draws_onto_the_window_surface():
+    from scrcrappy.config import Config
+    panel, _ = settings_panel(Config(mouse="esp32"), [], calibration=1.5)
+    screen = pygame.Surface((375, 715))
+    screen.fill((255, 255, 255))
+    panel.draw(screen, 667)
+    assert screen.get_at((370, 10))[:3] != (255, 255, 255)  # dimmed
+    assert screen.get_at((30 + 5, 30 + 5))[:3] != (255, 255, 255)  # the panel's own colour, not the image's
+    assert screen.get_at((370, 700))[:3] == (255, 255, 255)  # the bar's area is left alone
+
+
+def test_popups_report_whether_one_is_open():
+    from scrcrappy.dialog import Popups
+
+    class Fake:
+        closed = False
+
+    p = Popups()
+    assert not p.is_open()
+    popup = p.open(Fake)
+    assert p.is_open() and p.open(Fake) is None
+    popup.closed = True
+    assert not p.is_open()
+
+
+def test_calibrate_tooltip_shows_after_a_hover_delay():
+    from scrcrappy.config import Config
+    from scrcrappy.toolbar import TIP_DELAY
+    panel, _ = settings_panel(Config(), [], calibration=1.5)
+    x, y = panel.hits["calibrate"].center
+    panel.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(x + panel.rect.x, y + panel.rect.y), window=panel.window))
+    assert panel.tip(panel.hover_since + TIP_DELAY - 0.1) is None
+    assert "Tracking Speed" in panel.tip(panel.hover_since + TIP_DELAY + 0.1)
+    panel.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(1, 1), window=panel.window))  # off the button
+    assert panel.tip(panel.hover_since + 5) is None
+    screen = pygame.Surface((375, 715))
+    panel.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(x + panel.rect.x, y + panel.rect.y), window=panel.window))
+    panel.hover_since -= 5
+    panel.draw(screen, 667)  # draws the tooltip without error

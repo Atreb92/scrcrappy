@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=scrcrappy
+Comment=Mirror and control an iPhone over USB
+Exec=scrcrappy
+Icon=scrcrappy
+Terminal=false
+Categories=Utility;
+StartupWMClass=scrcrappy

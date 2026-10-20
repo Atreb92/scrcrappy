@@ -74,6 +74,10 @@ MIT, see [LICENSE](LICENSE).
   the video; scrcrappy ships a patched build (`third_party/qvh.patch`).
 - ZXTouch: showed how touches can be injected from SpringBoard on a jailbroken iPhone. scrcrappy-agent
   follows the same approach as a clean rewrite and contains none of its code.
+- [Inter](https://github.com/rsms/inter) (SIL OFL 1.1): the interface font, subset to Latin
+  (`scrcrappy/fonts/`, licence in `OFL.txt` there; rebuilt by `scripts/make-fonts.sh`).
+- [Material Symbols](https://github.com/google/material-design-icons) (Apache 2.0): the toolbar icons
+  (`scrcrappy/icons/`, licence in `LICENSE` there).
 
 ## Mouse control without jailbreak
 
@@ -143,15 +147,18 @@ scrcrappy agent --clipboard
 Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit code 1.
 
 **MCP, in the running window** (any input mode): turn on *Allow AI control (MCP)* in the toolbar's Settings
-(or start with `--mcp`), click *Copy setup command* and run it in a terminal; it looks like
-`claude mcp add --transport http scrcrappy http://127.0.0.1:7331/mcp --header "Authorization: Bearer …"`.
+(or start with `--mcp`), click *Copy MCP config* and paste it into your AI client's MCP settings. It is the
+server entry most clients take:
+`{"mcpServers": {"scrcrappy": {"type": "http", "url": "http://127.0.0.1:7331/mcp", "headers": {"Authorization": "Bearer …"}}}}`
+(the token is created once and kept in `config.json`; some clients also have their own add command that
+takes the same URL and header).
 Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
 `clipboard` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
 clicking, report how far the cursor landed from the target) and `calibrate`; both need a plain, light screen
 (Settings scrolled to the top) open on the phone; on a busy screen `check_pointer` can mistake a grey icon for
 the cursor and report a bogus error. The server only listens on this computer and needs the token.
 
-While AI control is on, a dot at the top of the pill shows its state: **green** waiting, **yellow** an AI
+While AI control is on, a dot at the left of the toolbar shows its state: **green** waiting, **yellow** an AI
 has been active in the last 30 s, **red** an AI action is running and your mouse and keyboard are paused.
 A red ring marks where the AI touched.
 
@@ -161,8 +168,7 @@ only, and the orientation is just portrait or landscape.
 
 ## Toolbar
 
-A small bar sits to the right of the phone window (left if there's no room) and follows it.
-Hover a button for its name.
+A bar along the bottom of the phone window holds the buttons. Hover a button for its name.
 
 | Button | Does |
 |---|---|
@@ -170,15 +176,21 @@ Hover a button for its name.
 | Copy | Phone clipboard → computer, with `--mouse agent` only (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
-| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; AI control (MCP); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Closes when you click elsewhere. |
-| Chevron | Collapses the bar to a thin tab that opens while hovered; click the chevron again to keep it open. |
+| Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; AI control (MCP); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Opens as a panel over the phone image; closes with Esc, a click outside it, or when the window loses focus. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32
 each have their own mapping on the phone). The toolbar's state is saved in
-`~/.config/scrcrappy/config.json`: custom buttons, whether the bar is pinned and the Settings (input mode, natural scrolling, screenshot folder).
+`~/.config/scrcrappy/config.json`: custom buttons and the Settings (input mode, natural scrolling, screenshot folder).
 `--natural-scroll` / `--no-natural-scroll` override the saved scrolling direction.
 
 After updating to the 5-button version, forget and re-pair the device on the phone once.
 
-On Linux scrcrappy runs through X11 (XWayland on Wayland desktops) because Wayland doesn't let
-an app place the toolbar next to its window; set `SDL_VIDEODRIVER` yourself to override.
+On Linux scrcrappy runs as a native Wayland window in a Wayland session and falls back to X11 if that can't
+start; `--x11` forces X11 (XWayland on a Wayland desktop). Setting `SDL_VIDEODRIVER` yourself overrides both.
+Everything but the add-button dialog is drawn inside the phone window, so nothing depends on window placement;
+the dialog is a window of its own that the compositor places.
+
+Wayland shows a window's icon from a desktop entry that matches its app id (`scrcrappy`), so without one the window
+has a generic icon. To add it for your user (untested): copy `packaging/scrcrappy.desktop` to
+`~/.local/share/applications/` and `scrcrappy/icons/scrcrappy.png` to
+`~/.local/share/icons/hicolor/256x256/apps/scrcrappy.png`.

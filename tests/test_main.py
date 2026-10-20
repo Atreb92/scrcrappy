@@ -12,6 +12,21 @@ def test_no_iphone_exits_1(capsys, monkeypatch):
     assert "no iPhone connected" in capsys.readouterr().err
 
 
+def test_video_driver_wayland_first_with_x11_fallback_or_forced():
+    pick = cli.pick_video_driver
+    assert pick({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "linux") == "wayland,x11"  # x11 if wayland fails
+    assert pick({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "linux", x11=True) == "x11"
+    assert pick({"DISPLAY": ":0"}, "linux") == "x11"
+    assert pick({"WAYLAND_DISPLAY": "wayland-0"}, "linux", x11=True) is None  # no X server to force: let SDL decide
+    assert pick({"WAYLAND_DISPLAY": "wayland-0", "SDL_VIDEODRIVER": "x11"}, "linux") is None  # the user's own choice wins
+    assert pick({"WAYLAND_DISPLAY": "wayland-0"}, "darwin") is None
+
+
+def test_x11_flag():
+    assert cli.build_parser().parse_args(["--x11"]).x11 is True
+    assert cli.build_parser().parse_args([]).x11 is False
+
+
 def test_natural_scroll_flag_is_tristate():
     # no flag: the saved value is used; --natural-scroll / --no-natural-scroll override it
     p = cli.build_parser()

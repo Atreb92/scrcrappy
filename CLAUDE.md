@@ -8,7 +8,7 @@ BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor),
 ## Map
 
 - `__main__.py` CLI (flags win over saved settings; `scrcrappy agent …` dispatches to `agent_cli.py`)
-- `app.py` window loop, BLE `Controller`; `toolbar.py` pill; `dialog.py` Add-button dialog, menu, Settings fly-out
+- `app.py` window loop, BLE `Controller`; `toolbar.py` bar (button strip under the phone image); `dialog.py` Settings + right-click menu (overlays in the main window), Add-button dialog (its own window)
 - `agent.py` agent backend (Session: worker thread, replies posted back as pygame USEREVENTs; reconnects)
 - `agent_client.py` vendored from scrcrappy-agent (keep in sync with its `client/`); `usbmux.py` stdlib usbmuxd
 - `ai.py` AI tools + LED/rings/lock; `mcp.py` stdlib MCP server (127.0.0.1:7331, Bearer token); `actions.py` shared percent-coordinate logic
