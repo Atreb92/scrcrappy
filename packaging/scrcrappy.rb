@@ -27,7 +27,7 @@ class Scrcrappy < Formula
     # Personal tap: dependencies come as PyPI wheels (pygame-ce bundles SDL, av bundles FFmpeg). virtualenv_create
     # points the venv at python@3.13's opt path, so it survives Python patch upgrades; pip_install isn't used
     # because it forces building every dependency from source.
-    virtualenv_create(libexec, "python3.13", without_pip: false)
+    virtualenv_create(libexec, "python3.13")
     system libexec/"bin/pip", "install", buildpath
     bin.install_symlink libexec/"bin/scrcrappy"
   end
