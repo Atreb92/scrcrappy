@@ -51,6 +51,8 @@ def calibrate(send: Send, frames: LatestFrame) -> dict[int, float]:
         if not (a and b):
             raise RuntimeError("can't see the cursor: open a plain light screen (e.g. Settings scrolled to the top) and retry")
         table[length] = round((b[0] - a[0]) / (n * length), 3)
+        if table[length] <= 0:
+            raise RuntimeError("the cursor didn't move right: retry (Settings > Calibrate)")
         print(f"  length {length:2}: {table[length]} px/count", flush=True)
     return table
 
@@ -61,9 +63,10 @@ def gain_path(serial: str) -> Path:
 
 def load(serial: str) -> dict[float, float]:
     try:
-        return {float(k): v for k, v in json.loads(gain_path(serial).read_text()).items()}
+        table = {float(k): v for k, v in json.loads(gain_path(serial).read_text()).items()}
     except (OSError, ValueError):
         return DEFAULT_GAIN
+    return table if table and all(v > 0 for v in table.values()) else DEFAULT_GAIN
 
 
 def save(serial: str, table: dict[int, float]) -> Path:

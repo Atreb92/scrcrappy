@@ -2,6 +2,7 @@
 import contextlib
 import ctypes.util
 import os
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -85,7 +86,7 @@ def capture(qvh: str, out: LatestFrame) -> Iterator[subprocess.Popen]:
     os.mkfifo(fifo)
     with open(log_path, "wb") as log:
         proc = subprocess.Popen([qvh, "record", fifo, os.devnull], stdout=log, stderr=log)
-    proc.log_path = log_path
+    proc.log = ""
 
     def reader() -> None:
         with open(fifo, "rb", buffering=0) as f:
@@ -101,3 +102,6 @@ def capture(qvh: str, out: LatestFrame) -> Iterator[subprocess.Popen]:
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+        with open(log_path, errors="replace") as f:
+            proc.log = f.read()[-1000:]  # for the error message; the folder doesn't outlive the run
+        shutil.rmtree(tmp, ignore_errors=True)

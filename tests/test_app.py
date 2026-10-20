@@ -408,3 +408,9 @@ def test_window_takes_the_phones_aspect_when_the_first_frame_arrives():
         Bar.__init__ = orig
     size = next(x for x in loops if isinstance(x, tuple))
     assert size == (667, round(667 * 20 / 40) + BAR_H)  # long side kept (667), landscape 2:1 image area above the bar
+
+
+def test_window_enter_is_paused_while_the_ai_acts():
+    from scrcrappy.app import paused
+    assert paused(pygame.event.Event(pygame.WINDOWENTER), True)  # else the pointer homes mid-press
+    assert not paused(pygame.event.Event(pygame.WINDOWENTER), False)

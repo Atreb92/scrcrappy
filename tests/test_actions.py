@@ -76,3 +76,16 @@ def test_frame_png_from_video_frame():
     frame = (bytes(4 * 2 * 3), (4, 2), 12)
     data, w, h = actions.frame_png(frame)
     assert (w, h) == (4, 2) and data.startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize("ms", ["1e12", "inf", "nan", "0", "10001"])
+def test_parse_rejects_unbounded_durations(ms):
+    with pytest.raises(ValueError):
+        actions.parse_point(f"5,5,{ms}")
+
+
+def test_nonpositive_gain_file_falls_back_to_default(tmp_path, monkeypatch):
+    from scrcrappy import calibrate
+    monkeypatch.setattr(calibrate, "gain_path", lambda serial: tmp_path / "g.json")
+    (tmp_path / "g.json").write_text('{"4": 0.0, "12": -1}')
+    assert calibrate.load("x") == calibrate.DEFAULT_GAIN

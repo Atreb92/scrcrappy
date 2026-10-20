@@ -24,7 +24,6 @@ REPLY_S = 35  # agent requests may wait 30 s for a prompt on the phone
 APP_SETTLE_S = 1.0  # after open_app: the agent replies before the app has drawn
 SETTLE_S = 0.35  # after the pointer stops: let the last video frames arrive (as calibrate does)
 POINTER_WAIT_S = 5  # after a calibration: the app rebuilds the pointer on the next frame
-MAX_MS = 10_000  # longest long-press / swipe: the user's input is paused meanwhile
 
 POINT = {"x": {"type": "number", "minimum": 0, "maximum": 100, "description": "percent of the screenshot width, from the left"},
          "y": {"type": "number", "minimum": 0, "maximum": 100, "description": "percent of the screenshot height, from the top"}}
@@ -193,7 +192,8 @@ class AiControl:
         if not self.keys:
             raise ToolError("no keyboard in this mode")
         skipped = self.keys.type_text(text)
-        self.keys.wait_idle()  # typed on the phone before the AI's next screenshot
+        if not self.keys.wait_idle(10 + 0.05 * len(text)):  # typed on the phone before the AI's next screenshot
+            raise ToolError("typing didn't finish in time; check the connection to the phone")
         return [{"type": "text", "text": f"typed {len(text) - skipped} characters"
                                          + (f", skipped {skipped} (US layout, ASCII only)" if skipped else "")}]
 
@@ -329,8 +329,8 @@ def _ms(args: dict) -> float | None:
         ms = float(args["ms"])
     except (TypeError, ValueError):
         raise ToolError(f"ms must be a number of milliseconds, got {args['ms']!r}") from None
-    if not 0 < ms <= MAX_MS:
-        raise ToolError(f"ms must be between 1 and {MAX_MS}, got {ms:g}")
+    if not 0 < ms <= actions.MAX_MS:
+        raise ToolError(f"ms must be between 1 and {actions.MAX_MS}, got {ms:g}")
     return ms
 
 

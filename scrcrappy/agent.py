@@ -22,6 +22,7 @@ from . import usbmux
 from .agent_client import Agent, AgentError, encode_frame, load_secret, pairing_code, read_frame
 from .geometry import ROTATION_BY_ORIENTATION, inside, rotation, to_device
 
+REPLY_S = 15  # s to wait for a reply before the connection counts as lost
 POLL = 1.0  # s of idle worker between `screen` requests (orientation)
 MOVE_GAP = 0.016  # s between touch moves: about the phone's screen rate
 SWIPE = 0.1  # wheel notch = swipe of this fraction of the shown frame's height
@@ -110,6 +111,7 @@ class Session:
         def job() -> None:
             try:
                 self._send(obj)
+                self.sock.settimeout(REPLY_S)  # a silent phone is a lost connection
                 reply = read_frame(self.sock.recv)
             except (OSError, ValueError):
                 if failed:  # tell a waiting AI tool now, not after its timeout
@@ -154,7 +156,7 @@ class Session:
                 continue
             try:
                 job()
-            except (OSError, ValueError) as e:
+            except (OSError, ValueError, AgentError) as e:
                 print(f"agent: connection lost ({e}), reconnecting", file=sys.stderr)
                 if not self.reopen:
                     return
@@ -164,7 +166,7 @@ class Session:
     def _reconnect(self) -> bool:
         try:
             sock = self.reopen()
-        except (OSError, AgentError):
+        except (OSError, ValueError, KeyError, AgentError):  # a bad hello is as good as no connection
             return False
         with self.lock:
             self.sock.close()

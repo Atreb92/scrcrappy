@@ -22,7 +22,7 @@ Bluetooth mode also needs the system python's bindings (`python3-dbus python3-go
 Debian, `python-dbus python-gobject` on Arch).
 
 **Homebrew, macOS and Linux** (builds qvh from source, so it takes a minute; macOS needs nothing else, Linux
-also needs usbmuxd from your distro; untested):
+also needs usbmuxd from your distro; tested on Linux, not yet on macOS):
 
 ```sh
 brew tap atreb92/scrcrappy
@@ -54,6 +54,8 @@ A BLE mouse drives the AssistiveTouch cursor. Pick where it comes from with `--m
   `firmware/esp32-mouse` (works from Linux and macOS). Flash it once with PlatformIO:
   `cd firmware/esp32-mouse && pio run -e esp32dev -t upload` (env per board in `platformio.ini`).
   On the phone it is called "scrcrappy ESP32" (the laptop helper: "scrcrappy PC").
+  The board pairs with the first phone only and refuses everyone else; to pair a different phone (or the same one after
+  forgetting it), send the board a `p` line over serial. The laptop helper (`ble`) accepts any pairing while it runs, so use it somewhere you trust.
 
 Either way the phone sees a BLE mouse; the phone shows it as the AssistiveTouch
 cursor, and scrcrappy steers that cursor to follow your mouse over the window.
@@ -75,7 +77,7 @@ position, so set the phone's hardware layout to match your computer's
 on-screen keyboard.
 
 After updating scrcrappy, if the device description changed: "Forget" it on the phone, run
-`bluetoothctl remove <phone address>` (ble) or reflash (esp32), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
+`bluetoothctl remove <phone address>` (ble) or send the board a `p` line (esp32, e.g. `echo p > /dev/ttyUSB0` with scrcrappy closed), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.
 
 ## Control with a jailbreak (crappytouch)

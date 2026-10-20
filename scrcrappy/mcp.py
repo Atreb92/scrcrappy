@@ -14,6 +14,7 @@ from importlib import metadata
 from typing import Callable
 
 PORT = 7331
+MAX_BODY = 1_000_000  # bytes; a client (even with the token) doesn't pick how much we read
 LOCAL_ORIGIN = re.compile(r"https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$")
 SUPPORTED = ("2025-06-18", "2025-03-26", "2024-11-05")  # newest first: answered when a client asks for another
 
@@ -70,7 +71,10 @@ class McpServer:
                                                    "again from scrcrappy's Settings"),
                                        {"WWW-Authenticate": 'Bearer error="invalid_token"'})
                 try:
-                    msg = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+                    size = int(self.headers.get("Content-Length", 0))
+                    if not 0 <= size <= MAX_BODY:
+                        return self._reply(413, None)
+                    msg = json.loads(self.rfile.read(size))
                 except ValueError:
                     return self._reply(400, _error(None, -32700, "parse error"))
                 server.last_request = time.monotonic()
