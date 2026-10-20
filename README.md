@@ -26,6 +26,7 @@ also needs usbmuxd from your distro; tested on Linux, not yet on macOS):
 
 ```sh
 brew tap atreb92/scrcrappy
+brew trust atreb92/scrcrappy   # recent Homebrew refuses formulas from untrusted taps
 brew install scrcrappy
 ```
 
