@@ -122,7 +122,7 @@ only) and run `.venv/bin/scrcrappy --mouse agent` (or pick Agent in the toolbar'
 - Keys go to the phone by physical position (same Hardware Keyboard layout note as below); held keys repeat.
 - Paste (**Ctrl+Shift+V**) types any text, accents and emoji included. iOS shows *Allow Paste* in the app
   (Settings › ‹app› › Paste from Other Apps › Allow stops it); the text stays on the phone's clipboard.
-- Toolbar: Copy (phone clipboard → computer), Screenshot (PNG in `~/Pictures`, or the folder in Settings), Home, App switcher, Lock.
+- Toolbar: Copy (phone clipboard → computer), Screenshot (PNG in your Pictures folder, or the folder in Settings), Home, App switcher, Lock.
 
 First run: unlock the phone; it asks *Allow “‹computer›” to control this iPhone?* with a 6-digit code —
 check it matches the one in the terminal, tap Allow. After each phone reboot, touch its screen once
@@ -174,7 +174,7 @@ A bar along the bottom of the phone window holds the buttons. Hover a button for
 |---|---|
 | Paste | Types the computer's clipboard into the phone (also **Ctrl+Shift+V**). US layout, printable ASCII + Enter/Tab; other characters are skipped and reported. |
 | Copy | Phone clipboard → computer, with `--mouse agent` only (a Bluetooth keyboard/mouse can't read the phone's clipboard). |
-| Screenshot | Saves a PNG (`~/Pictures`, else your home folder, or the folder in Settings) and says where in a short message over the toolbar. With `--mouse agent` it is the phone's own screen; otherwise the mirrored video frame. |
+| Screenshot | Saves a PNG (your desktop's Pictures folder, e.g. `~/Pictures` or `~/Immagini`, else your home folder; or the folder in Settings) and says where in a short message over the toolbar. With `--mouse agent` it is the phone's own screen; otherwise the mirrored video frame. |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
 | Settings (gear) | Input mode (and ESP32 port) used when `--mouse` / `--port` aren't given — applies next launch; natural scrolling; AI control (MCP); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Opens as a panel over the phone image; closes with Esc, a click outside it, or when the window loses focus. |
