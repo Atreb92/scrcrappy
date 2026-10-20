@@ -7,7 +7,7 @@
 2. Tag and push: `git tag v<version> && git push origin v<version>`.
 3. `.github/workflows/release.yml` builds qvh, runs the tests, builds the Linux wheel
    (`scrcrappy-<version>-py3-none-manylinux_2_35_x86_64.whl`, qvh inside) and attaches it to the
-   GitHub release. Linux users install it with `pipx install <wheel URL>`.
+   GitHub release. The README install command picks the latest release by itself; nothing to edit per release.
 4. The `homebrew` job in the workflow rewrites `url` and `sha256` in `packaging/scrcrappy.rb` and pushes it to the tap
    repo (`atreb92/homebrew-scrcrappy`, `Formula/scrcrappy.rb`). It needs the repo secret `TAP_DEPLOY_KEY`, the private half of a
    write deploy key on the tap repo. Untested: check the first run. By hand, set `url` and `sha256` (`curl -sL <tarball URL> | sha256sum`)

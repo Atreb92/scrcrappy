@@ -15,7 +15,7 @@ Pick one. All of them ship the patched qvh inside; the only system pieces are li
 sudo dnf install pipx usbmuxd libusb1            # Fedora
 sudo apt install pipx usbmuxd libusb-1.0-0       # Debian / Ubuntu
 sudo pacman -S python-pipx usbmuxd libusb        # Arch
-pipx install https://github.com/atreb92/scrcrappy/releases/download/v0.2.0/scrcrappy-0.2.0-py3-none-manylinux_2_35_x86_64.whl
+pipx install "$(curl -s https://api.github.com/repos/atreb92/scrcrappy/releases/latest | grep -o 'https://[^"]*\.whl')"
 ```
 
 Bluetooth mode also needs the system python's bindings (`python3-dbus python3-gobject` on Fedora and
