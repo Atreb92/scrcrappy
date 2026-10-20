@@ -142,6 +142,7 @@ scrcrappy agent --long-press 50,30,1500 # optional duration in ms (default 1000)
 scrcrappy agent --swipe 50,80,50,20     # optional ,ms (default 300)
 scrcrappy agent --type "hello"          # keys if a US keyboard can type it, else paste ("typed_with")
 scrcrappy agent --clipboard
+scrcrappy agent --home                 # also --switcher (Home twice) and --lock
 ```
 
 Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit code 1.
@@ -153,7 +154,7 @@ server entry most clients take:
 (the token is created once and kept in `config.json`; some clients also have their own add command that
 takes the same URL and header).
 Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
-`clipboard` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
+`clipboard`, `home`, `switcher` and `lock` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
 clicking, report how far the cursor landed from the target) and `calibrate`; both need a plain, light screen
 (Settings scrolled to the top) open on the phone; on a busy screen `check_pointer` can mistake a grey icon for
 the cursor and report a bogus error. The server only listens on this computer and needs the token.

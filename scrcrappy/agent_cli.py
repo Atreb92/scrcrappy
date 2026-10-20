@@ -38,6 +38,9 @@ def parser() -> argparse.ArgumentParser:
     g.add_argument("--type", metavar="TEXT", help="type into the focused field: keys when a US layout can "
                    "type it all, else paste (the phone may ask Allow Paste)")
     g.add_argument("--clipboard", action="store_true", help="print the phone's clipboard text")
+    g.add_argument("--home", action="store_true", help="press the Home button")
+    g.add_argument("--switcher", action="store_true", help="open the app switcher (Home pressed twice)")
+    g.add_argument("--lock", action="store_true", help="press the Lock button (the phone stays locked until unlocked)")
     return p
 
 
@@ -68,6 +71,13 @@ def run(args: argparse.Namespace, a: Agent) -> dict:
         Path(args.screenshot).write_bytes(data)
         return {"path": args.screenshot, "width": w, "height": h,
                 "orientation": actions.ORIENTATIONS.get(orientation, "portrait")}
+    if args.home or args.switcher or args.lock:
+        usages = (agent_mod.LOCK,) if args.lock else (agent_mod.HOME,) * (2 if args.switcher else 1)
+        for i, usage in enumerate(usages):
+            if i:
+                time.sleep(agent_mod.SWITCHER_GAP)
+            a.request({"cmd": "key", "page": agent_mod.BUTTONS, "usage": usage})
+        return {}
     if args.type is not None:
         kind, strokes = actions.typing_plan(args.type)
         if kind == "keys":

@@ -290,3 +290,32 @@ def test_calibrate_failure_is_a_tool_error():
     control = ai.AiControl(frames(), pointer=lambda: FakePointer(), calibrate=fail)
     with pytest.raises(ToolError, match="plain light screen"):
         tool(control, "calibrate").run({})
+
+
+def test_agent_mode_has_the_phones_buttons_and_ble_mode_does_not():
+    agent_tools = [t.name for t in ai.AiControl(frames(), session=FakeSession({})).tools()]
+    assert {"home", "lock", "switcher"} <= set(agent_tools)
+    ble_tools = [t.name for t in ai.AiControl(frames(), pointer=lambda: FakePointer()).tools()]
+    assert not {"home", "lock", "switcher"} & set(ble_tools)  # a Bluetooth mouse has no such buttons
+
+
+def key_requests(session):
+    return [(r["page"], r["usage"]) for r in session.sent if r["cmd"] == "key"]
+
+
+def test_home_and_lock_press_one_button_each():
+    s = FakeSession({})
+    control = ai.AiControl(frames(), session=s)
+    assert tool(control, "home").run({}) == [{"type": "text", "text": "done"}]
+    tool(control, "lock").run({})
+    assert key_requests(s) == [(0x0C, 0x40), (0x0C, 0x30)]  # consumer page: Home, Lock
+
+
+def test_switcher_is_two_home_presses_and_a_failure_is_a_tool_error(monkeypatch):
+    monkeypatch.setattr(ai, "SWITCHER_GAP", 0)
+    s = FakeSession({})
+    tool(ai.AiControl(frames(), session=s), "switcher").run({})
+    assert key_requests(s) == [(0x0C, 0x40), (0x0C, 0x40)]
+    broken = ai.AiControl(frames(), session=FakeSession({"key": {"error": "agent not connected"}}))
+    with pytest.raises(ToolError, match="agent not connected"):
+        tool(broken, "home").run({})

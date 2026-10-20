@@ -11,6 +11,7 @@ from typing import Callable
 
 from . import actions
 from .calibrate import find_cursor, to_array
+from .agent import BUTTONS, HOME, LOCK, SWITCHER_GAP
 from .agent_cli import ERRORS
 from .config import Config
 from .mcp import PORT, McpServer, Tool, ToolError
@@ -106,8 +107,14 @@ class AiControl:
                                   "light screen (e.g. Settings scrolled to the top) open on the phone.",
                                   {"type": "object", "properties": {}}, self.calibrate))
         if self.session:
-            found.append(Tool("clipboard", "The phone's clipboard text. Fails if the phone asks Allow Paste.",
-                              {"type": "object", "properties": {}}, self.clipboard))
+            nothing = {"type": "object", "properties": {}}
+            found += [
+                Tool("clipboard", "The phone's clipboard text. Fails if the phone asks Allow Paste.", nothing, self.clipboard),
+                Tool("home", "Press the Home button: go to the home screen.", nothing, self.home),
+                Tool("switcher", "Open the app switcher (Home pressed twice).", nothing, self.switcher),
+                Tool("lock", "Press the Lock button. The phone stays locked, and taps do nothing, until it is unlocked "
+                     "on the phone.", nothing, self.lock),
+            ]
         return found
 
     def screenshot(self, args: dict) -> list[dict]:
@@ -185,7 +192,24 @@ class AiControl:
     def clipboard(self, args: dict) -> list[dict]:
         return [{"type": "text", "text": self._call({"cmd": "clipboard_get"})["text"]}]
 
+    def home(self, args: dict) -> list[dict]:
+        return self._buttons(HOME)
+
+    def switcher(self, args: dict) -> list[dict]:
+        return self._buttons(HOME, HOME)
+
+    def lock(self, args: dict) -> list[dict]:
+        return self._buttons(LOCK)
+
     # --- helpers
+    def _buttons(self, *usages: int) -> list[dict]:
+        """The phone's buttons (HID consumer page), one request each, a short gap between presses."""
+        for i, usage in enumerate(usages):
+            if i:
+                time.sleep(SWITCHER_GAP)
+            self._call({"cmd": "key", "page": BUTTONS, "usage": usage})
+        return [{"type": "text", "text": "done"}]
+
     def _touch(self, steps: list[actions.Step]) -> list[dict]:
         self.add_ring(steps[0][2], steps[0][3])
         if steps[-1][2:] != steps[0][2:]:

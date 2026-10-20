@@ -124,3 +124,26 @@ def test_empty_screenshot_path_is_an_error(monkeypatch, capsys):
     code, out = run(["--screenshot", ""], capsys)
     assert code == 1 and "path" in out["error"]
     assert not any(m["cmd"] == "clipboard_get" for m in phone.seen)
+
+
+def keys(phone):
+    return [(m["page"], m["usage"]) for m in phone.seen if m["cmd"] == "key"]
+
+
+def test_home_switcher_and_lock_press_the_phones_buttons(monkeypatch, capsys):
+    monkeypatch.setattr(agent_cli.agent_mod, "SWITCHER_GAP", 0)
+    phone = FakePhone(monkeypatch)
+    assert run(["--home"], capsys) == (0, {"ok": True})
+    assert keys(phone) == [(0x0C, 0x40)]  # consumer page: Home
+    phone = FakePhone(monkeypatch)
+    assert run(["--switcher"], capsys) == (0, {"ok": True})
+    assert keys(phone) == [(0x0C, 0x40), (0x0C, 0x40)]  # Home twice
+    phone = FakePhone(monkeypatch)
+    assert run(["--lock"], capsys) == (0, {"ok": True})
+    assert keys(phone) == [(0x0C, 0x30)]
+
+
+def test_one_action_per_call(monkeypatch):
+    FakePhone(monkeypatch)
+    with pytest.raises(SystemExit):
+        agent_cli.main(["--home", "--lock"])
