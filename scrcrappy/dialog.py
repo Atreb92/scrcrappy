@@ -7,10 +7,10 @@ from typing import Callable
 import pygame
 
 from .config import ICON_CHOICES, Config, Custom
-from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP
+from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, ui_font
 
 SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (10, 132, 255)  # iOS dark
-FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (56, 56, 60), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
+FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (68, 68, 74), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
 COLS, CELL, PAD, WIDTH = 8, 44, 16, 400
 
 
@@ -63,8 +63,7 @@ class Dialog:
 
     def __init__(self, state: DialogState, on_send: Callable[[], None], on_done: Callable[[Custom | None], None]) -> None:
         self.state, self.on_send, self.on_done = state, on_send, on_done
-        self.font = pygame.font.Font(None, 20)
-        self.small = pygame.font.Font(None, 18)
+        self.font, self.small, self.head = ui_font(14), ui_font(12), ui_font(14, True)
         self.icons = pygame.font.Font(ICONS / "MaterialSymbolsRounded-outline.ttf", 22)
         self.closed = False
         self.hits: dict[str, pygame.Rect] = {}
@@ -132,7 +131,7 @@ class Dialog:
         s = self.state
         surf = self.win.get_surface()
         surf.fill(SURFACE)
-        surf.blit(self.font.render("1. Pick an icon and a name", True, FG), (PAD, PAD))
+        surf.blit(self.head.render("1. Pick an icon and a name", True, FG), (PAD, PAD))
         for i, (icon, _) in enumerate(ICON_CHOICES):
             r = self.hits[f"icon:{i}"]
             if icon == s.icon:
@@ -144,7 +143,7 @@ class Dialog:
         pygame.draw.rect(surf, FIELD, name, border_radius=7)
         text = f"{s.name}|" if s.name else dict(ICON_CHOICES)[s.icon]  # empty: the icon's label is used
         surf.blit(self.small.render(text, True, TEXT if s.name else DISABLED), (name.x + 8, name.y + 7))
-        surf.blit(self.font.render(f"2. Bind it on the iPhone (this is button {s.button})", True, FG),
+        surf.blit(self.head.render(f"2. Bind it on the iPhone (this is button {s.button})", True, FG),
                   (PAD, self.steps_top - 22))
         y = self.steps_top
         for n, lines in enumerate(self.step_lines, 1):
@@ -164,7 +163,7 @@ class Menu:
 
     def __init__(self, pos: tuple[int, int], button: int, on_edit: Callable[[], None], on_remove: Callable[[], None]) -> None:
         self.button, self.on_edit, self.on_remove = button, on_edit, on_remove
-        self.font, self.small = pygame.font.Font(None, 20), pygame.font.Font(None, 16)
+        self.font, self.small = ui_font(14), ui_font(11)
         self.note = _wrap(f"Removing keeps the phone's Button {button} mapping: set it to None there "
                           "(AssistiveTouch › Devices) if you don't want it.", self.small, 220)
         self.hits = {"edit": pygame.Rect(0, 4, 240, 30), "remove": pygame.Rect(0, 34, 240, 30)}
@@ -263,7 +262,7 @@ class Settings:
         self.window, self.where, self.cfg, self.on_change, self.on_natural, self.on_close = (
             window, where, cfg, on_change, on_natural, on_close)
         self.on_calibrate, self.on_ai, self.ai_status, self.on_copy = on_calibrate, on_ai, ai_status, on_copy
-        self.font, self.small = pygame.font.Font(None, 20), pygame.font.Font(None, 18)
+        self.font, self.small, self.head = ui_font(14), ui_font(12), ui_font(14, True)
         self.calibration_lines = [] if calibration is None else _wrap(
             f"Current: {calibration:.2f} screen px per mouse count. The cursor speed is set on the iPhone in "
             "Settings › Accessibility › Touch › AssistiveTouch › Tracking Speed. Recalibrate after changing it, "
@@ -422,7 +421,7 @@ class Settings:
         rect = self.rect
         surf = pygame.Surface((PANEL_W, self.height), pygame.SRCALPHA)
         surf.blit(_glass(screen, rect), (0, 0))
-        surf.blit(self.font.render("Input", True, FG), (PAD, 14))
+        surf.blit(self.head.render("Input", True, FG), (PAD, 14))
         tag = self.small.render("next launch", True, (0xF2, 0xB7, 0x05))
         tag_bg = tag.get_rect(topleft=(PAD + 50, 13)).inflate(10, 4)
         pygame.draw.rect(surf, (0x4A, 0x3A, 0x12), tag_bg, border_radius=tag_bg.height // 2)
@@ -440,7 +439,7 @@ class Settings:
             surf.blit(self.small.render("Port", True, FG), (PAD, self.hits["port"].y + 7))
             self._field(surf, "port", Config.port)
         self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
-        surf.blit(self.font.render("Screenshots", True, FG), (PAD, self.shots_top))
+        surf.blit(self.head.render("Screenshots", True, FG), (PAD, self.shots_top))
         self._field(surf, "screenshots", "~/Pictures")
         b = self.hits["browse"]
         pygame.draw.rect(surf, FIELD, b, border_radius=7)
@@ -455,7 +454,7 @@ class Settings:
             label = self.small.render("Copy setup command", True, ACCENT)
             surf.blit(label, label.get_rect(center=c.center))
         if self.calibration_lines:
-            surf.blit(self.font.render("Pointer calibration", True, FG), (PAD, self.calib_top))
+            surf.blit(self.head.render("Pointer calibration", True, FG), (PAD, self.calib_top))
             for i, line in enumerate(self.calibration_lines):
                 surf.blit(self.small.render(line, True, MUTED), (PAD, self.calib_top + 20 + 16 * i))
             c = self.hits["calibrate"]

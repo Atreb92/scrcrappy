@@ -176,7 +176,7 @@ def test_calibration_section_only_with_a_mouse_and_calibrate_closes_the_panel():
     started = []
     panel, closed = settings_panel(Config(), [], calibration=1.859, on_calibrate=lambda: started.append(1))
     assert any("1.86" in line for line in panel.calibration_lines)
-    assert any("Tracking Speed" in line for line in panel.calibration_lines)
+    assert "Tracking Speed" in " ".join(panel.calibration_lines)  # however it wraps
     click(panel, "calibrate")
     assert started == [1] and closed == [1] and panel.closed
 

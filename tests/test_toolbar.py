@@ -98,3 +98,14 @@ def test_led_on_top_only_while_ai_control_is_on():
 def test_led_is_a_small_dot_in_the_strip():
     rects = {b.id: r for b, r in hlayout(buttons(True, [HOME], led=True), 375)}
     assert rects["led"].width <= rects["paste"].width * 0.4
+
+
+def test_ui_font_has_every_character_we_draw():
+    import pygame
+    from scrcrappy.toolbar import ui_font
+    pygame.font.init()
+    for bold in (False, True):
+        font = ui_font(14, bold)
+        missing = font.render("\U0010fffd", True, (0, 0, 0))  # the "missing glyph" box
+        for ch in "Aa0 ›…·é—":
+            assert pygame.image.tobytes(font.render(ch, True, (0, 0, 0)), "RGBA") != pygame.image.tobytes(missing, "RGBA") or ch == " "

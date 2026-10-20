@@ -74,6 +74,10 @@ MIT, see [LICENSE](LICENSE).
   the video; scrcrappy ships a patched build (`third_party/qvh.patch`).
 - ZXTouch: showed how touches can be injected from SpringBoard on a jailbroken iPhone. scrcrappy-agent
   follows the same approach as a clean rewrite and contains none of its code.
+- [Inter](https://github.com/rsms/inter) (SIL OFL 1.1): the interface font, subset to Latin
+  (`scrcrappy/fonts/`, licence in `OFL.txt` there; rebuilt by `scripts/make-fonts.sh`).
+- [Material Symbols](https://github.com/google/material-design-icons) (Apache 2.0): the toolbar icons
+  (`scrcrappy/icons/`, licence in `LICENSE` there).
 
 ## Mouse control without jailbreak
 

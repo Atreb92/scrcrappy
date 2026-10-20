@@ -90,8 +90,15 @@ def layout(items: list[Button | None], height: int) -> tuple[int, list[tuple[But
 # --- drawing ------------------------------------------------------------------------------------------
 
 ICONS = Path(__file__).with_name("icons")
+FONTS = Path(__file__).with_name("fonts")  # Inter, subset: scripts/make-fonts.sh
+
+
+def ui_font(size: int, bold: bool = False) -> pygame.font.Font:
+    return pygame.font.Font(FONTS / ("Inter-SemiBold.ttf" if bold else "Inter-Regular.ttf"), size)
+
+
 # iOS dark: the bar, the dialogs' windows and the Settings glass all draw from this palette
-BG, FG, ON_BG, ON_FG, DISABLED, SEP = (28, 28, 30), (232, 232, 238), (76, 76, 82), (255, 255, 255), (110, 110, 118), (72, 72, 78)
+BG, FG, ON_BG, ON_FG, DISABLED, SEP = (28, 28, 30), (232, 232, 238), (96, 96, 104), (255, 255, 255), (110, 110, 118), (72, 72, 78)
 EDGE = (62, 62, 66)  # hairline on top of the bar
 HOVER = (255, 255, 255, 30)
 TIP_BG, TIP_FG = (58, 58, 62), (242, 242, 247)
@@ -221,7 +228,7 @@ class Bar:
             self._draw_tip(surf)
 
     def _draw_tip(self, surf: pygame.Surface) -> None:
-        font = self._tip_font = getattr(self, "_tip_font", None) or pygame.font.Font(None, 18)
+        font = self._tip_font = getattr(self, "_tip_font", None) or ui_font(12)
         lines = _wrap(self.tip_text, font, min(TIP_WIDTH, surf.get_width() - 24) - 16)
         size = (16 + max(font.size(l)[0] for l in lines), 10 + 18 * len(lines))
         rect = next(r for b, r in self.rects if b is self.hover)
