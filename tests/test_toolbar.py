@@ -5,7 +5,7 @@ from scrcrappy.toolbar import BAR_H, buttons, hlayout, layout, next_free
 
 HOME, APPS = Custom(2, "\ue9b2", "Home"), Custom(3, "\ue8eb", "")
 
-COPY_TIP = "Needs --mouse agent (jailbreak)"
+COPY_TIP = "Not supported in Bluetooth mode"
 
 
 def test_buttons_order_and_copy_disabled():

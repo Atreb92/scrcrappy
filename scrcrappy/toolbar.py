@@ -14,7 +14,7 @@ BAR_H = 48
 TIP_GAP = 6  # between a tooltip and the strip
 NEEDS_INPUT = "Needs --mouse ble, esp32 or agent"
 LED_TIP = "AI control: green = waiting, yellow = an AI is working, red = AI acting (your input is paused)"
-COPY_TIP = "Needs --mouse agent (jailbreak)"  # a Bluetooth keyboard/mouse can't read the phone's clipboard
+COPY_TIP = "Not supported in Bluetooth mode"  # a Bluetooth keyboard/mouse can't read the phone's clipboard
 
 
 @dataclass
