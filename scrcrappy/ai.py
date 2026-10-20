@@ -3,12 +3,14 @@ while an AI works (status LED, touch rings). Tools run on the MCP request thread
 pieces: the agent Session, the pointer's queue, the key queue and LatestFrame."""
 import base64
 import json
+import math
 import secrets
 import threading
 import time
 from typing import Callable
 
 from . import actions
+from .calibrate import find_cursor, to_array
 from .agent_cli import ERRORS
 from .config import Config
 from .mcp import PORT, McpServer, Tool, ToolError
@@ -18,6 +20,8 @@ SESSION_S = 30  # "AI in a session" = any request this recent
 RING_S = 0.6
 FINGER = 4  # AI touches: the window's own drags use 1-3
 REPLY_S = 35  # agent requests may wait 30 s for a prompt on the phone
+SETTLE_S = 0.35  # after the pointer stops: let the last video frames arrive (as calibrate does)
+POINTER_WAIT_S = 5  # after a calibration: the app rebuilds the pointer on the next frame
 MAX_MS = 10_000  # longest long-press / swipe: the user's input is paused meanwhile
 
 POINT = {"x": {"type": "number", "minimum": 0, "maximum": 100, "description": "percent of the screenshot width, from the left"},
@@ -30,8 +34,11 @@ class AiControl:
     """`session` (agent mode) or `pointer` (Bluetooth / ESP32: returns the current Pointer or None) plus `keys`;
     neither: screenshots only."""
 
-    def __init__(self, frames, session=None, pointer: Callable | None = None, keys=None) -> None:
+    def __init__(self, frames, session=None, pointer: Callable | None = None, keys=None,
+                 calibrate: Callable[[], str] | None = None) -> None:
+        """`calibrate` runs the app's pointer calibration, blocks, and returns a summary (RuntimeError: failed)."""
         self.frames, self.session, self.pointer, self.keys = frames, session, pointer, keys
+        self.calibrate_pointer = calibrate
         self.server: McpServer | None = None
         self.error: str | None = None
         self._rings: list[tuple[float, float, float]] = []  # x %, y %, monotonic time to show it
@@ -88,6 +95,15 @@ class AiControl:
                 "Allow Paste)." if self.session else " US layout, printable ASCII; other characters are skipped."),
                  _schema({"text": {"type": "string"}}), self.type_text),
         ]
+        if self.pointer:
+            found.append(Tool("check_pointer", "Move the phone's pointer to a point without clicking and report how far "
+                              "the cursor landed from it, in pixels. Needs a plain, light screen "
+                              f"(e.g. Settings scrolled to the top) where the grey cursor disk is visible. {COORDS}", _schema(POINT), self.check_pointer))
+            if self.calibrate_pointer:
+                found.append(Tool("calibrate", "Recalibrate the pointer (about half a minute; the cursor moves by "
+                                  "itself). Use when check_pointer shows taps landing off target. Needs a plain, "
+                                  "light screen (e.g. Settings scrolled to the top) open on the phone.",
+                                  {"type": "object", "properties": {}}, self.calibrate))
         if self.session:
             found.append(Tool("clipboard", "The phone's clipboard text. Fails if the phone asks Allow Paste.",
                               {"type": "object", "properties": {}}, self.clipboard))
@@ -112,6 +128,33 @@ class AiControl:
     def tap(self, args: dict) -> list[dict]:
         x, y = _point(args, "x", "y")
         return self._touch(actions.tap(x, y))
+
+    def check_pointer(self, args: dict) -> list[dict]:
+        x, y = _point(args, "x", "y")
+        p, frame = self.pointer(), self.frames.peek()
+        if not p or not frame:
+            raise ToolError("the pointer isn't ready yet (no video, or calibrating)")
+        target = (x / 100 * frame[1][0], y / 100 * frame[1][1])
+        p.move_to(*target)
+        _idle(p)
+        time.sleep(SETTLE_S)
+        found = find_cursor(to_array(self.frames.peek()))
+        if not found:
+            raise ToolError("can't see the cursor: open a plain, light screen (e.g. Settings scrolled to the top) and retry")
+        err = math.hypot(found[0] - target[0], found[1] - target[1])
+        report = {"target_px": [round(target[0]), round(target[1])], "cursor_px": [round(found[0]), round(found[1])],
+                  "error_px": round(err, 1), "error_percent_of_width": round(100 * err / frame[1][0], 1)}
+        return [{"type": "text", "text": json.dumps(report)}]
+
+    def calibrate(self, args: dict) -> list[dict]:
+        try:
+            summary = self.calibrate_pointer()
+        except RuntimeError as e:
+            raise ToolError(str(e))
+        end = time.monotonic() + POINTER_WAIT_S
+        while not self.pointer() and time.monotonic() < end:
+            time.sleep(0.05)
+        return [{"type": "text", "text": summary}]
 
     def long_press(self, args: dict) -> list[dict]:
         x, y = _point(args, "x", "y")

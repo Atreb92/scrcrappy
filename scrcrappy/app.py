@@ -17,6 +17,7 @@ from .toolbar import GAP, ICONS, Pill, buttons, next_free
 from .video import LatestFrame
 
 
+CALIBRATE_WAIT_S = 120  # the AI's calibrate tool gives up waiting (a run takes well under a minute)
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
 # SDL ignores the click that focuses a window by default: the toolbar would need two clicks
 os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
@@ -135,7 +136,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     settings_closed_at = 0.0
     calibrating = False
     ai = ai_mod.AiControl(frames, session=agent, keys=keys,
-                          pointer=(lambda: controller.pointer if controller else None) if make_pointer else None)
+                          pointer=(lambda: controller.pointer if controller else None) if make_pointer else None,
+                          calibrate=(lambda: ai_calibrate()) if calibrator else None)
     was_locked = False
 
     def items():
@@ -223,10 +225,12 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         settings_closed_at = time.monotonic()
         pill.set_items(items())
 
-    def calibrate() -> None:
+    def calibrate(on_done: Callable[[str | None], None] | None = None) -> None:
         """Settings › Calibrate: the pointer stops while the calibrator drives the cursor, then is rebuilt
-        (on the next frame) with the new table."""
+        (on the next frame) with the new table. `on_done(error)` runs on this thread when it ends."""
         nonlocal controller, calibrating
+        if calibrating:
+            return on_done and on_done("already calibrating")
         if controller:
             controller.release_all()
             controller.stop()
@@ -239,16 +243,29 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 error = None
             except RuntimeError as e:
                 error = str(e)
-            pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: calibrated(error)))
+            pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: calibrated(error, on_done)))
 
         threading.Thread(target=work, daemon=True).start()
 
-    def calibrated(error: str | None) -> None:
+    def calibrated(error: str | None, on_done: Callable[[str | None], None] | None) -> None:
         nonlocal calibrating
         calibrating = False
         main.title = f"{title} — calibration failed, see the terminal" if error else title
         if error:
             print(f"calibration failed: {error}", file=sys.stderr)
+        if on_done:
+            on_done(error)
+
+    def ai_calibrate() -> str:
+        """The AI's calibrate tool (MCP thread): run calibrate() on the window's thread and wait for it."""
+        done, result = threading.Event(), []
+        pygame.event.post(pygame.event.Event(
+            pygame.USEREVENT, run=lambda: calibrate(lambda error: (result.append(error), done.set()))))
+        if not done.wait(CALIBRATE_WAIT_S):
+            raise RuntimeError("calibration is taking too long; check the window")
+        if result[0]:
+            raise RuntimeError(result[0])
+        return f"calibrated: {calibrator.value():.2f} screen px per count for a 12-count report"
 
     def open_settings() -> None:
         nonlocal settings

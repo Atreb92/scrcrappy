@@ -1,10 +1,12 @@
 import base64
 import io
+import json
 import os
 import time
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
+import numpy as np
 import pygame
 import pytest
 
@@ -234,3 +236,55 @@ def test_input_paused_per_event_while_locked():
     assert paused(pygame.event.Event(pygame.KEYDOWN, scancode=4), True)
     assert not paused(pygame.event.Event(pygame.WINDOWFOCUSLOST), True)
     assert not paused(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(0, 0)), False)
+
+
+def frames_with_cursor(cx, cy, w=750, h=1334):
+    """A white screen with the AssistiveTouch disk (solid ~150 grey) centred at (cx, cy)."""
+    img = np.full((h, w, 3), 255, np.uint8)
+    yy, xx = np.ogrid[:h, :w]
+    img[(xx - cx) ** 2 + (yy - cy) ** 2 <= 18 ** 2] = 150
+    f = LatestFrame()
+    f.put((img.tobytes(), (w, h), w * 3))
+    return f
+
+
+@pytest.fixture
+def no_settle(monkeypatch):
+    monkeypatch.setattr(ai, "SETTLE_S", 0)
+
+
+def test_check_pointer_reports_the_error_in_pixels(no_settle):
+    p = FakePointer()
+    control = ai.AiControl(frames_with_cursor(375, 700), pointer=lambda: p)  # target is (375, 667)
+    [block] = tool(control, "check_pointer").run({"x": 50, "y": 50})
+    assert p.calls[0] == ("move_to", 375.0, 667.0) and not any(c[0] == "button" for c in p.calls)
+    out = json.loads(block["text"])
+    assert out["error_px"] == pytest.approx(33, abs=1)
+    assert out["cursor_px"] == pytest.approx([375, 700], abs=1) and out["target_px"] == [375, 667]
+
+
+def test_check_pointer_without_a_visible_cursor_says_how_to_fix_it(no_settle):
+    control = ai.AiControl(frames(), pointer=lambda: FakePointer())  # all black
+    with pytest.raises(ToolError, match="plain, light screen"):
+        tool(control, "check_pointer").run({"x": 50, "y": 50})
+
+
+def test_pointer_tools_only_with_a_pointer():
+    assert "check_pointer" not in [t.name for t in ai.AiControl(frames(), session=FakeSession({})).tools()]
+    assert "calibrate" not in [t.name for t in ai.AiControl(frames(), pointer=lambda: FakePointer()).tools()]
+
+
+def test_calibrate_runs_the_app_routine_and_waits_for_the_pointer(no_settle):
+    ready = iter([None, None, FakePointer()])  # the app rebuilds the pointer on the next frame
+    control = ai.AiControl(frames(), pointer=lambda: next(ready, FakePointer()), calibrate=lambda: "px per count: 1.66")
+    [block] = tool(control, "calibrate").run({})
+    assert "1.66" in block["text"] and next(ready, None) is None
+
+
+def test_calibrate_failure_is_a_tool_error():
+    def fail():
+        raise RuntimeError("can't see the cursor: open a plain light screen")
+
+    control = ai.AiControl(frames(), pointer=lambda: FakePointer(), calibrate=fail)
+    with pytest.raises(ToolError, match="plain light screen"):
+        tool(control, "calibrate").run({})

@@ -146,7 +146,10 @@ Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit
 (or start with `--mcp`), click *Copy setup command* and run it in a terminal; it looks like
 `claude mcp add --transport http scrcrappy http://127.0.0.1:7331/mcp --header "Authorization: Bearer …"`.
 Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
-and `clipboard` in jailbreak mode. The server only listens on this computer and needs the token.
+`clipboard` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
+clicking, report how far the cursor landed from the target) and `calibrate`; both need a plain, light screen
+(Settings scrolled to the top) open on the phone; on a busy screen `check_pointer` can mistake a grey icon for
+the cursor and report a bogus error. The server only listens on this computer and needs the token.
 
 While AI control is on, a dot at the top of the pill shows its state: **green** waiting, **yellow** an AI
 has been active in the last 30 s, **red** an AI action is running and your mouse and keyboard are paused.
