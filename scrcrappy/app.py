@@ -25,7 +25,7 @@ os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
 
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
 INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL,
-         pygame.KEYDOWN, pygame.KEYUP, pygame.TEXTINPUT)
+         pygame.KEYDOWN, pygame.KEYUP, pygame.TEXTINPUT, pygame.WINDOWENTER)
 
 
 def paused(event: pygame.event.Event, locked: bool) -> bool:
@@ -149,7 +149,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                        settings=bool(settings and not settings.closed), led=ai.server is not None)
 
     def toggle_ai() -> None:
-        cfg.ai_control = not cfg.ai_control
+        cfg.ai_control = ai.server is None  # --mcp starts it without saving, so cfg may disagree with the server
         if cfg.ai_control:
             ai.enable(cfg)
         else:

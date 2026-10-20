@@ -135,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
                                  cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator, mcp=args.mcp,
                                  device_name="scrcrappy ESP32" if args.mouse == "esp32" else "scrcrappy PC")
     if not closed_by_user:
-        print(f"error: video capture stopped (phone unplugged?), qvh log: {proc.log_path}", file=sys.stderr)
+        print(f"error: video capture stopped (phone unplugged?), qvh log:\n{proc.log}", file=sys.stderr)
         return 1
     return 0
 

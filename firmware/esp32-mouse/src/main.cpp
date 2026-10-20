@@ -37,12 +37,17 @@ class ReportCallbacks : public NimBLECharacteristicCallbacks {
     }
 };
 
+class ServerCallbacks : public NimBLEServerCallbacks {
+    void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { subscribed = false; }
+};
+
 void setup() {
     Serial.begin(115200);
     NimBLEDevice::init("scrcrappy ESP32");
     NimBLEDevice::setSecurityAuth(true, false, true);  // bond, Just Works, secure connections
 
     NimBLEServer* server = NimBLEDevice::createServer();
+    server->setCallbacks(new ServerCallbacks());
     server->advertiseOnDisconnect(true);
     NimBLEHIDDevice* hid = new NimBLEHIDDevice(server);
     hid->setManufacturer("scrcrappy");

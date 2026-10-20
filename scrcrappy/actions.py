@@ -12,6 +12,7 @@ ORIENTATIONS = {1: "portrait", 2: "portrait-upside-down", 3: "landscape-right", 
 CAP = 1568  # long edge: AI clients shrink larger images anyway
 TAP_S, LONG_PRESS_MS, SWIPE_MS, MOVE_S = 0.08, 1000, 300, 0.016
 
+MAX_MS = 10_000  # longest long-press / swipe: the user's input is paused meanwhile
 Step = tuple[float, str, float, float]  # seconds to wait first, phase, x %, y %
 
 
@@ -25,8 +26,8 @@ def _numbers(text: str, counts: tuple[int, ...], what: str) -> list[float]:
     coords = values[:counts[0]]
     if not all(0 <= v <= 100 for v in coords):
         raise ValueError(f"coordinates are percent of the screenshot, 0-100: {text!r}")
-    if len(values) > counts[0] and values[-1] <= 0:
-        raise ValueError(f"duration must be positive milliseconds: {text!r}")
+    if len(values) > counts[0] and not 0 < values[-1] <= MAX_MS:
+        raise ValueError(f"duration must be 1-{MAX_MS} milliseconds: {text!r}")
     return values
 
 
