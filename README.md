@@ -212,7 +212,12 @@ agent names stayed.
 
 **Which input mode do I want?** `agent` on a jailbroken phone with crappytouch (exact touches, clipboard,
 apps, URLs, no Bluetooth, no calibration). `ble` or `esp32` on a stock phone (steers the AssistiveTouch cursor, needs calibration).
-Apps, URLs, the phone's screenshot and the clipboard are agent-only.
+Apps, URLs, the phone's screenshot and the clipboard are agent-only. `ble` (the computer's own Bluetooth
+adapter) is Linux only: on macOS use `esp32` or `agent`.
+
+**Pairing fails after I forgot the device on the phone.** Forgetting it on the phone isn't enough: the computer
+still holds the old pairing. Remove it there too (`bluetoothctl remove <phone address>` on Linux), then pair again.
+For `esp32`, reflash the board instead (iOS caches the device description).
 
 **Clicks do nothing after the phone rebooted.** The jailbreak is gone after a reboot: run Dopamine again, then
 touch the phone's screen once before clicks work.
