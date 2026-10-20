@@ -156,7 +156,8 @@ def test_enable_creates_token_and_reports_busy_port(monkeypatch):
     taken.close()
     control.enable(cfg)
     assert control.server and control.error is None
-    assert cfg.mcp_token in control.command(cfg)
+    config = json.loads(control.client_config(cfg))["mcpServers"]["scrcrappy"]  # the usual MCP client format
+    assert config["url"].endswith("/mcp") and config["headers"]["Authorization"] == f"Bearer {cfg.mcp_token}"
     control.disable()
     assert control.server is None
 

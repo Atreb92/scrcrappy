@@ -176,7 +176,8 @@ def test_calibration_section_only_with_a_mouse_and_calibrate_closes_the_panel():
     started = []
     panel, closed = settings_panel(Config(), [], calibration=1.859, on_calibrate=lambda: started.append(1))
     assert any("1.86" in line for line in panel.calibration_lines)
-    assert "Tracking Speed" in " ".join(panel.calibration_lines)  # however it wraps
+    assert len(panel.calibration_lines) == 1  # short; the explanation is the Calibrate button's tooltip
+    assert "Tracking Speed" in panel.tips["calibrate"]
     click(panel, "calibrate")
     assert started == [1] and closed == [1] and panel.closed
 
@@ -247,3 +248,19 @@ def test_popups_report_whether_one_is_open():
     assert p.is_open() and p.open(Fake) is None
     popup.closed = True
     assert not p.is_open()
+
+
+def test_calibrate_tooltip_shows_after_a_hover_delay():
+    from scrcrappy.config import Config
+    from scrcrappy.toolbar import TIP_DELAY
+    panel, _ = settings_panel(Config(), [], calibration=1.5)
+    x, y = panel.hits["calibrate"].center
+    panel.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(x + panel.rect.x, y + panel.rect.y), window=panel.window))
+    assert panel.tip(panel.hover_since + TIP_DELAY - 0.1) is None
+    assert "Tracking Speed" in panel.tip(panel.hover_since + TIP_DELAY + 0.1)
+    panel.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(1, 1), window=panel.window))  # off the button
+    assert panel.tip(panel.hover_since + 5) is None
+    screen = pygame.Surface((375, 715))
+    panel.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(x + panel.rect.x, y + panel.rect.y), window=panel.window))
+    panel.hover_since -= 5
+    panel.draw(screen, 667)  # draws the tooltip without error

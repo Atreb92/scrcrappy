@@ -147,8 +147,11 @@ scrcrappy agent --clipboard
 Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit code 1.
 
 **MCP, in the running window** (any input mode): turn on *Allow AI control (MCP)* in the toolbar's Settings
-(or start with `--mcp`), click *Copy setup command* and run it in a terminal; it looks like
-`claude mcp add --transport http scrcrappy http://127.0.0.1:7331/mcp --header "Authorization: Bearer …"`.
+(or start with `--mcp`), click *Copy MCP config* and paste it into your AI client's MCP settings. It is the
+server entry most clients take:
+`{"mcpServers": {"scrcrappy": {"type": "http", "url": "http://127.0.0.1:7331/mcp", "headers": {"Authorization": "Bearer …"}}}}`
+(the token is created once and kept in `config.json`; some clients also have their own add command that
+takes the same URL and header).
 Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
 `clipboard` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
 clicking, report how far the cursor landed from the target) and `calibrate`; both need a plain, light screen

@@ -66,7 +66,7 @@ class McpServer:
                     return self._reply(403, None)
                 got = self.headers.get("Authorization", "").encode("latin-1")  # http.server decodes as latin-1
                 if not hmac.compare_digest(got, f"Bearer {server.token}".encode()):
-                    return self._reply(401, _error(None, -32001, "wrong or missing token: copy the setup command "
+                    return self._reply(401, _error(None, -32001, "wrong or missing token: copy the MCP config "
                                                    "again from scrcrappy's Settings"),
                                        {"WWW-Authenticate": 'Bearer error="invalid_token"'})
                 try:

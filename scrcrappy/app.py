@@ -157,11 +157,11 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
 
     def ai_status() -> str:
         return ai.error or (f"Listening on http://127.0.0.1:{ai_mod.PORT}/mcp (this computer only). Copy the "
-                            "setup command and run it in a terminal to give Claude Code access.")
+                            "MCP config and add it to your AI client.")
 
-    def copy_ai_command() -> None:
-        pygame.scrap.put_text(ai.command(cfg))
-        print("AI control: setup command copied to the clipboard", file=sys.stderr)
+    def copy_ai_config() -> None:
+        pygame.scrap.put_text(ai.client_config(cfg))
+        print("AI control: MCP config copied to the clipboard", file=sys.stderr)
 
     def changed() -> None:
         save_or_warn(save, cfg)
@@ -265,7 +265,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             settings.close()
         else:
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
-                                calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_command)
+                                calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config)
         bar.set_items(items())
 
     bar = Bar(main, items(), {

@@ -229,11 +229,16 @@ class Bar:
 
     def _draw_tip(self, surf: pygame.Surface) -> None:
         font = self._tip_font = getattr(self, "_tip_font", None) or ui_font(12)
-        lines = _wrap(self.tip_text, font, min(TIP_WIDTH, surf.get_width() - 24) - 16)
-        size = (16 + max(font.size(l)[0] for l in lines), 10 + 18 * len(lines))
         rect = next(r for b, r in self.rects if b is self.hover)
-        x = min(max(6, rect.centerx - size[0] // 2), surf.get_width() - size[0] - 6)
-        box = pygame.Rect(x, self.top - TIP_GAP - size[1], *size)
-        pygame.draw.rect(surf, TIP_BG, box, border_radius=6)
-        for i, line in enumerate(lines):
-            surf.blit(font.render(line, True, TIP_FG), (box.x + 8, box.y + 5 + 18 * i))
+        draw_tip(surf, font, self.tip_text, pygame.Rect(rect.x, self.top, rect.w, 0))  # above the strip
+
+
+def draw_tip(surf: pygame.Surface, font: pygame.font.Font, text: str, anchor: pygame.Rect, width: int = TIP_WIDTH) -> None:
+    """A tooltip box with `text` just above `anchor`, kept inside `surf`."""
+    lines = _wrap(text, font, min(width, surf.get_width() - 24) - 16)
+    size = (16 + max(font.size(l)[0] for l in lines), 10 + 18 * len(lines))
+    x = min(max(6, anchor.centerx - size[0] // 2), surf.get_width() - size[0] - 6)
+    box = pygame.Rect(x, max(6, anchor.top - TIP_GAP - size[1]), *size)
+    pygame.draw.rect(surf, TIP_BG, box, border_radius=6)
+    for i, line in enumerate(lines):
+        surf.blit(font.render(line, True, TIP_FG), (box.x + 8, box.y + 5 + 18 * i))

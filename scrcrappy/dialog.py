@@ -2,12 +2,13 @@
 import subprocess
 import sys
 import threading
+import time
 from typing import Callable
 
 import pygame
 
 from .config import ICON_CHOICES, Config, Custom
-from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, ui_font
+from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, TIP_DELAY, draw_tip, ui_font
 
 SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (10, 132, 255)  # iOS dark
 FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (68, 68, 74), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
@@ -226,6 +227,9 @@ def _glass(screen: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
     return glass
 
 
+CALIBRATE_TIP = ("Measures the pointer speed again. Do it after changing Tracking Speed on the iPhone (Settings › "
+                 "Accessibility › Touch › AssistiveTouch), or when the cursor overshoots or falls short. Open a plain, "
+                 "light screen first and don't touch the mouse for about 20 s.")
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
 
@@ -264,10 +268,10 @@ class Settings:
         self.on_calibrate, self.on_ai, self.ai_status, self.on_copy = on_calibrate, on_ai, ai_status, on_copy
         self.font, self.small, self.head = ui_font(14), ui_font(12), ui_font(14, True)
         self.calibration_lines = [] if calibration is None else _wrap(
-            f"Current: {calibration:.2f} screen px per mouse count. The cursor speed is set on the iPhone in "
-            "Settings › Accessibility › Touch › AssistiveTouch › Tracking Speed. Recalibrate after changing it, "
-            "or when the cursor overshoots or falls short: open a plain light screen (e.g. Settings) first, "
-            "then click Calibrate and don't touch the mouse for about 20 s.", self.small, PANEL_W - 2 * PAD)
+            f"Current: {calibration:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
+        self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
+        self.hover: str | None = None
+        self.hover_since = 0.0
         self.icons = pygame.font.Font(ICONS / "MaterialSymbolsRounded-outline.ttf", 18)
         self.text = {"port": cfg.port, "screenshots": cfg.screenshots}
         self.editing: str | None = None
@@ -325,6 +329,10 @@ class Settings:
             self._commit()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.close()
+        elif event.type == pygame.MOUSEMOTION:
+            hit = self._hit(event.pos)
+            if hit != self.hover:
+                self.hover, self.hover_since = hit, time.monotonic()
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             rect = self.rect
             if rect.collidepoint(event.pos):
@@ -333,6 +341,16 @@ class Settings:
             else:
                 self.close()  # on release: the press that started it never reached the phone either
         return event.type in INPUT
+
+    def _hit(self, pos: tuple[int, int]) -> str | None:
+        rect = self.rect
+        local = (pos[0] - rect.x, pos[1] - rect.y)
+        return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
+
+    def tip(self, now: float | None = None) -> str | None:
+        """The hover text of the item under the mouse, once it has been there for TIP_DELAY."""
+        now = time.monotonic() if now is None else now
+        return self.tips.get(self.hover) if self.hover and now - self.hover_since >= TIP_DELAY else None
 
     def _click(self, hit: str | None) -> None:
         if hit not in ("port", "screenshots"):
@@ -451,7 +469,7 @@ class Settings:
         if "copy" in self.hits:
             c = self.hits["copy"]
             pygame.draw.rect(surf, FIELD, c, border_radius=c.height // 2)
-            label = self.small.render("Copy setup command", True, ACCENT)
+            label = self.small.render("Copy MCP config", True, ACCENT)
             surf.blit(label, label.get_rect(center=c.center))
         if self.calibration_lines:
             surf.blit(self.head.render("Pointer calibration", True, FG), (PAD, self.calib_top))
@@ -466,6 +484,8 @@ class Settings:
         surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)  # round the corners
         pygame.draw.rect(surf, (255, 255, 255, 46), surf.get_rect(), 1, border_radius=PANEL_R)
         screen.blit(surf, rect.topleft, area=pygame.Rect(0, 0, rect.w, rect.h))
+        if text := self.tip():
+            draw_tip(screen, self.small, text, self.hits[self.hover].move(rect.topleft), 260)
 
 
 class Popups:
