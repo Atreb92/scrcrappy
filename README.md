@@ -148,7 +148,8 @@ Each prints one JSON object; on failure `{"ok": false, "error": "…"}` and exit
 Tools: `screenshot` (the image plus width, height, orientation), `tap`, `long_press`, `swipe`, `type_text`,
 `clipboard` in jailbreak mode, and in Bluetooth / ESP32 mode `check_pointer` (move without
 clicking, report how far the cursor landed from the target) and `calibrate`; both need a plain, light screen
-(Settings scrolled to the top) open on the phone. The server only listens on this computer and needs the token.
+(Settings scrolled to the top) open on the phone; on a busy screen `check_pointer` can mistake a grey icon for
+the cursor and report a bogus error. The server only listens on this computer and needs the token.
 
 While AI control is on, a dot at the top of the pill shows its state: **green** waiting, **yellow** an AI
 has been active in the last 30 s, **red** an AI action is running and your mouse and keyboard are paused.
