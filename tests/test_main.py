@@ -17,7 +17,8 @@ def test_video_driver_wayland_first_with_x11_fallback_or_forced():
     assert pick({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "linux") == "wayland,x11"  # x11 if wayland fails
     assert pick({"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}, "linux", x11=True) == "x11"
     assert pick({"DISPLAY": ":0"}, "linux") == "x11"
-    assert pick({"WAYLAND_DISPLAY": "wayland-0"}, "linux", x11=True) is None  # no X server to force: let SDL decide
+    assert pick({"WAYLAND_DISPLAY": "wayland-0"}, "linux", x11=True) == "x11"  # asked for X11: say so, even if SDL can't
+    assert pick({"WAYLAND_DISPLAY": "wayland-0", "SDL_VIDEODRIVER": ""}, "linux") == "wayland,x11"  # empty = not set
     assert pick({"WAYLAND_DISPLAY": "wayland-0", "SDL_VIDEODRIVER": "x11"}, "linux") is None  # the user's own choice wins
     assert pick({"WAYLAND_DISPLAY": "wayland-0"}, "darwin") is None
 

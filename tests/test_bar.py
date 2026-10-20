@@ -124,3 +124,12 @@ def test_toast_shows_above_the_strip_then_expires(bar):
     assert any(screen.get_at((x, bar.top - 12))[:3] != (255, 255, 255) for x in range(375))
     bar.update(now=bar.toast_until + 0.1)
     assert bar.toast_text is None
+
+
+def test_a_press_whose_release_never_came_does_not_swallow_the_next_bar_click(bar):
+    bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, (100, 100)))  # pressed on the phone, then the window lost focus
+    bar.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=bar.main))
+    assert click(bar, "paste") is True and bar.seen == ["paste"]
+    bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, (100, 100)))
+    bar.handle(pygame.event.Event(pygame.WINDOWLEAVE, window=bar.main))  # or the mouse left the window
+    assert click(bar, "settings") is True and bar.seen == ["paste", "settings"]

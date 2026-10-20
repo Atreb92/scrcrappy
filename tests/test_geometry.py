@@ -59,3 +59,8 @@ def test_rotating_the_phone_keeps_the_long_side():
     assert reshaped_size((1334, 750), (375, 715), bar_h=48) == (667, round(667 * 750 / 1334) + 48)  # landscape
     w, h = reshaped_size(PHONE, (667, 423), bar_h=48)  # and back to portrait: the image area is 375 x 667 again
     assert (h - 48) == 667 and abs(w - 375) <= 1
+
+
+def test_a_frame_without_size_leaves_the_window_alone():
+    assert aspect_size((0, 0), (375, 715), last=(300, 715), bar_h=48) == (375, 715)
+    assert reshaped_size((0, 1334), (375, 715), bar_h=48) == (375, 715)

@@ -31,8 +31,7 @@ placement; the remaining separate windows (Add/Edit dialog, right-click menu) ar
 ## Non-goals / limits
 
 - Not checked by hand on Wayland: the window icon (desktop entry in `packaging/`), HiDPI / fractional scaling, compositors other than KDE.
-- The panel is not scrollable: in a window shorter than the panel (about 410 px with every section on, so a window under about 430 px tall) the bottom
-  is clipped. Scrolling can come when needed.
+- The panel scrolls with the mouse wheel when the window is shorter than it (the window is at least as wide as the panel).
 - Bar width: the built-in buttons plus a few custom ones fit 375 px; many custom buttons shrink and then overflow
   (no overflow menu yet).
 

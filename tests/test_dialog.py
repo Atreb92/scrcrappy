@@ -294,3 +294,34 @@ def test_calibrate_tooltip_shows_after_a_hover_delay():
     panel.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(x + panel.rect.x, y + panel.rect.y), window=panel.window))
     panel.hover_since -= 5
     panel.draw(screen, 667)  # draws the tooltip without error
+
+
+def test_settings_does_not_look_at_the_disk_every_frame(monkeypatch):
+    from scrcrappy import dialog
+    from scrcrappy.config import Config
+    calls = []
+    monkeypatch.setattr(dialog, "default_folder_label", lambda: calls.append(1) or "~/Pictures")
+    panel, _ = settings_panel(Config(), [])
+    screen = pygame.Surface((375, 715))
+    for _ in range(5):
+        panel.draw(screen, 667)
+    assert len(calls) == 1
+
+
+def test_settings_scrolls_in_a_window_shorter_than_the_panel():
+    from scrcrappy.config import Config
+    window = pygame.Window("phone", (300, 400))
+    cfg, calls = Config(), []
+    panel = __import__("scrcrappy.dialog", fromlist=["Settings"]).Settings(
+        window, lambda size: pygame.Rect(10, 8, size[0], 200), cfg, on_change=lambda: None, on_natural=lambda: None,
+        on_close=lambda: None, calibration=1.5, on_calibrate=lambda: calls.append(1))
+    assert panel.hits["calibrate"].bottom > 200  # below the visible part
+    for _ in range(20):
+        panel.handle(pygame.event.Event(pygame.MOUSEWHEEL, window=window, x=0, y=-1))  # wheel down
+    assert panel.scroll == panel.height - 200  # as far as there is something to show
+    x, y = panel.hits["calibrate"].center
+    panel.handle(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, window=window,
+                                    pos=(10 + x, 8 + y - panel.scroll)))
+    assert calls == [1]
+    screen = pygame.Surface((300, 400))
+    panel.draw(screen, 352)  # draws the scrolled view without error
