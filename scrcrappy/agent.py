@@ -1,4 +1,4 @@
-"""Jailbreak backend: scrcrappy-agent, a SpringBoard tweak reached over USB (protocol: its PROTOCOL.md).
+"""Jailbreak backend: crappytouch, a SpringBoard tweak reached over USB (protocol: its PROTOCOL.md).
 
 Window clicks become touches at exact positions (no cursor to steer), keys become HID usages, and the
 toolbar gets paste of any text, copy from the phone, screenshots and the phone's buttons.
@@ -72,7 +72,7 @@ def _open(udid: str) -> Agent:
     try:
         return Agent.connect(udid)
     except ConnectionRefusedError as e:
-        raise ConnectionRefusedError(f"{e}: is scrcrappy-agent installed (and the phone booted to SpringBoard)?") from None
+        raise ConnectionRefusedError(f"{e}: is crappytouch installed (and the phone booted to SpringBoard)?") from None
 
 
 def _post(fn: Callable[[], None]) -> None:

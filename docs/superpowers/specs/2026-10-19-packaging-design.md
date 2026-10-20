@@ -69,7 +69,7 @@ open source later, so the install path should already be the one strangers will 
 - Linux: `usbmuxd` (most desktops have it) and `libusb` (almost always present).
 - Linux Bluetooth mode only: `python3-dbus` and `python3-gobject` from dnf (the helper runs under the
   system python, as today).
-- Jailbreak mode: scrcrappy-agent on the phone (its own repo).
+- Jailbreak mode: crappytouch on the phone (its own repo).
 
 ## Left to the builder
 

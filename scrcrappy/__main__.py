@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mouse", choices=config.MICE, default=None,
                         help="input: drive the AssistiveTouch cursor through a BLE mouse (ble = this computer's "
                              "Bluetooth (Linux), esp32 = ESP32 with firmware/esp32-mouse on --port), or "
-                             "agent = scrcrappy-agent on a jailbroken phone (touches, keys, clipboard); "
+                             "agent = crappytouch on a jailbroken phone (touches, keys, clipboard); "
                              "default: the toolbar's Settings")
     parser.add_argument("--port", help="ESP32 serial port (default: the toolbar's Settings, /dev/ttyUSB0)")
     parser.add_argument("--ble-python", default="/usr/bin/python3",

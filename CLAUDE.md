@@ -1,8 +1,8 @@
 # scrcrappy — notes for a new session
 
 scrcpy for iOS: mirror an iPhone over USB (patched qvh → PyAV → pygame window) and control it with a
-BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor), with scrcrappy-agent
-(our SpringBoard tweak, `~/source/scrcrappy-agent`, jailbroken phones), or from AI agents
+BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor), with crappytouch
+(our SpringBoard tweak, `~/source/crappytouch`, jailbroken phones), or from AI agents
 (`scrcrappy agent …` CLI, MCP in the window). User-facing docs: README.md. Open items: TODO.md.
 
 ## Map
@@ -10,7 +10,7 @@ BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor),
 - `__main__.py` CLI (flags win over saved settings; `scrcrappy agent …` dispatches to `agent_cli.py`)
 - `app.py` window loop, BLE `Controller`; `toolbar.py` bar (button strip under the phone image); `dialog.py` Settings + right-click menu (overlays in the main window), Add-button dialog (its own window)
 - `agent.py` agent backend (Session: worker thread, replies posted back as pygame USEREVENTs; reconnects)
-- `agent_client.py` vendored from scrcrappy-agent (keep in sync with its `client/`); `usbmux.py` stdlib usbmuxd
+- `agent_client.py` vendored from crappytouch (keep in sync with its `client/`); `usbmux.py` stdlib usbmuxd
 - `ai.py` AI tools + LED/rings/lock; `mcp.py` stdlib MCP server (127.0.0.1:7331, Bearer token); `actions.py` shared percent-coordinate logic
 - `mouse.py` pointer steering (gain table), `calibrate.py`, `links.py` + `blemouse.py` (BLE helper, system python), `keyqueue.py`
 - `geometry.py` coordinate/rotation maps; `video.py` qvh capture, `LatestFrame` (get = take, peek = newest)
