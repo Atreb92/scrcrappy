@@ -462,6 +462,9 @@ class Popups:
         self.items.append(make())
         return self.items[-1]
 
+    def is_open(self) -> bool:
+        return any(not p.closed for p in self.items)
+
     def handle(self, event: pygame.event.Event) -> bool:
         return any(p.handle(event) for p in list(self.items))
 

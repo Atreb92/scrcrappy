@@ -233,3 +233,17 @@ def test_settings_overlay_draws_onto_the_window_surface():
     assert screen.get_at((370, 10))[:3] != (255, 255, 255)  # dimmed
     assert screen.get_at((30 + 5, 30 + 5))[:3] != (255, 255, 255)  # the panel's own colour, not the image's
     assert screen.get_at((370, 700))[:3] == (255, 255, 255)  # the bar's area is left alone
+
+
+def test_popups_report_whether_one_is_open():
+    from scrcrappy.dialog import Popups
+
+    class Fake:
+        closed = False
+
+    p = Popups()
+    assert not p.is_open()
+    popup = p.open(Fake)
+    assert p.is_open() and p.open(Fake) is None
+    popup.closed = True
+    assert not p.is_open()

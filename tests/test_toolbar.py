@@ -93,3 +93,8 @@ def test_every_icon_is_in_the_subset_font():
 def test_led_on_top_only_while_ai_control_is_on():
     assert buttons(True, [], agent=True, led=True)[0].id == "led"
     assert "led" not in [b.id for b in buttons(True, [], agent=True) if b]
+
+
+def test_led_is_a_small_dot_in_the_strip():
+    rects = {b.id: r for b, r in hlayout(buttons(True, [HOME], led=True), 375)}
+    assert rects["led"].width <= rects["paste"].width * 0.4

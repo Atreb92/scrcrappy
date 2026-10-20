@@ -68,7 +68,7 @@ def buttons(has_input: bool, customs: list[Custom], agent: bool = False,
 
 
 def _sizes(items: list[Button | None], height: int) -> tuple[int, list[int]]:
-    weights = [1 / 3 if b is None else 0.6 if b.small else 1 for b in items]
+    weights = [1 / 3 if b is None else 0.35 if b.small else 1 for b in items]
     d = int(min(MAX_D, (height - 2 * PAD_Y) / sum(weights)))
     return d, [max(1, round(w * d)) for w in weights]
 
@@ -197,7 +197,7 @@ class Bar:
         for item, rect in self.rects:
             if item.id == "led":
                 if self.led_colour:
-                    pygame.draw.circle(surf, self.led_colour, rect.center, max(3, rect.width // 4))
+                    pygame.draw.circle(surf, self.led_colour, rect.center, max(3, rect.width // 3))
                 continue
             if item.toggled:
                 pygame.draw.circle(surf, ON_BG, rect.center, rect.width // 2)

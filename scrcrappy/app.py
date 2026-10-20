@@ -302,6 +302,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     return True
                 if event.type in (pygame.WINDOWMOVED, pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
                     bar.follow()
+                if popups.is_open() and event.type in INPUT[:4]:
+                    continue  # a dialog or menu is up: the mouse over the phone window doesn't steer the phone cursor
                 if controller and img:
                     controller.handle(event, fit(img.get_size(), (main.size[0], bar.top)), img.get_size())
             if frame := frames.get():
