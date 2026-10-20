@@ -20,12 +20,18 @@ placement; the remaining separate windows (Add/Edit dialog, right-click menu) ar
   Esc, a click outside the panel, the window losing focus (except while the folder picker is open), Calibrate,
   or the gear again. Typed text (port, folder) is kept on close, as today.
 - **No option to switch back**: the pill code, `pill_rect`, `--ui` and the collapse/pin logic are deleted.
-- Add/Edit dialog and the right-click menu stay separate windows for now (X11 positions them next to the bar).
+- The right-click menu is an overlay like Settings (above the button, same glass look). The Add/Edit dialog stays
+  a window of its own: on Wayland the compositor places it.
+- **Look**: iOS dark glass (frosted, dark, rounded panels; Inter, SIL OFL, bundled in `scrcrappy/fonts/`). The
+  calibration explanation is a hover tooltip on the Calibrate button; MCP setup copies the standard `mcpServers`
+  JSON, not a client-specific command.
+- **Video driver**: native Wayland in a Wayland session (`SDL_VIDEODRIVER=wayland,x11`, so X11 is the fallback),
+  `--x11` forces X11, a `SDL_VIDEODRIVER` set by the user wins.
 
 ## Non-goals / limits
 
-- Native Wayland itself (driver choice, Dialog and Menu in-window): next step.
-- The panel is not scrollable: in a window shorter than the panel (about 520 px with every section on) the bottom
+- Not checked by hand on Wayland: the Add/Edit dialog, the window icon, HiDPI / fractional scaling, compositors other than KDE.
+- The panel is not scrollable: in a window shorter than the panel (about 410 px with every section on, so a window under about 430 px tall) the bottom
   is clipped. Scrolling can come when needed.
 - Bar width: the built-in buttons plus a few custom ones fit 375 px; many custom buttons shrink and then overflow
   (no overflow menu yet).

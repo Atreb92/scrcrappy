@@ -155,8 +155,8 @@ def test_paste_returns_skipped_count(monkeypatch):
     assert c.paste() == 1
 
 
-def test_first_click_on_unfocused_pill_is_delivered(monkeypatch):
-    # SDL drops the click that focuses a window unless this hint is set: the pill needed 2 clicks
+def test_first_click_on_unfocused_window_is_delivered(monkeypatch):
+    # SDL drops the click that focuses a window unless this hint is set: the toolbar needed 2 clicks
     import importlib
     import os
     import scrcrappy.app
@@ -233,7 +233,7 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
     from scrcrappy.toolbar import Bar
     from scrcrappy.video import LatestFrame
 
-    pointers, runs, pills = [], [], []
+    pointers, runs, bars = [], [], []
 
     def make_pointer(size):
         pointers.append(FakePointer())
@@ -246,24 +246,24 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
         def run(self):
             runs.append(len(pointers))  # pointers built so far when the measurement runs
 
-    orig_pill, orig_settings = Bar.__init__, app_module.Settings.__init__
+    orig_bar, orig_settings = Bar.__init__, app_module.Settings.__init__
 
-    def pill_init(self, *a, **kw):
-        orig_pill(self, *a, **kw)
-        pills.append(self)
+    def bar_init(self, *a, **kw):
+        orig_bar(self, *a, **kw)
+        bars.append(self)
 
     def settings_init(self, *a, **kw):
         orig_settings(self, *a, **kw)
         self._click("calibrate")
 
-    monkeypatch.setattr(Bar, "__init__", pill_init)
+    monkeypatch.setattr(Bar, "__init__", bar_init)
     monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
     frames, t0, loops = LatestFrame(), time.time(), []
 
     def alive():
         loops.append(1)
         if len(loops) == 3:
-            pills[0].actions["settings"]()  # gear clicked once the pointer exists
+            bars[0].actions["settings"]()  # gear clicked once the pointer exists
         frames.put((bytes(30 * 60 * 3), (30, 60), 90))
         return time.time() - t0 < 1.0
 
@@ -283,25 +283,25 @@ def test_mcp_flag_is_never_saved(monkeypatch):
     from scrcrappy.toolbar import Bar
     from scrcrappy.video import LatestFrame
     monkeypatch.setattr(ai, "PORT", 0)
-    saved, pills, clicked = [], [], []
+    saved, bars, clicked = [], [], []
     orig, orig_settings = Bar.__init__, app_module.Settings.__init__
 
-    def pill_init(self, *a, **kw):
+    def bar_init(self, *a, **kw):
         orig(self, *a, **kw)
-        pills.append(self)
+        bars.append(self)
 
     def settings_init(self, *a, **kw):
         orig_settings(self, *a, **kw)
         self._click("natural")  # any other setting change saves the config
 
-    monkeypatch.setattr(Bar, "__init__", pill_init)
+    monkeypatch.setattr(Bar, "__init__", bar_init)
     monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
     t0 = time.time()
 
     def alive():
-        if pills and time.time() - t0 > 0.2 and not clicked:
+        if bars and time.time() - t0 > 0.2 and not clicked:
             clicked.append(1)
-            pills[0].actions["settings"]()
+            bars[0].actions["settings"]()
         return time.time() - t0 < 0.5
 
     app_module.run(LatestFrame(), alive, cfg=Config(), mcp=True, save=lambda c: saved.append(c.ai_control))

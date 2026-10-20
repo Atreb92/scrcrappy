@@ -35,7 +35,7 @@
 - [x] Bar and Settings overlay inside the phone window (docs/superpowers/specs/2026-10-20-bar-settings-overlay-design.md).
 - [x] Native Wayland by default in a Wayland session, X11 fallback / `--x11`; the right-click menu is an in-window overlay (only the Add/Edit dialog is a window).
 - [ ] Wayland, not yet checked by hand: the Add/Edit dialog (compositor-placed), the window icon (needs a `scrcrappy.desktop`; the app id is `scrcrappy`), HiDPI / fractional scaling, other compositors than KDE.
-- [ ] Settings panel isn't scrollable: a window shorter than about 520 px clips its bottom.
+- [ ] Settings panel isn't scrollable: a window shorter than about 430 px clips its bottom.
 - [ ] Bar overflow: many custom buttons shrink the buttons; add an overflow menu.
 
 ## Housekeeping
