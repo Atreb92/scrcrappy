@@ -189,3 +189,8 @@ On Linux scrcrappy runs as a native Wayland window in a Wayland session and fall
 start; `--x11` forces X11 (XWayland on a Wayland desktop). Setting `SDL_VIDEODRIVER` yourself overrides both.
 Everything but the add-button dialog is drawn inside the phone window, so nothing depends on window placement;
 the dialog is a window of its own that the compositor places.
+
+Wayland shows a window's icon from a desktop entry that matches its app id (`scrcrappy`), so without one the window
+has a generic icon. To add it for your user (untested): copy `packaging/scrcrappy.desktop` to
+`~/.local/share/applications/` and `scrcrappy/icons/scrcrappy.png` to
+`~/.local/share/icons/hicolor/256x256/apps/scrcrappy.png`.
