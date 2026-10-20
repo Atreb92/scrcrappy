@@ -4,10 +4,16 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:  # re-run just the homebrew job for an existing tag
+    inputs:
+      tag:
+        description: tag to publish to the tap, e.g. v0.2.1
+        required: true
 permissions:
   contents: write
 jobs:
   linux-wheel:
+    if: github.event_name == 'push'
     runs-on: ubuntu-22.04  # glibc 2.35: the wheel is tagged manylinux_2_35
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +40,10 @@ jobs:
   homebrew:
     # UNTESTED. Needs the repo secret TAP_DEPLOY_KEY: the private half of a write deploy key on atreb92/homebrew-scrcrappy.
     needs: linux-wheel
+    if: ${{ !cancelled() && (needs.linux-wheel.result == 'success' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-22.04
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -44,7 +53,7 @@ jobs:
           path: tap
       - name: Point the formula at this tag
         run: |
-          url="https://github.com/${{ github.repository }}/archive/refs/tags/$GITHUB_REF_NAME.tar.gz"
+          url="https://github.com/${{ github.repository }}/archive/refs/tags/$TAG.tar.gz"
           sha=$(curl -sL "$url" | sha256sum | cut -d' ' -f1)
           mkdir -p tap/Formula
           sed -e "s|^  url \"https://github.com/.*/archive/.*|  url \"$url\"|" -e "s|^  sha256 \".*|  sha256 \"$sha\"|" \
@@ -54,4 +63,6 @@ jobs:
         working-directory: tap
         run: |
           git config user.name "github-actions" && git config user.email "actions@users.noreply.github.com"
-          git add Formula/scrcrappy.rb && git commit -m "scrcrappy $GITHUB_REF_NAME" && git push
+          git add Formula/scrcrappy.rb
+          git diff --cached --quiet && { echo "formula already at $TAG"; git push --dry-run; exit 0; }  # still proves the key can write
+          git commit -m "scrcrappy $TAG" && git push
