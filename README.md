@@ -11,7 +11,7 @@ duct tape, and it works anyway.
 
 ```sh
 sudo dnf install pipx usbmuxd
-pipx install https://github.com/OWNER/scrcrappy/releases/download/v0.2.0/scrcrappy-0.2.0-py3-none-manylinux_2_35_x86_64.whl
+pipx install https://github.com/atreb92/scrcrappy/releases/download/v0.2.0/scrcrappy-0.2.0-py3-none-manylinux_2_35_x86_64.whl
 ```
 
 Until the repo is public: `scripts/build-qvh.sh && pipx install .` from a checkout (needs the
@@ -20,7 +20,7 @@ Development packages below). Bluetooth mode also needs `sudo dnf install python3
 **macOS** (untested):
 
 ```sh
-brew tap OWNER/scrcrappy
+brew tap atreb92/scrcrappy
 brew install scrcrappy
 ```
 

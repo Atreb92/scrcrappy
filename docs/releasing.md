@@ -12,10 +12,10 @@
    and `sha256` to
 
    ```sh
-   curl -sL https://github.com/OWNER/scrcrappy/archive/refs/tags/v<version>.tar.gz | sha256sum
+   curl -sL https://github.com/atreb92/scrcrappy/archive/refs/tags/v<version>.tar.gz | sha256sum
    ```
 
-   then copy the file to the tap repo (`OWNER/homebrew-scrcrappy`, `Formula/scrcrappy.rb`) and push.
+   then copy the file to the tap repo (`atreb92/homebrew-scrcrappy`, `Formula/scrcrappy.rb`) and push.
    Check on a Mac: `brew update && brew upgrade scrcrappy && scrcrappy --help`.
 5. If qvh's pinned commit changes, update `COMMIT` in `scripts/build-qvh.sh` and the `qvh` resource's
    `revision` in the formula together.

@@ -1,11 +1,11 @@
-# Homebrew formula for the OWNER/scrcrappy tap (copy to Formula/scrcrappy.rb there; see docs/releasing.md).
+# Homebrew formula for the atreb92/scrcrappy tap (copy to Formula/scrcrappy.rb there; see docs/releasing.md).
 # UNTESTED: written before the repo was on GitHub and without a Mac.
 class Scrcrappy < Formula
   include Language::Python::Virtualenv
 
   desc "Mirror and control an iPhone over USB (scrcpy for iOS)"
-  homepage "https://github.com/OWNER/scrcrappy"
-  url "https://github.com/OWNER/scrcrappy/archive/refs/tags/v0.2.0.tar.gz"
+  homepage "https://github.com/atreb92/scrcrappy"
+  url "https://github.com/atreb92/scrcrappy/archive/refs/tags/v0.2.0.tar.gz"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
   license "MIT"
 

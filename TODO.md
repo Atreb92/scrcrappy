@@ -22,7 +22,7 @@
 
 ## Verify
 
-- [ ] Packaging: release workflow, release wheel and Homebrew formula are untested — run them once the repo is on GitHub and a Mac is at hand (docs/releasing.md); fill in OWNER.
+- [ ] Packaging: release workflow, release wheel and Homebrew formula are untested — run them once the repo is on GitHub and a Mac is at hand (docs/releasing.md).
 - [x] Licence: MIT (2026-10-19).
 - [x] Custom buttons: Edit… and Remove confirmed by the user.
 - [x] Saved config restores custom buttons / natural scrolling / pinned state after a restart: confirmed by the user.

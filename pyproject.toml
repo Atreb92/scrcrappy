@@ -9,6 +9,9 @@ dependencies = ["av", "numpy", "pygame-ce", "pyusb"]
 [project.optional-dependencies]
 dev = ["pytest"]
 
+[project.urls]
+Homepage = "https://github.com/atreb92/scrcrappy"
+
 [project.scripts]
 scrcrappy = "scrcrappy.__main__:main"
 
