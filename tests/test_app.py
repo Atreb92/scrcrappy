@@ -225,7 +225,8 @@ def test_calibrator_reports_current_value_and_saves_a_new_table(monkeypatch, tmp
     assert calibrate.load("abc")[12.0] == 2.5
 
 
-def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
+@pytest.mark.parametrize("failure", [None, OSError("disk full")])
+def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch, failure):  # also when it blows up
     import os
     import time
     os.environ["SDL_VIDEODRIVER"] = "dummy"
@@ -245,6 +246,8 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
 
         def run(self):
             runs.append(len(pointers))  # pointers built so far when the measurement runs
+            if failure:
+                raise failure
 
     orig_bar, orig_settings = Bar.__init__, app_module.Settings.__init__
 
@@ -264,7 +267,8 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch):
         loops.append(1)
         if len(loops) == 3:
             bars[0].actions["settings"]()  # gear clicked once the pointer exists
-        frames.put((bytes(30 * 60 * 3), (30, 60), 90))
+        if len(loops) <= 3:  # a still screen: no new frame after this, the pointer must come back anyway
+            frames.put((bytes(30 * 60 * 3), (30, 60), 90))
         return time.time() - t0 < 1.0
 
     app_module.run(frames, alive, make_pointer=make_pointer, calibrator=FakeCalibrator(), save=lambda c: None)

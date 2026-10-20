@@ -134,6 +134,9 @@ class Bar:
         self.hover_since = 0.0
         self.tip_text: str | None = None
         self.tip_hidden = False  # after a press: no tooltip until the mouse reaches another button
+        self.phone_press = False  # a press that started on the phone: its drag and release belong to the phone
+        self.toast_text: str | None = None  # a short message ("Screenshot saved: …") shown above the strip
+        self.toast_until = 0.0
         self.led_colour: tuple[int, int, int] | None = None
         self.items: list[Button | None] = []
         self.rects: list[tuple[Button, pygame.Rect]] = []
@@ -163,6 +166,9 @@ class Bar:
     def _hit(self, pos: tuple[int, int]) -> Button | None:
         return next((b for b, r in self.rects if r.collidepoint(pos)), None)
 
+    def toast(self, text: str, seconds: float = 2.5) -> None:
+        self.toast_text, self.toast_until = text, time.monotonic() + seconds
+
     def handle(self, event: pygame.event.Event) -> bool:
         """Consume the mouse events that land on the strip; everything else goes on to the phone."""
         if event.type == pygame.WINDOWLEAVE and getattr(event, "window", None) is self.main:
@@ -170,7 +176,15 @@ class Bar:
             return False
         if event.type not in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
             return False
-        if getattr(event, "window", None) is not self.main or event.pos[1] < self.top:
+        if getattr(event, "window", None) is not self.main:
+            return False
+        if event.type == pygame.MOUSEBUTTONDOWN and event.pos[1] < self.top:
+            self.phone_press = True
+        if self.phone_press:  # dragged onto the strip: still the phone's drag, and its release must reach it
+            if event.type == pygame.MOUSEBUTTONUP:
+                self.phone_press = False
+            return False
+        if event.pos[1] < self.top:
             if event.type == pygame.MOUSEMOTION:
                 self.hover, self.tip_text = None, None
             return False
@@ -199,6 +213,8 @@ class Bar:
 
     def update(self, now: float | None = None, app_focused: bool | None = None) -> None:
         now = time.monotonic() if now is None else now
+        if self.toast_text and now >= self.toast_until:
+            self.toast_text = None
         if self.hover and self.tip_text is None and not self.tip_hidden and now - self.hover_since >= TIP_DELAY:
             b = self.hover
             self.tip_text = f"{b.tip}: {'on' if b.toggled else 'off'}" if b.toggled is not None and b.id != "settings" else b.tip
@@ -227,13 +243,18 @@ class Bar:
                 b = next(r for b, r in self.rects if b is self.items[i + 1])
                 x = (a.right + b.left) // 2
                 pygame.draw.line(surf, SEP, (x, self.top + BAR_H * 0.28), (x, self.top + BAR_H * 0.72))
-        if self.tip_text and self.hover:
+        if self.toast_text:
+            draw_tip(surf, self._font(), self.toast_text, pygame.Rect(w // 2, self.top, 0, 0), 300)
+        elif self.tip_text and self.hover:
             self._draw_tip(surf)
 
     def _draw_tip(self, surf: pygame.Surface) -> None:
-        font = self._tip_font = getattr(self, "_tip_font", None) or ui_font(12)
         rect = next(r for b, r in self.rects if b is self.hover)
-        draw_tip(surf, font, self.tip_text, pygame.Rect(rect.x, self.top, rect.w, 0))  # above the strip
+        draw_tip(surf, self._font(), self.tip_text, pygame.Rect(rect.x, self.top, rect.w, 0))  # above the strip
+
+    def _font(self) -> pygame.font.Font:
+        self._tip_font = getattr(self, "_tip_font", None) or ui_font(12)
+        return self._tip_font
 
 
 def draw_tip(surf: pygame.Surface, font: pygame.font.Font, text: str, anchor: pygame.Rect, width: int = TIP_WIDTH) -> None:

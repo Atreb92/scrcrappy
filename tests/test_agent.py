@@ -21,6 +21,7 @@ class FakeSession:
 
     def request(self, obj, done=None):
         self.calls.append(("request", obj))
+        self.done = done
 
     def swipe(self, a, b):
         self.calls.append(("swipe", a, b))
@@ -154,3 +155,34 @@ def test_request_fails_fast_when_the_connection_drops():
     while not errors and time.monotonic() - t0 < 2:
         time.sleep(0.01)
     assert errors and "connection" in errors[0]
+
+
+def png_reply():
+    import base64
+    import io
+    buf = io.BytesIO()
+    pygame.image.save(pygame.Surface((10, 20)), buf, "x.png")
+    return {"png": base64.b64encode(buf.getvalue()).decode()}
+
+
+def test_screenshot_tells_the_window_where_it_went(tmp_path):
+    c, _ = ctl()
+    c.screenshots, shown = str(tmp_path), []
+    c.notify = shown.append
+    c.s.request = lambda obj, done=None: setattr(c.s, "done", done)
+    c.screenshot()
+    c.s.done(png_reply())
+    [saved] = list(tmp_path.glob("scrcrappy-*.png"))
+    assert len(shown) == 1 and shown[0].startswith("Screenshot saved: ") and shown[0].endswith(saved.name)
+
+
+def test_screenshot_failure_is_shown_too(tmp_path):
+    c, _ = ctl()
+    blocker = tmp_path / "not-a-folder"
+    blocker.write_text("")
+    c.screenshots, shown = str(blocker), []
+    c.notify = shown.append
+    c.s.request = lambda obj, done=None: setattr(c.s, "done", done)
+    c.screenshot()
+    c.s.done(png_reply())
+    assert shown and shown[0].startswith("Screenshot not saved")

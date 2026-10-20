@@ -233,6 +233,7 @@ def test_rings_keep_recent_and_future_ones():
 
 def test_input_paused_per_event_while_locked():
     from scrcrappy.app import paused
+    assert paused(pygame.event.Event(pygame.TEXTINPUT, text="a"), True)  # a Settings field is not typed into either
     assert paused(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, pos=(0, 0)), True)  # pill clicks too
     assert paused(pygame.event.Event(pygame.KEYDOWN, scancode=4), True)
     assert not paused(pygame.event.Event(pygame.WINDOWFOCUSLOST), True)

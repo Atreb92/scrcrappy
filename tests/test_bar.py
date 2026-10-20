@@ -104,3 +104,23 @@ def test_pressing_a_button_hides_its_tooltip_until_the_mouse_moves_on(bar):
     bar.handle(ev(bar, pygame.MOUSEMOTION, at(bar, "settings")))
     bar.update(now=bar.hover_since + TIP_DELAY + 0.1)
     assert bar.tip_text == "Settings"
+
+
+def test_a_drag_that_started_on_the_phone_is_not_swallowed_by_the_strip(bar):
+    assert bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, (100, 100))) is False  # press on the phone
+    assert bar.handle(ev(bar, pygame.MOUSEMOTION, at(bar, "paste"))) is False  # dragged down onto the strip
+    assert bar.handle(ev(bar, pygame.MOUSEBUTTONUP, at(bar, "paste"))) is False  # the phone must see the release
+    assert bar.seen == []  # and it is not a click on the button
+    assert click(bar, "paste") is True and bar.seen == ["paste"]  # the next press on the strip works as usual
+
+
+def test_toast_shows_above_the_strip_then_expires(bar):
+    bar.toast("Screenshot saved: a.png", seconds=2)
+    bar.update(now=bar.toast_until - 1)
+    assert bar.toast_text
+    screen = pygame.Surface((375, 715))
+    screen.fill((255, 255, 255))
+    bar.draw(screen)
+    assert any(screen.get_at((x, bar.top - 12))[:3] != (255, 255, 255) for x in range(375))
+    bar.update(now=bar.toast_until + 0.1)
+    assert bar.toast_text is None

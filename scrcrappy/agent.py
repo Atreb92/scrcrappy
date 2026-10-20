@@ -172,6 +172,12 @@ class Session:
         self.sock.close()
 
 
+def tilde(path: Path | str) -> str:
+    """`path` with the home folder written as ~."""
+    home, text = str(Path.home()), str(path)
+    return "~" + text[len(home):] if text == home or text.startswith(home + "/") else text
+
+
 def screenshot_dir(folder: str = "") -> Path:
     """The Settings folder (created if needed), else ~/Pictures, else home."""
     if folder:
@@ -189,6 +195,7 @@ class Controller:
     def __init__(self, session: Session, natural_scroll: bool = False) -> None:
         self.s, self.natural_scroll = session, natural_scroll
         self.screenshots = ""  # folder from Settings
+        self.notify: Callable[[str], None] = lambda text: None  # a message for the window (set by app.run)
         self.fingers, self.at, self.moved = 0, (0.0, 0.0), 0.0
         self.modifiers = 0
 
@@ -258,6 +265,7 @@ class Controller:
         def done(reply: dict) -> None:
             pygame.scrap.put_text(reply["text"])
             print(f"copied {len(reply['text'])} characters from the phone", file=sys.stderr)
+            self.notify(f"Copied {len(reply['text'])} characters from the phone")
 
         self.s.request({"cmd": "clipboard_get"}, done)  # may wait for the phone's Allow Paste prompt
 
@@ -270,8 +278,10 @@ class Controller:
                 pygame.image.save(img, path)
             except (OSError, pygame.error) as e:
                 print(f"screenshot not saved: {e}", file=sys.stderr)
+                self.notify(f"Screenshot not saved: {e}")
                 return
             print(f"screenshot saved: {path}", file=sys.stderr)
+            self.notify(f"Screenshot saved: {tilde(path)}")
 
         self.s.request({"cmd": "screenshot"}, done)
 

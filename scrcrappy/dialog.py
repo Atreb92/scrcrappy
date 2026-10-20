@@ -8,6 +8,7 @@ from typing import Callable
 import pygame
 
 from .config import ICON_CHOICES, Config, Custom
+from .agent import screenshot_dir, tilde
 from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, TIP_DELAY, draw_tip, ui_font
 
 SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (10, 132, 255)  # iOS dark
@@ -265,6 +266,20 @@ MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")
 PANEL_W, SWITCH = 260, (34, 18)
 
 
+def post_run(fn: Callable[[], None]) -> None:
+    """Have the window's loop call `fn` (from any thread); a window that is already gone ignores it."""
+    try:
+        pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=fn))
+    except pygame.error:
+        pass
+
+
+def default_folder_label() -> str:
+    """What screenshots go to when no folder is set: ~/Pictures if there is one, else the home folder."""
+    label = tilde(screenshot_dir(""))
+    return label if label != "~" else "~ (home folder)"
+
+
 def pick_folder(initial: str) -> str | None:
     """The desktop's folder picker (zenity on Linux, AppleScript on macOS); None if cancelled or missing."""
     if sys.platform == "darwin":
@@ -408,8 +423,8 @@ class Settings:
             self.picking = True
 
             def run() -> None:
-                path = pick_folder(self.text["screenshots"] or "~/Pictures")
-                pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: self._picked(path)))
+                path = pick_folder(self.text["screenshots"] or str(screenshot_dir("")))
+                post_run(lambda: self._picked(path))
 
             threading.Thread(target=run, daemon=True).start()
 
@@ -489,7 +504,7 @@ class Settings:
             self._field(surf, "port", Config.port)
         self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
         surf.blit(self.head.render("Screenshots", True, FG), (PAD, self.shots_top))
-        self._field(surf, "screenshots", "~/Pictures")
+        self._field(surf, "screenshots", default_folder_label())
         b = self.hits["browse"]
         pygame.draw.rect(surf, FIELD, b, border_radius=7)
         glyph = self.icons.render("\ue2c8", True, ACCENT)  # folder_open

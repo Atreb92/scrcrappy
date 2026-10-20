@@ -12,7 +12,7 @@ from .mouse import Pointer
 from . import agent as agent_mod, ai as ai_mod, config
 from .calibrate import Calibrator
 from .config import Config, Custom
-from .dialog import PANEL_W, Dialog, DialogState, Menu, Popups, Settings
+from .dialog import PANEL_W, Dialog, DialogState, Menu, Popups, Settings, post_run
 from .toolbar import BAR_H, ICONS, Bar, buttons, next_free
 from .video import LatestFrame
 
@@ -25,7 +25,7 @@ os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
 
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
 INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL,
-         pygame.KEYDOWN, pygame.KEYUP)
+         pygame.KEYDOWN, pygame.KEYUP, pygame.TEXTINPUT)
 
 
 def paused(event: pygame.event.Event, locked: bool) -> bool:
@@ -122,6 +122,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip
+    main.minimum_size = (240, BAR_H + 150)  # below this the image area would reach zero
     main.set_icon(pygame.image.load(ICONS / "scrcrappy.png"))  # rendered from icons/scrcrappy.svg
     pygame.key.stop_text_input()  # raw key events only, no IME
     clock = pygame.time.Clock()
@@ -209,7 +210,10 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             x = min(max(8, button.centerx - size[0] // 2), main.size[0] - size[0] - 8)
             return pygame.Rect(x, bar.top - PANEL_MARGIN - size[1], *size)
 
-        context_menu = Menu(main, where, n, on_edit=lambda: edit(n), on_remove=remove)
+        if controller:
+            controller.release()
+        context_menu = Menu(main, where, n, on_edit=lambda: edit(n), on_remove=remove,
+                            on_close=lambda: bar.set_items(items()))  # the strip forgets what the mouse was over
 
     def settings_rect(size: tuple[int, int]) -> pygame.Rect:
         """The Settings panel: centred above the strip, clipped to the room there is."""
@@ -240,9 +244,9 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             try:
                 calibrator.run()
                 error = None
-            except RuntimeError as e:
-                error = str(e)
-            pygame.event.post(pygame.event.Event(pygame.USEREVENT, run=lambda: calibrated(error, on_done)))
+            except Exception as e:  # whatever went wrong, the pointer must come back
+                error = str(e) or type(e).__name__
+            post_run(lambda: calibrated(error, on_done))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -258,8 +262,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def ai_calibrate() -> str:
         """The AI's calibrate tool (MCP thread): run calibrate() on the window's thread and wait for it."""
         done, result = threading.Event(), []
-        pygame.event.post(pygame.event.Event(
-            pygame.USEREVENT, run=lambda: calibrate(lambda error: (result.append(error), done.set()))))
+        post_run(lambda: calibrate(lambda error: (result.append(error), done.set())))
         if not done.wait(CALIBRATE_WAIT_S):
             raise RuntimeError("calibration is taking too long; check the window")
         if result[0]:
@@ -271,6 +274,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if settings and not settings.closed:
             settings.close()
         else:
+            if controller:
+                controller.release()  # a key held right now would otherwise stay down on the phone: the overlay eats its release
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config)
         bar.set_items(items())
@@ -287,6 +292,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "menu": open_menu,
         "settings": open_settings,
     })
+    if agent and controller:
+        controller.notify = bar.toast  # "Screenshot saved: …", "Copied N characters"
     if cfg.ai_control or mcp:  # --mcp: on for this run only, cfg.ai_control (what's saved) stays as it is
         had_token = bool(cfg.mcp_token)
         ai.enable(cfg)
@@ -316,11 +323,11 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             if frame := frames.get():
                 pixels, size, pitch = frame
                 img = pygame.image.frombuffer(pixels, size, "RGB", pitch)
-                if make_pointer and not controller and not calibrating:
-                    pointer = make_pointer(size)
-                    pointer.home()
-                    pointer.start()
-                    controller = Controller(pointer, cfg.natural_scroll, keys)
+            if img and make_pointer and not controller and not calibrating:  # (also after calibrating on a still screen)
+                pointer = make_pointer(img.get_size())
+                pointer.home()
+                pointer.start()
+                controller = Controller(pointer, cfg.natural_scroll, keys)
             if ai.locked() != was_locked:
                 was_locked = not was_locked
                 if was_locked and controller:

@@ -13,6 +13,8 @@
 
 ## Usability
 
+- [ ] Screenshot button in Bluetooth / ESP32 mode too: save the mirrored video frame (no agent needed) and show the same in-window toast as agent mode.
+
 - [ ] BLE link speed: since the device advertises as a keyboard (appearance 0x03C1, keyboard-first descriptor) the phone delivers ~1 report / 15 ms (was ≥125/s as a mouse), so reports are paced at 15 ms and the cursor feels a bit less immediate than at the start. Experiment: advertise as a mouse again (keep keyboard-first + LED descriptor), re-pair, re-measure throughput at 8 ms and check the Hardware Keyboard setting still appears. User decided to keep 15 ms for now (usable).
 - [x] AssistiveTouch actions are now user-added custom buttons with in-app binding steps (+ on the toolbar).
 - [ ] Mouse wheel doesn't scroll iOS Settings lists (works in other apps). Investigate (wheel report size/pacing? AssistiveTouch scroll mode?).
@@ -40,5 +42,7 @@
 - [ ] Bar overflow: many custom buttons shrink the buttons; add an overflow menu.
 
 ## Housekeeping
+
+- [ ] No test drives the main loop's event routing end to end (overlays → popups → bar → phone controller); only the pieces are tested.
 
 - [ ] Laptop Bluetooth adapter was left `Pairable: yes` by early spikes (original value unknown).
