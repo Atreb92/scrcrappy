@@ -90,11 +90,11 @@ def layout(items: list[Button | None], height: int) -> tuple[int, list[tuple[But
 # --- drawing ------------------------------------------------------------------------------------------
 
 ICONS = Path(__file__).with_name("icons")
-FONTS = Path(__file__).with_name("fonts")  # Inter, subset: scripts/make-fonts.sh
+FONTS = Path(__file__).with_name("fonts")  # Roboto, subset: scripts/make-fonts.sh
 
 
 def ui_font(size: int, bold: bool = False) -> pygame.font.Font:
-    return pygame.font.Font(FONTS / ("Inter-SemiBold.ttf" if bold else "Inter-Regular.ttf"), size)
+    return pygame.font.Font(FONTS / ("Roboto-SemiBold.ttf" if bold else "Roboto-Regular.ttf"), size)
 
 
 # iOS dark: the bar, the dialogs' windows and the Settings glass all draw from this palette
