@@ -25,6 +25,8 @@ jobs:
       - run: sh scripts/build-qvh.sh
       - run: pip install build wheel pytest . && SDL_VIDEODRIVER=dummy pytest -q
       - run: python -m build --wheel
+      - name: Wheel ships qvh and its licences
+        run: unzip -l dist/*.whl | grep -q "scrcrappy/bin/qvh$" && unzip -l dist/*.whl | grep -q qvh-LICENSES.txt
       - run: python -m wheel tags --python-tag py3 --abi-tag none --platform-tag manylinux_2_35_x86_64 --remove dist/*.whl
       - run: gh release create "$GITHUB_REF_NAME" dist/*.whl --title "$GITHUB_REF_NAME" --generate-notes
         env:

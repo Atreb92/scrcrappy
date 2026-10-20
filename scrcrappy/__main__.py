@@ -8,6 +8,7 @@ import socket
 import sys
 import time
 from collections.abc import Mapping
+from importlib.metadata import version
 from pathlib import Path
 
 from . import agent, app, calibrate, config, links, mouse, video
@@ -30,6 +31,7 @@ def find_qvh(flag: str | None, package: Path | None = None) -> str | None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="scrcrappy", description="Mirror and control an iPhone over USB.")
+    parser.add_argument("--version", action="version", version=f"scrcrappy {version('scrcrappy')}")
     parser.add_argument("--qvh", help="path to the patched qvh binary (default: the one built into scrcrappy, "
                                       "else PATH)")
     parser.add_argument("--mouse", choices=config.MICE, default=None,

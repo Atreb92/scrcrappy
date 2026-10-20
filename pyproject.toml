@@ -2,6 +2,16 @@
 name = "scrcrappy"
 version = "0.2.0"
 description = "scrcpy for iOS"
+readme = "README.md"
+authors = [{ name = "atreb92" }]
+keywords = ["ios", "iphone", "screen-mirroring", "scrcpy", "assistivetouch"]
+classifiers = [
+    "Environment :: X11 Applications",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video :: Display",
+]
 license = "MIT"
 requires-python = ">=3.11"
 dependencies = ["av", "numpy", "pygame-ce", "pyusb"]
@@ -11,6 +21,7 @@ dev = ["pytest"]
 
 [project.urls]
 Homepage = "https://github.com/atreb92/scrcrappy"
+Issues = "https://github.com/atreb92/scrcrappy/issues"
 
 [project.scripts]
 scrcrappy = "scrcrappy.__main__:main"
