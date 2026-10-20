@@ -7,6 +7,7 @@
 - [ ] Agent: pairing code is shown in the terminal only, not in the window.
 - [ ] Later (advanced): full terminal over SSH (OpenSSH on the phone, through `usbmux.connect(22)`).
 - [x] Opening apps via scrcrappy-agent 0.3.0 (`apps` / `open`): MCP `list_apps` / `open_app` and `scrcrappy agent --apps` / `--open`. Needs the 0.3.0 agent on the phone.
+- [x] Open a URL or deeplink via agent 0.5.0 (`open_url`): MCP `open_url` and `scrcrappy agent --open-url`.
 - [ ] Later: volume buttons via scrcrappy-agent; an app launcher in the toolbar (Home / switcher / lock are there already).
 
 - [x] AI control, agent mode: `home`, `switcher` and `lock` tools.

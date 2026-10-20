@@ -356,3 +356,22 @@ def test_open_app_unknown_name_locked_phone_and_old_agent_are_tool_errors():
     old = ai.AiControl(frames(), session=FakeSession({"apps": {"error": "unknown command"}}))
     with pytest.raises(ToolError, match="0.3.0"):
         tool(old, "list_apps").run({})
+
+
+def test_open_url_tool_agent_mode_only_and_lets_the_app_draw(monkeypatch):
+    assert "open_url" not in [t.name for t in ai.AiControl(frames(), pointer=lambda: FakePointer()).tools()]
+    waited = []
+    monkeypatch.setattr(ai.time, "sleep", waited.append)
+    s = FakeSession({})
+    [block] = tool(ai.AiControl(frames(), session=s), "open_url").run({"url": "https://example.com"})
+    assert [r for r in s.sent if r["cmd"] == "open_url"] == [{"cmd": "open_url", "url": "https://example.com"}]
+    assert "https://example.com" in block["text"] and waited == [ai.APP_SETTLE_S]
+
+
+def test_open_url_errors_are_tool_errors():
+    bad = ai.AiControl(frames(), session=FakeSession({"open_url": {"error": "bad url"}}))
+    with pytest.raises(ToolError, match="scheme"):
+        tool(bad, "open_url").run({"url": "example.com"})
+    old = ai.AiControl(frames(), session=FakeSession({"open_url": {"error": "unknown command"}}))
+    with pytest.raises(ToolError, match="0.5.0"):
+        tool(old, "open_url").run({"url": "https://example.com"})
