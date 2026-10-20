@@ -35,6 +35,9 @@
 - [ ] ESP32 firmware has never run on real hardware (only compiled for esp32 / -c3 / -s3).
 - [ ] macOS untested end to end: patched qvh (clear-halt removal), click-through, the bar and Settings overlay.
 
+- [ ] Flatpak for Linux (bundles libusb; usbmuxd / BLE helper access need sandbox holes, so decide after pipx + brew are proven).
+- [ ] Linux aarch64 and macOS wheels in CI (qvh is native); brew covers macOS until then.
+
 ## Wayland
 
 - [x] Bar and Settings overlay inside the phone window (docs/superpowers/specs/2026-10-20-bar-settings-overlay-design.md).

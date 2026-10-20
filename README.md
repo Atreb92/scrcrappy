@@ -7,21 +7,32 @@ duct tape, and it works anyway.
 
 ## Install
 
-**Linux** (Fedora shown; usbmuxd and libusb are on most desktops already):
+Pick one. All of them ship the patched qvh inside; the only system pieces are libusb and, on Linux, usbmuxd.
+
+**Linux, pipx** (x86_64; the wheel is on the [releases page](https://github.com/atreb92/scrcrappy/releases)):
 
 ```sh
-sudo dnf install pipx usbmuxd
+sudo dnf install pipx usbmuxd libusb1            # Fedora
+sudo apt install pipx usbmuxd libusb-1.0-0       # Debian / Ubuntu
+sudo pacman -S python-pipx usbmuxd libusb        # Arch
 pipx install https://github.com/atreb92/scrcrappy/releases/download/v0.2.0/scrcrappy-0.2.0-py3-none-manylinux_2_35_x86_64.whl
 ```
 
-Until the repo is public: `scripts/build-qvh.sh && pipx install .` from a checkout (needs the
-Development packages below). Bluetooth mode also needs `sudo dnf install python3-dbus python3-gobject`.
+Bluetooth mode also needs the system python's bindings (`python3-dbus python3-gobject` on Fedora and
+Debian, `python-dbus python-gobject` on Arch).
 
-**macOS** (untested):
+**Homebrew, macOS and Linux** (builds qvh from source, so it takes a minute; macOS needs nothing else, Linux
+also needs usbmuxd from your distro; untested):
 
 ```sh
 brew tap atreb92/scrcrappy
 brew install scrcrappy
+```
+
+**From a checkout** (needs the Development packages below):
+
+```sh
+scripts/build-qvh.sh && pipx install .
 ```
 
 Then run `scrcrappy` from anywhere. Releases: [docs/releasing.md](docs/releasing.md).

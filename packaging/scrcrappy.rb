@@ -1,5 +1,5 @@
 # Homebrew formula for the atreb92/scrcrappy tap (copy to Formula/scrcrappy.rb there; see docs/releasing.md).
-# UNTESTED: written before the repo was on GitHub and without a Mac.
+# UNTESTED: written before the repo was on GitHub and without a Mac. Linux (Linuxbrew) is meant to work too; usbmuxd comes from the distro.
 class Scrcrappy < Formula
   include Language::Python::Virtualenv
 
