@@ -2,7 +2,8 @@
 
 # scrcrappy
 
-scrcpy for iOS: mirror and control an iPhone over USB.
+scrcpy for iOS, the crappy way: mirror and control an iPhone over USB. Held together with glue and
+duct tape, and it works anyway.
 
 ## Install
 
@@ -64,6 +65,15 @@ mirroring protocol. `third_party/qvh.patch` makes two changes:
 ## Licence
 
 MIT, see [LICENSE](LICENSE).
+
+## Credits
+
+- [scrcpy](https://github.com/Genymobile/scrcpy): the original. scrcrappy borrows its idea and most of its
+  name, and is built and held together with glue and duct tape to make the same thing work on iOS.
+- [qvh](https://github.com/danielpaulus/quicktime_video_hack) (MIT): the QuickTime USB protocol behind
+  the video; scrcrappy ships a patched build (`third_party/qvh.patch`).
+- ZXTouch: showed how touches can be injected from SpringBoard on a jailbroken iPhone. scrcrappy-agent
+  follows the same approach as a clean rewrite and contains none of its code.
 
 ## Mouse control without jailbreak
 
