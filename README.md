@@ -185,6 +185,7 @@ each have their own mapping on the phone). The toolbar's state is saved in
 
 After updating to the 5-button version, forget and re-pair the device on the phone once.
 
-On Linux scrcrappy runs through X11 (XWayland on Wayland desktops) because the add-button dialog and the
-right-click menu are windows placed next to the toolbar, which native Wayland doesn't allow; set
-`SDL_VIDEODRIVER` yourself to override.
+On Linux scrcrappy runs as a native Wayland window in a Wayland session and falls back to X11 if that can't
+start; `--x11` forces X11 (XWayland on a Wayland desktop). Setting `SDL_VIDEODRIVER` yourself overrides both.
+Everything but the add-button dialog is drawn inside the phone window, so nothing depends on window placement;
+the dialog is a window of its own that the compositor places.
