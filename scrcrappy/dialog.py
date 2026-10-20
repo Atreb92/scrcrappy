@@ -9,7 +9,8 @@ import pygame
 from .config import ICON_CHOICES, Config, Custom
 from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP
 
-SURFACE, TEXT, MUTED, ACCENT = (0xF4, 0xF7, 0xFB), (0x1D, 0x25, 0x30), (0x6B, 0x75, 0x84), (0x2F, 0x5E, 0xA8)
+SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (10, 132, 255)  # iOS dark
+FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (56, 56, 60), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
 COLS, CELL, PAD, WIDTH = 8, 44, 16, 400
 
 
@@ -123,8 +124,7 @@ class Dialog:
         self.on_done(result)
 
     def _button(self, surf: pygame.Surface, rect: pygame.Rect, text: str, filled: bool) -> None:
-        pygame.draw.rect(surf, ACCENT if filled else (255, 255, 255), rect)
-        pygame.draw.rect(surf, ACCENT, rect, 1)
+        pygame.draw.rect(surf, ACCENT if filled else FIELD, rect, border_radius=8)
         label = self.small.render(text, True, (255, 255, 255) if filled else ACCENT)
         surf.blit(label, label.get_rect(center=rect.center))
 
@@ -141,8 +141,7 @@ class Dialog:
             surf.blit(glyph, glyph.get_rect(center=r.center))
         name = self.hits["name"]
         surf.blit(self.small.render("Name", True, MUTED), (PAD, name.y + 7))
-        pygame.draw.rect(surf, (255, 255, 255), name)
-        pygame.draw.rect(surf, SEP, name, 1)
+        pygame.draw.rect(surf, FIELD, name, border_radius=7)
         text = f"{s.name}|" if s.name else dict(ICON_CHOICES)[s.icon]  # empty: the icon's label is used
         surf.blit(self.small.render(text, True, TEXT if s.name else DISABLED), (name.x + 8, name.y + 7))
         surf.blit(self.font.render(f"2. Bind it on the iPhone (this is button {s.button})", True, FG),
@@ -210,6 +209,24 @@ class Menu:
 
 INPUT = (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEWHEEL, pygame.KEYDOWN,
          pygame.KEYUP, pygame.TEXTINPUT)
+PANEL_R = 20
+
+
+def _glass(screen: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
+    """What shows through frosted glass over `rect`: the pixels there, blurred (shrunk, enlarged) and tinted."""
+    clipped = rect.clip(screen.get_rect())
+    if not clipped.w or not clipped.h:
+        return pygame.Surface((1, 1), pygame.SRCALPHA)
+    under = screen.subsurface(clipped).copy()
+    w, h = under.get_size()
+    small = pygame.transform.smoothscale(under, (max(1, w // BLUR), max(1, h // BLUR)))
+    glass = pygame.transform.smoothscale(small, (w, h)).convert_alpha()
+    tint = pygame.Surface((w, h), pygame.SRCALPHA)
+    tint.fill((*SURFACE, GLASS_ALPHA))
+    glass.blit(tint, (0, 0))
+    return glass
+
+
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
 
@@ -380,14 +397,15 @@ class Settings:
     def _switch(self, surf: pygame.Surface, key: str, label: str, on: bool) -> None:
         sw = self.hits[key]
         surf.blit(self.font.render(label, True, FG), (PAD, sw.y + 2))
-        pygame.draw.rect(surf, ACCENT if on else SEP, sw, border_radius=sw.height // 2)
+        pygame.draw.rect(surf, SWITCH_ON if on else (92, 92, 98), sw, border_radius=sw.height // 2)
         knob = (sw.right - sw.height // 2 if on else sw.x + sw.height // 2, sw.centery)
         pygame.draw.circle(surf, (255, 255, 255), knob, sw.height // 2 - 2)
 
     def _field(self, surf: pygame.Surface, key: str, placeholder: str) -> None:
         r = self.hits[key]
-        pygame.draw.rect(surf, (255, 255, 255), r)
-        pygame.draw.rect(surf, ACCENT if self.editing == key else SEP, r, 1)
+        pygame.draw.rect(surf, FIELD, r, border_radius=7)
+        if self.editing == key:
+            pygame.draw.rect(surf, ACCENT, r, 1, border_radius=7)
         text = self.text[key] + ("|" if self.editing == key else "")
         label = self.small.render(text or placeholder, True, TEXT if text else MUTED)
         clip = label.subsurface(max(0, label.get_width() - (r.width - 12)), 0,  # long paths: show the end
@@ -401,19 +419,21 @@ class Settings:
         dim = pygame.Surface((screen.get_width(), dim_height), pygame.SRCALPHA)
         dim.fill((0, 0, 0, 90))
         screen.blit(dim, (0, 0))
+        rect = self.rect
         surf = pygame.Surface((PANEL_W, self.height), pygame.SRCALPHA)
-        pygame.draw.rect(surf, SURFACE, surf.get_rect(), border_radius=14)
-        pygame.draw.rect(surf, SEP, surf.get_rect(), 1, border_radius=14)
+        surf.blit(_glass(screen, rect), (0, 0))
         surf.blit(self.font.render("Input", True, FG), (PAD, 14))
-        tag = self.small.render("next launch", True, (0x8A, 0x5A, 0x00))
+        tag = self.small.render("next launch", True, (0xF2, 0xB7, 0x05))
         tag_bg = tag.get_rect(topleft=(PAD + 50, 13)).inflate(10, 4)
-        pygame.draw.rect(surf, (0xFD, 0xF0, 0xD5), tag_bg)
+        pygame.draw.rect(surf, (0x4A, 0x3A, 0x12), tag_bg, border_radius=tag_bg.height // 2)
         surf.blit(tag, tag.get_rect(center=tag_bg.center))
+        first, last = self.hits["mode:0"], self.hits[f"mode:{len(MODES) - 1}"]  # iOS segmented control
+        pygame.draw.rect(surf, FIELD, first.union(last), border_radius=8)
         for i, (mode, name) in enumerate(MODES):
             r = self.hits[f"mode:{i}"]
             on = self.cfg.mouse == mode
-            pygame.draw.rect(surf, ON_BG if on else (255, 255, 255), r)
-            pygame.draw.rect(surf, SEP, r, 1)
+            if on:
+                pygame.draw.rect(surf, ON_BG, r.inflate(-4, -4), border_radius=6)
             label = self.small.render(name, True, ON_FG if on else FG)
             surf.blit(label, label.get_rect(center=r.center))
         if "port" in self.hits:
@@ -423,8 +443,7 @@ class Settings:
         surf.blit(self.font.render("Screenshots", True, FG), (PAD, self.shots_top))
         self._field(surf, "screenshots", "~/Pictures")
         b = self.hits["browse"]
-        pygame.draw.rect(surf, (255, 255, 255), b)
-        pygame.draw.rect(surf, ACCENT, b, 1)
+        pygame.draw.rect(surf, FIELD, b, border_radius=7)
         glyph = self.icons.render("\ue2c8", True, ACCENT)  # folder_open
         surf.blit(glyph, glyph.get_rect(center=b.center))
         self._switch(surf, "ai", "Allow AI control (MCP)", self.cfg.ai_control)
@@ -432,8 +451,7 @@ class Settings:
             surf.blit(self.small.render(line, True, MUTED), (PAD, self.ai_top + 28 + 16 * i))
         if "copy" in self.hits:
             c = self.hits["copy"]
-            pygame.draw.rect(surf, (255, 255, 255), c)
-            pygame.draw.rect(surf, ACCENT, c, 1)
+            pygame.draw.rect(surf, FIELD, c, border_radius=c.height // 2)
             label = self.small.render("Copy setup command", True, ACCENT)
             surf.blit(label, label.get_rect(center=c.center))
         if self.calibration_lines:
@@ -441,10 +459,13 @@ class Settings:
             for i, line in enumerate(self.calibration_lines):
                 surf.blit(self.small.render(line, True, MUTED), (PAD, self.calib_top + 20 + 16 * i))
             c = self.hits["calibrate"]
-            pygame.draw.rect(surf, ACCENT, c)
+            pygame.draw.rect(surf, ACCENT, c, border_radius=c.height // 2)
             label = self.small.render("Calibrate", True, (255, 255, 255))
             surf.blit(label, label.get_rect(center=c.center))
-        rect = self.rect
+        mask = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+        pygame.draw.rect(mask, (255, 255, 255, 255), mask.get_rect(), border_radius=PANEL_R)
+        surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)  # round the corners
+        pygame.draw.rect(surf, (255, 255, 255, 46), surf.get_rect(), 1, border_radius=PANEL_R)
         screen.blit(surf, rect.topleft, area=pygame.Rect(0, 0, rect.w, rect.h))
 
 

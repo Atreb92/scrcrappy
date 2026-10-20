@@ -90,9 +90,11 @@ def layout(items: list[Button | None], height: int) -> tuple[int, list[tuple[But
 # --- drawing ------------------------------------------------------------------------------------------
 
 ICONS = Path(__file__).with_name("icons")
-BG, FG, ON_BG, ON_FG, DISABLED, SEP = (0xDF, 0xE6, 0xF1), (0x3A, 0x46, 0x56), (0xB9, 0xCB, 0xE8), (0x0F, 0x2A, 0x4D), (0xA9, 0xB3, 0xC1), (0xC6, 0xCF, 0xDB)
-HOVER = (0x3A, 0x46, 0x56, 26)  # FG at 10%
-TIP_BG, TIP_FG = (0x30, 0x30, 0x34), (0xF2, 0xF0, 0xF4)
+# iOS dark: the bar, the dialogs' windows and the Settings glass all draw from this palette
+BG, FG, ON_BG, ON_FG, DISABLED, SEP = (28, 28, 30), (232, 232, 238), (76, 76, 82), (255, 255, 255), (110, 110, 118), (72, 72, 78)
+EDGE = (62, 62, 66)  # hairline on top of the bar
+HOVER = (255, 255, 255, 30)
+TIP_BG, TIP_FG = (58, 58, 62), (242, 242, 247)
 TIP_DELAY, TIP_WIDTH = 0.5, 220
 
 
@@ -194,6 +196,7 @@ class Bar:
     def draw(self, surf: pygame.Surface) -> None:
         w = surf.get_width()
         pygame.draw.rect(surf, BG, (0, self.top, w, BAR_H))
+        pygame.draw.line(surf, EDGE, (0, self.top), (w, self.top))
         for item, rect in self.rects:
             if item.id == "led":
                 if self.led_colour:
