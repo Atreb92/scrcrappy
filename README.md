@@ -202,3 +202,39 @@ Wayland shows a window's icon from a desktop entry that matches its app id (`scr
 has a generic icon. To add it for your user (untested): copy `packaging/scrcrappy.desktop` to
 `~/.local/share/applications/` and `scrcrappy/icons/scrcrappy.png` to
 `~/.local/share/icons/hicolor/256x256/apps/scrcrappy.png`.
+
+## FAQ
+
+**Is "agent" the same as crappytouch?** crappytouch is the tweak installed on the phone. "Agent" is only
+the name of scrcrappy's side of it: `--mouse agent`, `scrcrappy agent …`, and the pairing key
+`~/.config/scrcrappy/agent-<udid>.key`. It used to be called scrcrappy-agent; the old name is gone, the
+agent names stayed.
+
+**Which input mode do I want?** `agent` on a jailbroken phone with crappytouch (exact touches, clipboard,
+apps, URLs, no Bluetooth, no calibration). `ble` or `esp32` on a stock phone (steers the AssistiveTouch cursor, needs calibration).
+Apps, URLs, the phone's screenshot and the clipboard are agent-only.
+
+**Clicks do nothing after the phone rebooted.** The jailbreak is gone after a reboot: run Dopamine again, then
+touch the phone's screen once before clicks work.
+
+**The cursor overshoots or stops short (Bluetooth / ESP32).** The phone's pointer speed changed. Settings ›
+Calibrate, or `scrcrappy --calibrate`, on a plain light screen.
+
+**Stuck at "lockdown error -8", or `idevice_id -l` hangs.** usbmuxd can wedge after scrcrappy's USB reset while
+the phone is locked. Unlock the phone and replug it; scrcrappy gives up after 5 s with this hint.
+
+**The connection dropped for a second when the video started.** Expected: starting the video resets the USB
+link and the agent connection reconnects by itself.
+
+**`scrcrappy agent --apps` prints JSON, not a table.** Every `scrcrappy agent` call prints exactly one JSON
+object (`{"ok": true, …}`), so scripts can parse it; pipe it through `jq` for a table. `--open` takes a bundle
+id or an app name.
+
+**`--open-url prefs:…` fails with "open failed".** iOS refuses some schemes (`prefs:`) from outside; the
+others (`https:`, `tel:`, `sms:`, `maps:`, app deeplinks) work. `--open` and `--open-url` also fail while the phone is locked.
+
+**`--apps` / `--open` / `--open-url` say the agent is too old.** Update crappytouch on the phone: apps and
+open need 0.3.0, open_url 0.5.0.
+
+**The phone locks while I work.** Turn on Settings › crappytouch › *Keep Awake While Connected* on the phone;
+it won't auto-lock while scrcrappy is connected.
