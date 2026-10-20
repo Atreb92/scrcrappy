@@ -133,6 +133,7 @@ class Bar:
         self.hover: Button | None = None
         self.hover_since = 0.0
         self.tip_text: str | None = None
+        self.tip_hidden = False  # after a press: no tooltip until the mouse reaches another button
         self.led_colour: tuple[int, int, int] | None = None
         self.items: list[Button | None] = []
         self.rects: list[tuple[Button, pygame.Rect]] = []
@@ -176,7 +177,9 @@ class Bar:
         if event.type == pygame.MOUSEMOTION:
             hit = self._hit(event.pos)
             if hit is not self.hover:
-                self.hover, self.hover_since, self.tip_text = hit, time.monotonic(), None
+                self.hover, self.hover_since, self.tip_text, self.tip_hidden = hit, time.monotonic(), None, False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            self.tip_text, self.tip_hidden = None, True  # a menu or panel may open right where the tooltip is
         elif event.type == pygame.MOUSEBUTTONUP and (hit := self._hit(event.pos)):
             if event.button == 1:
                 self._click(hit)
@@ -196,7 +199,7 @@ class Bar:
 
     def update(self, now: float | None = None, app_focused: bool | None = None) -> None:
         now = time.monotonic() if now is None else now
-        if self.hover and self.tip_text is None and now - self.hover_since >= TIP_DELAY:
+        if self.hover and self.tip_text is None and not self.tip_hidden and now - self.hover_since >= TIP_DELAY:
             b = self.hover
             self.tip_text = f"{b.tip}: {'on' if b.toggled else 'off'}" if b.toggled is not None and b.id != "settings" else b.tip
 

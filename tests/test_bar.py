@@ -91,3 +91,16 @@ def test_follow_after_a_resize(bar):
     bar.main.size = (500, 800)
     bar.follow()
     assert bar.top == 800 - BAR_H and max(r.right for _, r in bar.rects) <= 500
+
+
+def test_pressing_a_button_hides_its_tooltip_until_the_mouse_moves_on(bar):
+    bar.handle(ev(bar, pygame.MOUSEMOTION, at(bar, "custom:2")))
+    bar.update(now=bar.hover_since + TIP_DELAY + 0.1)
+    assert bar.tip_text
+    bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, at(bar, "custom:2"), button=3))  # right-click: the menu opens there
+    assert bar.tip_text is None
+    bar.update(now=bar.hover_since + 10)
+    assert bar.tip_text is None
+    bar.handle(ev(bar, pygame.MOUSEMOTION, at(bar, "settings")))
+    bar.update(now=bar.hover_since + TIP_DELAY + 0.1)
+    assert bar.tip_text == "Settings"
