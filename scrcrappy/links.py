@@ -5,6 +5,7 @@ host -> device: "dx dy buttons wheel" (mouse report), "k modifiers k1..k6" (keyb
 device -> host: "ready" (advertising), "connected" (phone subscribed to reports)
 """
 import os
+import select
 import subprocess
 import termios
 import threading
@@ -14,9 +15,10 @@ from typing import Callable
 
 
 class Link:
-    def __init__(self, write: Callable[[bytes], object], read: Callable[[], bytes]) -> None:
+    def __init__(self, write: Callable[[bytes], object], read: Callable[[], bytes],
+                 close: Callable[[], object] = lambda: None) -> None:
         self.ready, self.connected = threading.Event(), threading.Event()
-        self._write = write
+        self._write, self.close = write, close
 
         def reader() -> None:
             buf = b""
@@ -61,10 +63,24 @@ def esp32(port: str, baud: int = 115200, wait: float = 10) -> Link:
     attrs = termios.tcgetattr(fd)
     attrs[4] = attrs[5] = getattr(termios, f"B{baud}")
     termios.tcsetattr(fd, termios.TCSANOW, attrs)
-    link = Link(lambda b: os.write(fd, b), lambda: os.read(fd, 4096))
+    closing, reader_gone = threading.Event(), threading.Event()
+
+    def read() -> bytes:  # poll, so closing the port never waits on a blocked read (macOS hangs there)
+        while not closing.is_set():
+            if select.select([fd], [], [], 0.2)[0]:
+                return os.read(fd, 4096)
+        reader_gone.set()
+        return b""
+
+    def close() -> None:
+        closing.set()
+        reader_gone.wait(1)  # the reader must be out of select/read before the fd goes
+        os.close(fd)
+
+    link = Link(lambda b: os.write(fd, b), read, close)
     for _ in range(int(wait / 0.5)):  # opening the port may reboot the board: ask until it answers
         os.write(fd, b"?\n")
         if link.ready.wait(0.5):
             return link
-    os.close(fd)
+    link.close()
     raise RuntimeError(f"no scrcrappy ESP32 firmware answering on {port}")

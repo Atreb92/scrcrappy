@@ -40,6 +40,20 @@ def test_esp32_handshake_and_reports():
     assert received.count(b"?") == 3  # retried through the "reboot"
 
 
+def test_esp32_close_stops_the_reader_and_releases_the_port():
+    master, slave = os.openpty()
+    threading.Thread(target=fake_board, args=(master, [], 2), daemon=True).start()
+    link = links.esp32(os.ttyname(slave))
+    before = threading.active_count()
+    link.close()
+    for _ in range(100):
+        if threading.active_count() < before:
+            break
+        threading.Event().wait(0.01)
+    assert threading.active_count() < before  # the reader thread left its select loop
+    link.send(1, 2, 0, 0)  # writing to the closed port is swallowed, not a crash
+
+
 def test_esp32_silent_port_is_an_error():
     master, slave = os.openpty()
     with pytest.raises(RuntimeError, match="no scrcrappy ESP32 firmware"):

@@ -1,7 +1,8 @@
 # Releasing
 
 > The release workflow and the Linux wheel are proven (v0.2.0), and the Homebrew formula installs on Linuxbrew.
-> macOS is still untested.
+> macOS captures through AVFoundation (no qvh), tested from source on Apple Silicon; the formula's macOS path
+> is untested until the next release, because the formula builds the tagged tarball.
 
 1. Bump `version` in `pyproject.toml` (the only place it lives) and commit.
 2. Tag and push: `git tag v<version> && git push origin v<version>`.

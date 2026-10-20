@@ -33,7 +33,9 @@
 - [x] Saved config restores custom buttons / natural scrolling / pinned state after a restart: confirmed by the user.
 - [x] Toolbar: first click acts (SDL focus click-through): confirmed by user (the pill is gone: the bar is part of the phone window).
 - [ ] ESP32 firmware has never run on real hardware (only compiled for esp32 / -c3 / -s3).
-- [ ] macOS untested end to end: patched qvh (clear-halt removal), click-through, the bar and Settings overlay.
+- [x] macOS video: qvh cannot work there (libusb `-99` on the second context; QuickTime interface claim fails with `out of resources`, also as root), so macOS captures through AVFoundation (`video.capture_avf`, spec 2026-10-21). Mirroring and `--mouse agent` confirmed by the user.
+- [ ] macOS: rotation, click-through, the bar and Settings overlay, several iPhones at once (the first capture device that is not a screen wins), `--calibrate` (its 3 s start-up wait), Homebrew formula (macOS path untested until the next release).
+- [ ] Flaky tests: `tests/test_app.py` fails on some runs after the agent / AI tests (different test each time, also on `main`). Order-dependent pygame window state.
 
 - [ ] Flatpak for Linux (bundles libusb; usbmuxd / BLE helper access need sandbox holes, so decide after pipx + brew are proven).
 - [ ] Linux aarch64 and macOS wheels in CI (qvh is native); brew covers macOS until then.
