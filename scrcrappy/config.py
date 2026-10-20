@@ -31,7 +31,7 @@ class Config:
     customs: dict[str, list[Custom]] = field(default_factory=dict)  # "<phone serial>/<ble|esp32>" -> buttons
     mouse: str = "none"  # input mode used when --mouse isn't given
     port: str = "/dev/ttyUSB0"  # ESP32 serial port when --port isn't given
-    screenshots: str = ""  # folder; "" = ~/Pictures, else home
+    screenshots: str = ""  # folder; "" = the desktop's Pictures folder, else ~/Pictures, else home
     ai_control: bool = False  # MCP server in the window (Settings)
     mcp_token: str = ""  # created when AI control is first turned on
 

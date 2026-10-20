@@ -275,7 +275,7 @@ def post_run(fn: Callable[[], None]) -> None:
 
 
 def default_folder_label() -> str:
-    """What screenshots go to when no folder is set: ~/Pictures if there is one, else the home folder."""
+    """What screenshots go to when no folder is set: the desktop's Pictures folder, ~/Pictures, else the home folder."""
     label = tilde(screenshot_dir(""))
     return label if label != "~" else "~ (home folder)"
 

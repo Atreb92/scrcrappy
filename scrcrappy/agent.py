@@ -6,7 +6,9 @@ toolbar gets paste of any text, copy from the phone, screenshots and the phone's
 import base64
 import io
 import itertools
+import os
 import queue
+import re
 import socket
 import sys
 import threading
@@ -179,14 +181,27 @@ def tilde(path: Path | str) -> str:
     return "~" + text[len(home):] if text == home or text.startswith(home + "/") else text
 
 
+def desktop_pictures_dir() -> Path | None:
+    """The desktop's Pictures folder from ~/.config/user-dirs.dirs (XDG; localised, e.g. ~/Immagini), if it exists."""
+    config = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "user-dirs.dirs"
+    try:
+        text = config.read_text()
+    except OSError:
+        return None
+    if match := re.search(r'^XDG_PICTURES_DIR="?(.*?)"?\s*$', text, re.M):
+        path = Path(match.group(1).replace("$HOME", str(Path.home())))
+        return path if path.is_dir() else None
+    return None
+
+
 def screenshot_dir(folder: str = "") -> Path:
-    """The Settings folder (created if needed), else ~/Pictures, else home."""
+    """The Settings folder (created if needed), else the desktop's Pictures folder, else ~/Pictures, else home."""
     if folder:
         path = Path(folder).expanduser()
         path.mkdir(parents=True, exist_ok=True)
         return path
     pictures = Path.home() / "Pictures"
-    return pictures if pictures.is_dir() else Path.home()
+    return desktop_pictures_dir() or (pictures if pictures.is_dir() else Path.home())
 
 
 def save_screenshot(img: pygame.Surface, folder: str = "") -> Path:

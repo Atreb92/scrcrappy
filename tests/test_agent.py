@@ -194,3 +194,37 @@ def test_save_screenshot_never_overwrites_one_taken_in_the_same_second(tmp_path,
     first, second = agent.save_screenshot(surf, str(tmp_path)), agent.save_screenshot(surf, str(tmp_path))
     assert first.name == "scrcrappy-20261020-120000.png" and second.name == "scrcrappy-20261020-120000-2.png"
     assert first.exists() and second.exists()
+
+
+@pytest.fixture
+def home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    return tmp_path
+
+
+def user_dirs(home, line):
+    (home / ".config").mkdir(exist_ok=True)
+    (home / ".config" / "user-dirs.dirs").write_text(f"# user dirs\nXDG_DESKTOP_DIR=\"$HOME/Desktop\"\n{line}\n")
+
+
+def test_default_screenshot_folder_is_the_desktops_pictures_folder(home):
+    (home / "Immagini").mkdir()
+    (home / "Pictures").mkdir()
+    user_dirs(home, 'XDG_PICTURES_DIR="$HOME/Immagini"')  # a localised desktop
+    assert agent.screenshot_dir("") == home / "Immagini"
+
+
+def test_default_screenshot_folder_falls_back_to_pictures_then_home(home):
+    user_dirs(home, 'XDG_PICTURES_DIR="$HOME/Immagini"')  # configured but missing
+    assert agent.screenshot_dir("") == home
+    (home / "Pictures").mkdir()
+    assert agent.screenshot_dir("") == home / "Pictures"
+    (home / ".config" / "user-dirs.dirs").unlink()  # no desktop configuration at all (macOS, minimal setups)
+    assert agent.screenshot_dir("") == home / "Pictures"
+
+
+def test_the_settings_folder_wins_and_is_created(home):
+    user_dirs(home, 'XDG_PICTURES_DIR="$HOME/Immagini"')
+    (home / "Immagini").mkdir()
+    assert agent.screenshot_dir(str(home / "mine")) == home / "mine" and (home / "mine").is_dir()
