@@ -8,14 +8,9 @@
 3. `.github/workflows/release.yml` builds qvh, runs the tests, builds the Linux wheel
    (`scrcrappy-<version>-py3-none-manylinux_2_35_x86_64.whl`, qvh inside) and attaches it to the
    GitHub release. Linux users install it with `pipx install <wheel URL>`.
-4. Update the Homebrew formula by hand: in `packaging/scrcrappy.rb` set `url` to the tag's source tarball
-   and `sha256` to
-
-   ```sh
-   curl -sL https://github.com/atreb92/scrcrappy/archive/refs/tags/v<version>.tar.gz | sha256sum
-   ```
-
-   then copy the file to the tap repo (`atreb92/homebrew-scrcrappy`, `Formula/scrcrappy.rb`) and push.
-   Check on a Mac: `brew update && brew upgrade scrcrappy && scrcrappy --help`.
+4. The `homebrew` job in the workflow rewrites `url` and `sha256` in `packaging/scrcrappy.rb` and pushes it to the tap
+   repo (`atreb92/homebrew-scrcrappy`, `Formula/scrcrappy.rb`). It needs the repo secret `TAP_TOKEN`, a token with write
+   access to the tap. Untested: check the first run. By hand, set `url` and `sha256` (`curl -sL <tarball URL> | sha256sum`)
+   and copy the file to the tap. Check on a Mac: `brew update && brew upgrade scrcrappy && scrcrappy --help`.
 5. If qvh's pinned commit changes, update `COMMIT` in `scripts/build-qvh.sh` and the `qvh` resource's
    `revision` in the formula together.
