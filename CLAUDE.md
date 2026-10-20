@@ -23,7 +23,7 @@ BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor),
 - The user's daily copy is pipx: after changes `rm -rf build dist && pipx install --force .`.
 - qvh: `scripts/build-qvh.sh` → `scrcrappy/bin/qvh` (shipped in the package). It uses `git apply`, not
   `patch`: `~/.cargo/bin/patch` on this machine is not GNU patch and silently applies nothing.
-- Work on a branch, merge to `master` with `--no-ff` when the user says so; no remote yet.
+- Work on a branch, merge to `main` with `--no-ff` when the user says so.
 
 ## Phone gotchas (iPhone 8, iOS 16.7.1, Dopamine)
 
