@@ -318,6 +318,8 @@ class Settings:
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
         self.hover: str | None = None
         self.hover_since = 0.0
+        self.scroll = 0  # how far the panel is scrolled, when the window is shorter than it
+        self.default_folder = default_folder_label()  # once: it looks at the disk
         self.icons = pygame.font.Font(ICONS / "MaterialSymbolsRounded-outline.ttf", 18)
         self.text = {"port": cfg.port, "screenshots": cfg.screenshots}
         self.editing: str | None = None
@@ -375,22 +377,22 @@ class Settings:
             self._commit()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.close()
+        elif event.type == pygame.MOUSEWHEEL:
+            self.scroll = max(0, min(self.scroll - event.y * 30, self.height - self.rect.height))
         elif event.type == pygame.MOUSEMOTION:
             hit = self._hit(event.pos)
             if hit != self.hover:
                 self.hover, self.hover_since = hit, time.monotonic()
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            rect = self.rect
-            if rect.collidepoint(event.pos):
-                local = (event.pos[0] - rect.x, event.pos[1] - rect.y)
-                self._click(next((k for k, r in self.hits.items() if r.collidepoint(local)), None))
+            if self.rect.collidepoint(event.pos):
+                self._click(self._hit(event.pos))
             else:
                 self.close()  # on release: the press that started it never reached the phone either
         return event.type in INPUT
 
     def _hit(self, pos: tuple[int, int]) -> str | None:
         rect = self.rect
-        local = (pos[0] - rect.x, pos[1] - rect.y)
+        local = (pos[0] - rect.x, pos[1] - rect.y + self.scroll)
         return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
 
     def tip(self, now: float | None = None) -> str | None:
@@ -484,7 +486,8 @@ class Settings:
         screen.blit(dim, (0, 0))
         rect = self.rect
         surf = pygame.Surface((PANEL_W, self.height), pygame.SRCALPHA)
-        surf.blit(_glass(screen, rect), (0, 0))
+        self.scroll = max(0, min(self.scroll, self.height - rect.height))  # the window may have grown
+        surf.blit(_glass(screen, rect), (0, self.scroll))  # the glass belongs to the visible part
         surf.blit(self.head.render("Input", True, FG), (PAD, 14))
         tag = self.small.render("next launch", True, (0xF2, 0xB7, 0x05))
         tag_bg = tag.get_rect(topleft=(PAD + 50, 13)).inflate(10, 4)
@@ -504,7 +507,7 @@ class Settings:
             self._field(surf, "port", Config.port)
         self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
         surf.blit(self.head.render("Screenshots", True, FG), (PAD, self.shots_top))
-        self._field(surf, "screenshots", default_folder_label())
+        self._field(surf, "screenshots", self.default_folder)
         b = self.hits["browse"]
         pygame.draw.rect(surf, FIELD, b, border_radius=7)
         glyph = self.icons.render("\ue2c8", True, ACCENT)  # folder_open
@@ -525,10 +528,11 @@ class Settings:
             pygame.draw.rect(surf, ACCENT, c, border_radius=c.height // 2)
             label = self.small.render("Calibrate", True, (255, 255, 255))
             surf.blit(label, label.get_rect(center=c.center))
-        _round(surf, PANEL_R)
-        screen.blit(surf, rect.topleft, area=pygame.Rect(0, 0, rect.w, rect.h))
+        view = surf.subsurface(pygame.Rect(0, self.scroll, min(rect.w, surf.get_width()), rect.h))
+        _round(view, PANEL_R)
+        screen.blit(view, rect.topleft)
         if text := self.tip():
-            draw_tip(screen, self.small, text, self.hits[self.hover].move(rect.topleft), 260)
+            draw_tip(screen, self.small, text, self.hits[self.hover].move(rect.x, rect.y - self.scroll), 260)
 
 
 class Popups:

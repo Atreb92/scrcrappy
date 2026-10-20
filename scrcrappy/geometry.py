@@ -9,6 +9,8 @@ def aspect_size(frame: tuple[int, int], size: tuple[int, int], last: tuple[int, 
     """The window size, after a resize from `last` to `size`, whose image area (the window minus a `bar_h` strip at the
     bottom) has the frame's aspect ratio. The side the user dragged most is kept, the other follows."""
     w, h = size
+    if not frame[0] or not frame[1]:
+        return size
     if abs(w - last[0]) >= abs(h - last[1]):
         return w, max(1, round(w * frame[1] / frame[0])) + bar_h
     return max(1, round((h - bar_h) * frame[0] / frame[1])), h
@@ -17,6 +19,8 @@ def aspect_size(frame: tuple[int, int], size: tuple[int, int], last: tuple[int, 
 def reshaped_size(frame: tuple[int, int], size: tuple[int, int], bar_h: int) -> tuple[int, int]:
     """The window size for a new frame shape (first frame, phone rotated): the image area takes the frame's aspect and
     keeps its long side, so a rotation swaps width and height instead of shrinking the window."""
+    if not frame[0] or not frame[1]:
+        return size
     long_side = max(size[0], size[1] - bar_h)
     if frame[0] >= frame[1]:
         return long_side, max(1, round(long_side * frame[1] / frame[0])) + bar_h

@@ -184,14 +184,15 @@ def tilde(path: Path | str) -> str:
 
 def desktop_pictures_dir() -> Path | None:
     """The desktop's Pictures folder from ~/.config/user-dirs.dirs (XDG; localised, e.g. ~/Immagini), if it exists."""
-    config = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "user-dirs.dirs"
+    base = Path(os.environ.get("XDG_CONFIG_HOME", ""))
+    config = (base if base.is_absolute() else Path.home() / ".config") / "user-dirs.dirs"
     try:
-        text = config.read_text()
+        text = config.read_text(errors="replace")
     except OSError:
         return None
     if match := re.search(r'^XDG_PICTURES_DIR="?(.*?)"?\s*$', text, re.M):
-        path = Path(match.group(1).replace("$HOME", str(Path.home())))
-        return path if path.is_dir() else None
+        path = Path(re.sub(r"\$(?:\{HOME\}|HOME)(?=/|$)", lambda _: str(Path.home()), match.group(1)))
+        return path if path.is_absolute() and path.is_dir() else None  # a relative value would mean "the cwd"
     return None
 
 

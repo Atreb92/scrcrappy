@@ -122,7 +122,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip
-    main.minimum_size = (240, BAR_H + 150)
+    main.minimum_size = (PANEL_W + 2 * PANEL_MARGIN, BAR_H + 150)  # wide enough for the Settings panel
+    maximized = False  # from the window's own events: a maximized window must not be resized to our aspect
     last_size, shaped_for = main.size, None  # the size before the latest resize; the frame size the window was shaped for  # below this the image area would reach zero
     main.set_icon(pygame.image.load(ICONS / "scrcrappy.png"))  # rendered from icons/scrcrappy.svg
     pygame.key.stop_text_input()  # raw key events only, no IME
@@ -236,9 +237,9 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         return pygame.Rect((main.size[0] - size[0]) // 2, bar.top - PANEL_MARGIN - min(size[1], room), size[0], min(size[1], room))
 
     def reshape(target: tuple[int, int]) -> None:
-        """Resize the window to `target`, unless it is as big as the desktop (maximized, tiled): then it stays."""
+        """Resize the window to `target`, unless it is maximized or as big as the desktop: then it stays."""
         desktop = pygame.display.get_desktop_sizes()[0]
-        if target != main.size and main.size[0] < desktop[0] and main.size[1] < desktop[1]:
+        if target != main.size and not maximized and main.size[0] < desktop[0] and main.size[1] < desktop[1]:
             main.size = target
 
     def settings_changed() -> None:
@@ -335,6 +336,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     continue
                 if event.type == pygame.WINDOWCLOSE or event.type == pygame.QUIT:
                     return True
+                if event.type in (pygame.WINDOWMAXIMIZED, pygame.WINDOWRESTORED):
+                    maximized = event.type == pygame.WINDOWMAXIMIZED
                 if event.type in (pygame.WINDOWRESIZED, pygame.WINDOWSIZECHANGED):
                     if img and main.size != last_size:  # keep the phone's aspect ratio while the window is resized
                         reshape(aspect_size(img.get_size(), main.size, last_size, BAR_H))

@@ -170,8 +170,9 @@ class Bar:
 
     def handle(self, event: pygame.event.Event) -> bool:
         """Consume the mouse events that land on the strip; everything else goes on to the phone."""
-        if event.type == pygame.WINDOWLEAVE and getattr(event, "window", None) is self.main:
+        if event.type in (pygame.WINDOWLEAVE, pygame.WINDOWFOCUSLOST) and getattr(event, "window", None) is self.main:
             self.hover, self.tip_text = None, None
+            self.phone_press = False  # the release of a press on the phone may never come: the controller lets go too
             return False
         if event.type not in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
             return False

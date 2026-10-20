@@ -56,10 +56,10 @@ def pick_video_driver(env: Mapping[str, str], platform: str, x11: bool = False) 
     """SDL's video driver list for this session, or None to leave it to SDL: on Linux native Wayland when there is
     a Wayland session (X11 if that fails to start), X11 when asked for or when there is no Wayland. A
     SDL_VIDEODRIVER set by the user always wins."""
-    if platform != "linux" or "SDL_VIDEODRIVER" in env:
+    if platform != "linux" or env.get("SDL_VIDEODRIVER"):
         return None
     if x11:
-        return "x11" if env.get("DISPLAY") else None
+        return "x11"  # asked for: if there is no X server SDL says so, instead of quietly using Wayland
     if env.get("WAYLAND_DISPLAY"):
         return "wayland,x11"
     return "x11" if env.get("DISPLAY") else None
@@ -73,7 +73,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if driver := pick_video_driver(os.environ, sys.platform, args.x11):
         os.environ["SDL_VIDEODRIVER"] = driver
-    os.environ.setdefault("SDL_VIDEO_WAYLAND_WMCLASS", "scrcrappy")  # the Wayland app id (icon via scrcrappy.desktop)
+    for hint in ("SDL_VIDEO_WAYLAND_WMCLASS", "SDL_VIDEO_X11_WMCLASS"):
+        os.environ.setdefault(hint, "scrcrappy")  # the app id / WM class a scrcrappy.desktop entry matches
     cfg = config.load()  # flags win over saved settings for this run, without changing them
     args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
 

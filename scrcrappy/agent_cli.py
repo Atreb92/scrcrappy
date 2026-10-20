@@ -33,7 +33,9 @@ def listed(apps: list[dict]) -> list[dict]:
 
 def find_app(apps: list[dict], query: str) -> dict:
     """The app `query` means: a bundle id or a display name (any case), else a name that contains it, if that is one app."""
-    q = query.casefold()
+    q = query.strip().casefold()
+    if not q:
+        raise ValueError("say which app: a name or a bundle id")
     for matches in ([a for a in apps if a["id"].casefold() == q], [a for a in apps if a["name"].casefold() == q],
                     [a for a in apps if q in a["name"].casefold()]):
         if len(matches) == 1:

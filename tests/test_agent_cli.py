@@ -221,3 +221,10 @@ def test_open_url_errors_are_readable(monkeypatch, capsys):
     assert "nothing" in run(["--open-url", "foo://bar"], capsys)[1]["error"]
     FakePhone(monkeypatch, old_agent=True)
     assert "0.5.0" in run(["--open-url", "https://example.com"], capsys)[1]["error"]
+
+
+def test_find_app_needs_a_query():
+    apps = [{"id": "a.mail", "name": "Mail"}]
+    for query in ("", "  "):
+        with pytest.raises(ValueError, match="which app"):
+            agent_cli.find_app(apps, query)  # "" is in every name: it must not open the only app

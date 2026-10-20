@@ -228,3 +228,27 @@ def test_the_settings_folder_wins_and_is_created(home):
     user_dirs(home, 'XDG_PICTURES_DIR="$HOME/Immagini"')
     (home / "Immagini").mkdir()
     assert agent.screenshot_dir(str(home / "mine")) == home / "mine" and (home / "mine").is_dir()
+
+
+def test_odd_user_dirs_files_never_break_the_screenshot_folder(home):
+    config = home / ".config"
+    config.mkdir()
+    (home / "Immagini").mkdir()
+    # not UTF-8, plus a good line: still read
+    (config / "user-dirs.dirs").write_bytes(b'# \xff\xfe\nXDG_PICTURES_DIR="$HOME/Immagini"\n')
+    assert agent.screenshot_dir("") == home / "Immagini"
+    (config / "user-dirs.dirs").write_text('XDG_PICTURES_DIR="Immagini"\n')  # relative: ignored, never the cwd
+    assert agent.screenshot_dir("") == home
+    (home / "HOMEFOO").mkdir()
+    (config / "user-dirs.dirs").write_text('XDG_PICTURES_DIR="$HOMEFOO"\n')  # not the $HOME variable
+    assert agent.screenshot_dir("") == home
+    (config / "user-dirs.dirs").write_text('XDG_PICTURES_DIR="${HOME}/Immagini"\n')
+    assert agent.screenshot_dir("") == home / "Immagini"
+
+
+def test_a_relative_xdg_config_home_is_ignored(home, monkeypatch):
+    (home / ".config").mkdir()
+    (home / "Immagini").mkdir()
+    (home / ".config" / "user-dirs.dirs").write_text('XDG_PICTURES_DIR="$HOME/Immagini"\n')
+    monkeypatch.setenv("XDG_CONFIG_HOME", "relative/dir")
+    assert agent.screenshot_dir("") == home / "Immagini"  # falls back to ~/.config

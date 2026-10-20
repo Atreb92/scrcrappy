@@ -41,10 +41,12 @@
 - [x] Native Wayland by default in a Wayland session, X11 fallback / `--x11`; the right-click menu is an in-window overlay (only the Add/Edit dialog is a window).
 - [x] Wayland: the Add/Edit dialog works (confirmed by the user).
 - [ ] Wayland: the window icon comes from `packaging/scrcrappy.desktop` (app id `scrcrappy`; install steps in the README, untested); HiDPI / fractional scaling and compositors other than KDE not checked.
-- [ ] Settings panel isn't scrollable: a window shorter than about 430 px clips its bottom.
+- [x] Settings panel scrolls with the mouse wheel when the window is shorter than it.
 - [ ] Bar overflow: many custom buttons shrink the buttons; add an overflow menu.
 
 ## Housekeeping
+
+- [ ] MCP `calibrate` waits its full 120 s (holding the one-tool-at-a-time lock) if the window is closed during a run; have a failed post end the wait.
 
 - [ ] No test drives the main loop's event routing end to end (overlays → popups → bar → phone controller); only the pieces are tested.
 
