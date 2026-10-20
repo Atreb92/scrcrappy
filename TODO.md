@@ -6,10 +6,11 @@
 - [ ] Agent on the phone: check landscape taps land right (orientation 3/4 table in `geometry.py`), pinch, wheel swipe feel (`SWIPE`, hold before lift), screenshot upright in landscape.
 - [ ] Agent: pairing code is shown in the terminal only, not in the window.
 - [ ] Later (advanced): full terminal over SSH (OpenSSH on the phone, through `usbmux.connect(22)`).
-- [ ] Later: volume buttons and opening apps via scrcrappy-agent (Home / switcher / lock are on the toolbar).
+- [x] Opening apps via scrcrappy-agent 0.3.0 (`apps` / `open`): MCP `list_apps` / `open_app` and `scrcrappy agent --apps` / `--open`. Needs the 0.3.0 agent on the phone.
+- [ ] Later: volume buttons via scrcrappy-agent; an app launcher in the toolbar (Home / switcher / lock are there already).
 
 - [x] AI control, agent mode: `home`, `switcher` and `lock` tools.
-- [ ] AI control, later: single keys, pinch, "wait until the screen settles", opening apps, on-screen element lists (agent features needed for the last two).
+- [ ] AI control, later: single keys, pinch, "wait until the screen settles", on-screen element lists (agent feature needed for the last).
 - [ ] usbmuxd wedges (lockdown error -8) after scrcrappy's USB reset while the phone is locked; only unlocking / replugging helps. Investigate avoiding the reset or waiting for unlock.
 
 ## Usability

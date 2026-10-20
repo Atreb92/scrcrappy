@@ -12,7 +12,7 @@ from typing import Callable
 from . import actions
 from .calibrate import find_cursor, to_array
 from .agent import BUTTONS, HOME, LOCK, SWITCHER_GAP
-from .agent_cli import ERRORS
+from .agent_cli import ERRORS, find_app, listed
 from .config import Config
 from .mcp import PORT, McpServer, Tool, ToolError
 
@@ -21,6 +21,7 @@ SESSION_S = 30  # "AI in a session" = any request this recent
 RING_S = 0.6
 FINGER = 4  # AI touches: the window's own drags use 1-3
 REPLY_S = 35  # agent requests may wait 30 s for a prompt on the phone
+APP_SETTLE_S = 1.0  # after open_app: the agent replies before the app has drawn
 SETTLE_S = 0.35  # after the pointer stops: let the last video frames arrive (as calibrate does)
 POINTER_WAIT_S = 5  # after a calibration: the app rebuilds the pointer on the next frame
 MAX_MS = 10_000  # longest long-press / swipe: the user's input is paused meanwhile
@@ -110,6 +111,10 @@ class AiControl:
             nothing = {"type": "object", "properties": {}}
             found += [
                 Tool("clipboard", "The phone's clipboard text. Fails if the phone asks Allow Paste.", nothing, self.clipboard),
+                Tool("list_apps", "The apps the phone can open: name, bundle id and whether each is running.", nothing,
+                     self.list_apps),
+                Tool("open_app", "Open an app, like tapping its icon: by name (any case) or bundle id, see list_apps. "
+                     "Fails if the phone is locked.", _schema({"app": {"type": "string"}}), self.open_app),
                 Tool("home", "Press the Home button: go to the home screen.", nothing, self.home),
                 Tool("switcher", "Open the app switcher (Home pressed twice).", nothing, self.switcher),
                 Tool("lock", "Press the Lock button. The phone stays locked, and taps do nothing, until it is unlocked "
@@ -191,6 +196,18 @@ class AiControl:
 
     def clipboard(self, args: dict) -> list[dict]:
         return [{"type": "text", "text": self._call({"cmd": "clipboard_get"})["text"]}]
+
+    def list_apps(self, args: dict) -> list[dict]:
+        return [{"type": "text", "text": json.dumps(listed(self._call({"cmd": "apps"})["apps"]), ensure_ascii=False)}]
+
+    def open_app(self, args: dict) -> list[dict]:
+        try:
+            app = find_app(self._call({"cmd": "apps"})["apps"], str(args.get("app", "")))
+        except ValueError as e:
+            raise ToolError(str(e))
+        self._call({"cmd": "open", "id": app["id"]})
+        time.sleep(APP_SETTLE_S)
+        return [{"type": "text", "text": f"opened {app['name']}"}]
 
     def home(self, args: dict) -> list[dict]:
         return self._buttons(HOME)

@@ -11,6 +11,13 @@ from scrcrappy import agent_cli
 from scrcrappy.agent_client import Agent, encode_frame, read_frame
 
 
+APPS = [{"id": "com.apple.Preferences", "name": "Settings", "pid": 412}, {"id": "com.apple.mobilenotes", "name": "Notes"},
+        {"id": "com.apple.mobilesafari", "name": "Safari"}, {"id": "com.apple.mobileslideshow", "name": "Photos"},
+        {"id": "com.apple.Passbook", "name": "Wallet"}, {"id": "com.apple.mobilephone", "name": "Phone"},
+        {"id": "com.apple.MobileSMS", "name": "Messages"}, {"id": "com.apple.mobilemail", "name": "Mail"},
+        {"id": "com.apple.reminders", "name": "Reminders"}, {"id": "com.apple.mobiletimer", "name": "Clock"}]
+
+
 def png(w, h):
     buf = io.BytesIO()
     pygame.image.save(pygame.Surface((w, h)), buf, "x.png")
@@ -20,9 +27,10 @@ def png(w, h):
 class FakePhone:
     """Speaks the agent protocol on a socketpair; records every request."""
 
-    def __init__(self, monkeypatch, orientation=1, touch_ready=True, clipboard=None):
+    def __init__(self, monkeypatch, orientation=1, touch_ready=True, clipboard=None, open_error=None, old_agent=False):
         ours, phone = socket.socketpair()
         self.seen, self.orientation, self.touch_ready, self.clipboard = [], orientation, touch_ready, clipboard
+        self.open_error, self.old_agent = open_error, old_agent
         phone.sendall(encode_frame({"hello": 1, "nonce": "00" * 16, "addr": "127.0.0.1"}))
         threading.Thread(target=self.serve, args=(phone,), daemon=True).start()
         monkeypatch.setattr(agent_cli, "connect", lambda: Agent(ours))
@@ -43,6 +51,12 @@ class FakePhone:
                              touch_ready=self.touch_ready, fingers_down=0)
             elif cmd == "screenshot":
                 reply["png"] = png(750, 1334)
+            elif cmd in ("apps", "open") and self.old_agent:
+                reply = {"error": "unknown command"}
+            elif cmd == "apps":
+                reply["apps"] = APPS
+            elif cmd == "open" and self.open_error:
+                reply = {"error": self.open_error}
             elif cmd == "clipboard_get":
                 reply = {"ok": True, "text": self.clipboard} if self.clipboard is not None else {"error": "clipboard timeout"}
             phone.sendall(encode_frame(reply))
@@ -147,3 +161,41 @@ def test_one_action_per_call(monkeypatch):
     FakePhone(monkeypatch)
     with pytest.raises(SystemExit):
         agent_cli.main(["--home", "--lock"])
+
+
+def test_apps_lists_name_id_and_whether_it_runs(monkeypatch, capsys):
+    FakePhone(monkeypatch)
+    code, out = run(["--apps"], capsys)
+    assert code == 0 and out["apps"][0] == {"id": "com.apple.Preferences", "name": "Settings", "running": True}
+    assert out["apps"][1] == {"id": "com.apple.mobilenotes", "name": "Notes", "running": False}
+
+
+def test_open_takes_a_name_or_a_bundle_id(monkeypatch, capsys):
+    phone = FakePhone(monkeypatch)
+    assert run(["--open", "notes"], capsys) == (0, {"ok": True, "id": "com.apple.mobilenotes", "name": "Notes"})
+    phone = FakePhone(monkeypatch)
+    assert run(["--open", "com.apple.Preferences"], capsys)[1]["name"] == "Settings"
+    assert [m for m in phone.seen if m["cmd"] == "open"] == [{"cmd": "open", "id": "com.apple.Preferences"}]
+
+
+def test_open_unknown_or_ambiguous_app_fails_before_opening_anything(monkeypatch, capsys):
+    for query, words in (("Calendar", "no app"), ("m", "more than one")):  # "m": Messages, Mail, Safari...
+        phone = FakePhone(monkeypatch)
+        code, out = run(["--open", query], capsys)
+        assert code == 1 and words in out["error"]
+        assert not [m for m in phone.seen if m["cmd"] == "open"]
+
+
+def test_locked_phone_and_old_agent_have_readable_errors(monkeypatch, capsys):
+    FakePhone(monkeypatch, open_error="locked")
+    code, out = run(["--open", "Settings"], capsys)
+    assert code == 1 and "unlock" in out["error"]
+    FakePhone(monkeypatch, old_agent=True)
+    code, out = run(["--apps"], capsys)
+    assert code == 1 and "update" in out["error"] and "0.3.0" in out["error"]
+
+
+def test_find_app_prefers_exact_matches():
+    apps = [{"id": "a.mail", "name": "Mail"}, {"id": "a.mailbox", "name": "Mailbox"}]
+    assert agent_cli.find_app(apps, "mail")["id"] == "a.mail"  # exact name beats the substring match
+    assert agent_cli.find_app(apps, "a.mailbox")["name"] == "Mailbox"
