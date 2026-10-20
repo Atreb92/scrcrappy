@@ -14,7 +14,6 @@ BAR_H = 48
 TIP_GAP = 6  # between a tooltip and the strip
 NEEDS_INPUT = "Needs --mouse ble, esp32 or agent"
 LED_TIP = "AI control: green = waiting, yellow = an AI is working, red = AI acting (your input is paused)"
-COPY_TIP = "Not supported in Bluetooth mode"  # a Bluetooth keyboard/mouse can't read the phone's clipboard
 
 
 @dataclass
@@ -36,7 +35,7 @@ def next_free(customs: list[Custom]) -> int | None:
 def buttons(has_input: bool, customs: list[Custom], agent: bool = False,
             settings: bool = False, led: bool = False) -> list[Button | None]:
     """The bar's items left to right; None is a separator. With the agent (jailbreak): copy, screenshot and the
-    phone's buttons instead of the AssistiveTouch custom buttons."""
+    phone's buttons instead of the AssistiveTouch custom buttons; without it a screenshot of the video."""
     def action(id_, icon, tip):
         return Button(id_, icon, tip if has_input else NEEDS_INPUT, enabled=has_input)
 
@@ -51,7 +50,7 @@ def buttons(has_input: bool, customs: list[Custom], agent: bool = False,
         add = [action("add", "\ue145", "Add a button…")] if next_free(customs) is not None else []  # gone when all used
         middle = [
             paste,
-            Button("copy", "\ue14d", COPY_TIP, enabled=False),
+            Button("screenshot", "\uec08", "Save a screenshot"),  # of the video: no phone clipboard to copy here
             None,
             *(action(f"custom:{c.button}", c.icon,
                      f"{c.name or labels.get(c.icon, 'Custom')} (button {c.button}) · right-click to edit or remove")

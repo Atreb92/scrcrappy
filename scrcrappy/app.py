@@ -165,6 +165,20 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         pygame.scrap.put_text(ai.client_config(cfg))
         print("AI control: MCP config copied to the clipboard", file=sys.stderr)
 
+    def screenshot() -> None:
+        """Agent: the phone's own screen. Otherwise the video frame as mirrored."""
+        if agent and controller:
+            return controller.screenshot()
+        if not img:
+            return bar.toast("No video yet: no screenshot")
+        try:
+            path = agent_mod.save_screenshot(img, cfg.screenshots)
+        except (OSError, pygame.error) as e:
+            print(f"screenshot not saved: {e}", file=sys.stderr)
+            return bar.toast(f"Screenshot not saved: {e}")
+        print(f"screenshot saved: {path}", file=sys.stderr)
+        bar.toast(f"Screenshot saved: {agent_mod.tilde(path)}")
+
     def changed() -> None:
         save_or_warn(save, cfg)
         bar.set_items(items())
@@ -283,7 +297,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     bar = Bar(main, items(), {
         "paste": paste,
         "copy": lambda: controller.copy(),
-        "screenshot": lambda: controller.screenshot(),
+        "screenshot": screenshot,
         "home": lambda: controller.home(),
         "switcher": lambda: controller.switcher(),
         "lock": lambda: controller.lock(),

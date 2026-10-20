@@ -5,15 +5,13 @@ from scrcrappy.toolbar import BAR_H, buttons, hlayout, layout, next_free
 
 HOME, APPS = Custom(2, "\ue9b2", "Home"), Custom(3, "\ue8eb", "")
 
-COPY_TIP = "Not supported in Bluetooth mode"
 
 
 def test_buttons_order_and_copy_disabled():
     items = buttons(has_input=True, customs=[HOME, APPS])
-    assert [b.id if b else None for b in items] == ["paste", "copy", None, "custom:2", "custom:3", "add", None, "settings"]
-    copy = items[1]
-    assert not copy.enabled and copy.tip == COPY_TIP
-    assert all(b.enabled for b in items if b and b.id != "copy")
+    assert [b.id if b else None for b in items] == ["paste", "screenshot", None, "custom:2", "custom:3", "add", None, "settings"]
+    assert items[1].id == "screenshot"  # no phone clipboard to copy from in Bluetooth mode: a screenshot of the video instead
+    assert all(b.enabled for b in items if b)
     assert items[7].toggled is False and items[0].toggled is None  # settings: highlighted while open
 
 
@@ -109,3 +107,8 @@ def test_ui_font_has_every_character_we_draw():
         missing = font.render("\U0010fffd", True, (0, 0, 0))  # the "missing glyph" box
         for ch in "Aa0 ›…·é—":
             assert pygame.image.tobytes(font.render(ch, True, (0, 0, 0)), "RGBA") != pygame.image.tobytes(missing, "RGBA") or ch == " "
+
+
+def test_screenshot_works_without_an_input_mode():
+    by_id = {b.id: b for b in buttons(has_input=False, customs=[]) if b}
+    assert by_id["screenshot"].enabled and by_id["screenshot"].tip == "Save a screenshot"  # it only needs the video
