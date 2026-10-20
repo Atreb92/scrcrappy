@@ -54,3 +54,6 @@
 - [ ] No test drives the main loop's event routing end to end (overlays → popups → bar → phone controller); only the pieces are tested.
 
 - [ ] Laptop Bluetooth adapter was left `Pairable: yes` by early spikes (original value unknown).
+
+- [ ] Settings › "Forget paired phone" (ESP32 mode only): send the board a `p` line over the serial link it already holds, confirm first, toast on the board's `pairing` reply. Needs a mockup; build after the ESP32-C3 test confirms the one-phone pairing in `firmware/esp32-mouse` works (today: `echo p > /dev/ttyUSB0` with scrcrappy closed).
+- [ ] Laptop Bluetooth helper (`--mouse ble`) accepts every pairing while it runs and the bonds stay after exit; decide how to restrict it without re-pairing each run.
