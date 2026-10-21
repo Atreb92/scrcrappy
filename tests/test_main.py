@@ -99,7 +99,7 @@ def test_macos_skips_qvh_and_the_usb_reset(monkeypatch, capsys):
     monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
     monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
     monkeypatch.setattr(cli, "find_qvh", lambda flag: pytest.fail("macOS has no qvh"))
-    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev: pytest.fail("macOS never enters the QuickTime config"))
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: pytest.fail("macOS never enters the QuickTime config"))
     cap = type("Cap", (), {"poll": lambda self: 0, "log": "boom"})()
     monkeypatch.setattr(cli.video, "capture_avf", lambda frames, serial: contextlib.nullcontext(cap))
     monkeypatch.setattr(cli.app, "run", lambda *a, **k: False)

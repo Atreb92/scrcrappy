@@ -66,9 +66,11 @@ def serial_number(dev: usb.core.Device) -> str:
     return serial
 
 
-def reset_if_stuck(dev: usb.core.Device) -> None:
+def reset_if_stuck(dev: usb.core.Device, qvh: str) -> None:
     """qvh can't switch the phone back out of the QuickTime config on Linux (usbmuxd holds it),
-    and the next session then never gets the device's PING. A USB reset re-enumerates it."""
+    and the next session then never gets the device's PING. A USB reset re-enumerates it. Either way
+    usbmuxd then wins the race for the phone while qvh switches it to the QuickTime config, and that
+    first attempt fails: so let `qvh activate` lose that race here (it hangs afterwards, hence the timeout)."""
     try:
         cfg = dev.get_active_configuration()
     except usb.core.USBError:
@@ -77,6 +79,9 @@ def reset_if_stuck(dev: usb.core.Device) -> None:
         with contextlib.suppress(usb.core.USBError):  # device vanishes mid-call while resetting
             dev.reset()
         time.sleep(3)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        subprocess.run([qvh, "activate"], capture_output=True, timeout=6)
+    time.sleep(2)
 
 
 def publish(frame: av.VideoFrame, out: LatestFrame) -> None:

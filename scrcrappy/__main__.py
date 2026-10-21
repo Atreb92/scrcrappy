@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     serial = video.serial_number(dev)
     if not mac:
-        video.reset_if_stuck(dev)
+        video.reset_if_stuck(dev, qvh)
 
     make_pointer, keys, session, calibrator = None, None, None, None
     frames = video.LatestFrame()
