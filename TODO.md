@@ -22,6 +22,7 @@
 - [x] AssistiveTouch actions are now user-added custom buttons with in-app binding steps (+ on the toolbar).
 - [ ] Calibration (requested 2026-10-24): while it runs the Calibrate button becomes a red Cancel that stops the measurement and keeps the old table (needs a cancel flag in `calibrate.calibrate`, `Calibrator.cancel()`, and Settings staying open during the run); the user's mouse and keyboard must not reach the phone meanwhile (`controller` is already None during a run; check keys and the bar). Also while `controller` is None the bar's Copy / Home / Switcher / Lock actions call `controller.<x>()` unguarded in `app.py` (AttributeError if clicked mid-calibration).
 - [ ] Mouse wheel doesn't scroll iOS Settings lists (works in other apps). Investigate (wheel report size/pacing? AssistiveTouch scroll mode?).
+- [ ] Slow mouse movements make the pointer tracking fail (reported 2026-10-24, ESP32): the phone cursor drifts or stops following when the mouse moves slowly. Look at the small-delta end of the gain table in `mouse.py` (rounding of sub-count moves, `LENGTHS` starts at 1) and at how small moves are accumulated.
 - [ ] Long, mostly-vertical cursor moves land 5–10% short of the target. Options: calibrate the vertical axis too, or correct from the video (closed loop).
 - [ ] Paste types US layout, printable ASCII only; other characters are skipped. Other layouts / accented characters via Option dead keys.
 - [ ] Optional `--ctrl-as-cmd`: send Ctrl as Cmd so Ctrl+C/V/A work as iPhone shortcuts.
