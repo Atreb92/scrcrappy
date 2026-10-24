@@ -57,5 +57,6 @@
 
 - [ ] Laptop Bluetooth adapter was left `Pairable: yes` by early spikes (original value unknown).
 
-- [ ] Settings › "Forget paired phone" (ESP32 mode only): send the board a `p` line over the serial link it already holds, confirm first, toast on the board's `pairing` reply. Needs a mockup; build after the ESP32-C3 test confirms the one-phone pairing in `firmware/esp32-mouse` works (today: `echo p > /dev/ttyUSB0` with scrcrappy closed).
+- [x] Settings › ESP32 board section: status (connected / open to pairing / paired) and "Forget phone & allow pairing" (spec 2026-10-24). The phone name iOS gives the board is the generic `iPhone`, so the section also shows the address tail. Untested on -C3 / -S3.
+- [x] Buttons show hover and pressed states (bar, Settings, right-click menu). Not the Add/Edit dialog window or the mode selector.
 - [ ] Laptop Bluetooth helper (`--mouse ble`) accepts every pairing while it runs and the bonds stay after exit; decide how to restrict it without re-pairing each run.
