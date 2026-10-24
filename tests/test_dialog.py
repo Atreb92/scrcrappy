@@ -406,3 +406,43 @@ def test_tick_polls_once_a_second_only_while_open():
 
 def test_tick_without_a_board_is_harmless():
     board_panel(board=None).tick(1.0)
+
+
+def press(panel, key, kind=pygame.MOUSEBUTTONDOWN):
+    x, y = panel.hits[key].center
+    return panel.handle(pygame.event.Event(kind, button=1, pos=(x + panel.rect.x, y + panel.rect.y), window=panel.window))
+
+
+def test_settings_press_one_button_release_on_another_does_not_click():
+    calls = []
+    panel, _ = settings_panel(__import__("scrcrappy.config", fromlist=["Config"]).Config(), [], on_calibrate=lambda: calls.append(1),
+                              calibration=1.0)
+    press(panel, "calibrate")
+    assert panel.pressed == "calibrate"
+    press(panel, "natural", pygame.MOUSEBUTTONUP)
+    assert calls == [] and panel.pressed is None and not panel.closed
+
+
+def test_settings_press_and_release_on_the_same_button_clicks():
+    calls = []
+    panel, _ = settings_panel(__import__("scrcrappy.config", fromlist=["Config"]).Config(), [], on_calibrate=lambda: calls.append(1),
+                              calibration=1.0)
+    press(panel, "calibrate")
+    press(panel, "calibrate", pygame.MOUSEBUTTONUP)
+    assert calls == [1] and panel.pressed is None
+
+
+def test_menu_press_one_row_release_on_another_does_not_act():
+    calls = []
+    m, _ = menu_overlay(on_remove=lambda: calls.append("remove"), on_edit=lambda: calls.append("edit"))
+    m.handle(menu_event(m, pygame.MOUSEBUTTONDOWN, "edit"))
+    assert m.pressed == "edit"
+    m.handle(menu_event(m, pygame.MOUSEBUTTONUP, "remove"))
+    assert calls == [] and m.pressed is None
+
+
+def test_menu_pressed_cleared_on_focus_loss():
+    m, _ = menu_overlay()
+    m.handle(menu_event(m, pygame.MOUSEBUTTONDOWN, "edit"))
+    m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.window))
+    assert m.pressed is None
