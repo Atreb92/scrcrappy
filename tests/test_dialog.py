@@ -528,3 +528,11 @@ def test_cancel_button_is_red_and_calibrate_is_blue():
 
     red, blue = centre_colour(True), centre_colour(False)
     assert red[0] > red[2] + 80 and blue[2] > blue[0] + 80
+
+
+def test_calibration_number_follows_a_finished_run():
+    from scrcrappy.config import Config
+    panel, _ = settings_panel(Config(), [], calibration=1.0)
+    panel.set_calibration(2.5)
+    assert any("2.50" in line for line in panel.calibration_lines)
+    assert panel.rect.height == panel.height

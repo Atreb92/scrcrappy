@@ -98,10 +98,17 @@ class Calibrator:
         """Screen px per count for a medium report (12 counts): the one number Settings shows."""
         return Gain(load(self.serial))(12)
 
-    def run(self) -> None:
-        """Measure and save; raises Cancelled (saving nothing) after `cancel()`."""
+    def begin(self) -> None:
+        """Forget an earlier cancel; the app calls this on its own thread just before starting the worker, so a
+        Cancel clicked right after the start can't be erased by the worker."""
         self._cancel.clear()
-        save(self.serial, calibrate(self.send, self.frames, self._cancel))
+
+    def run(self) -> None:
+        """Measure and save; raises Cancelled (saving nothing) after `cancel()`, even one during the last measurement."""
+        table = calibrate(self.send, self.frames, self._cancel)
+        if self._cancel.is_set():
+            raise Cancelled()
+        save(self.serial, table)
 
     def cancel(self) -> None:
         self._cancel.set()

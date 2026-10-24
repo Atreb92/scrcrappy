@@ -353,8 +353,7 @@ class Settings:
             window, where, cfg, on_change, on_natural, on_close)
         self.on_calibrate, self.on_ai, self.ai_status, self.on_copy = on_calibrate, on_ai, ai_status, on_copy
         self.font, self.small, self.head = ui_font(14), ui_font(12), ui_font(14, True)
-        self.calibration_lines = [] if calibration is None else _wrap(
-            f"Current: {calibration:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
+        self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
         self.connected, self.calibrating, self.on_cancel = connected, calibrating, on_cancel
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
@@ -447,6 +446,14 @@ class Settings:
         rect = self.rect
         local = (pos[0] - rect.x, pos[1] - rect.y + self.scroll)
         return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
+
+    def _calibration_lines(self, value: float) -> list[str]:
+        return _wrap(f"Current: {value:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
+
+    def set_calibration(self, value: float) -> None:
+        """A run just finished: show its number (the panel stays open while it runs)."""
+        self.calibration_lines = self._calibration_lines(value)
+        self._relayout()
 
     def confirming(self, now: float | None = None) -> bool:
         return (time.monotonic() if now is None else now) < self.confirm_until

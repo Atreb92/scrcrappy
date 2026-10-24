@@ -244,6 +244,9 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch, 
         def value(self):
             return 1.86
 
+        def begin(self):
+            pass
+
         def run(self):
             runs.append(len(pointers))  # pointers built so far when the measurement runs
             if failure == "cancelled":
@@ -294,6 +297,9 @@ def test_bar_actions_do_nothing_while_calibrating(monkeypatch):
     class SlowCalibrator:
         def value(self):
             return 1.86
+
+        def begin(self):
+            pass
 
         def run(self):
             gate.wait(2)
@@ -466,3 +472,67 @@ def test_window_enter_is_paused_while_the_ai_acts():
     from scrcrappy.app import paused
     assert paused(pygame.event.Event(pygame.WINDOWENTER), True)  # else the pointer homes mid-press
     assert not paused(pygame.event.Event(pygame.WINDOWENTER), False)
+
+
+def test_cancel_reaches_the_calibrator_even_while_an_ai_tool_holds_the_lock(monkeypatch):
+    """An AI-started calibration locks the user's input out; the red Cancel must still work (and toast)."""
+    import os
+    import threading
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module, calibrate
+    from scrcrappy.toolbar import Bar
+    from scrcrappy.video import LatestFrame
+
+    bars, panels, pointers, cancelled = [], [], [], threading.Event()
+
+    class WaitingCalibrator:
+        def value(self):
+            return 1.86
+
+        def begin(self):
+            cancelled.clear()
+
+        def cancel(self):
+            cancelled.set()
+
+        def run(self):
+            if cancelled.wait(3):
+                raise calibrate.Cancelled()
+
+    orig_bar, orig_settings = Bar.__init__, app_module.Settings.__init__
+
+    def bar_init(self, *a, **kw):
+        orig_bar(self, *a, **kw)
+        bars.append(self)
+
+    def settings_init(self, *a, **kw):
+        orig_settings(self, *a, **kw)
+        panels.append(self)
+        self._click("calibrate")
+
+    monkeypatch.setattr(Bar, "__init__", bar_init)
+    monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
+    monkeypatch.setattr(app_module.ai_mod.AiControl, "locked", lambda self: True)
+    frames, t0, loops = LatestFrame(), time.time(), []
+
+    def make_pointer(size):
+        pointers.append(FakePointer())
+        return pointers[-1]
+
+    def alive():
+        loops.append(1)
+        if len(loops) == 3:
+            bars[0].actions["settings"]()
+        if len(loops) == 6:
+            p = panels[0]
+            x, y = p.hits["calibrate"].center
+            pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, window=p.window,
+                                                 pos=(p.rect.x + x, p.rect.y + y - p.scroll)))
+        if len(loops) <= 3:
+            frames.put((bytes(30 * 60 * 3), (30, 60), 90))
+        return time.time() - t0 < 1.5
+
+    app_module.run(frames, alive, make_pointer=make_pointer, calibrator=WaitingCalibrator(), save=lambda c: None)
+    assert cancelled.is_set() and bars[0].toast_text == "Calibration cancelled"
+    assert len(pointers) == 2  # rebuilt after the cancel

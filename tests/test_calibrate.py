@@ -23,5 +23,15 @@ def test_a_cancel_before_the_run_does_not_leak_into_it(monkeypatch, tmp_path):
     c = calibrate.Calibrator("abc", send=lambda *a: None, frames=None)
     monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, cancel=None: {12: 2.5})
     c.cancel()
+    c.begin()  # the app calls this on its own thread before starting the worker
     c.run()
     assert calibrate.load("abc")[12.0] == 2.5
+
+
+def test_a_cancel_during_the_final_measurement_saves_nothing(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    c = calibrate.Calibrator("abc", send=lambda *a: None, frames=None)
+    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, cancel=None: (c.cancel(), {12: 2.5})[1])
+    with pytest.raises(calibrate.Cancelled):
+        c.run()
+    assert not calibrate.gain_path("abc").exists()

@@ -264,6 +264,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             controller.release_all()
             controller.stop()
         controller, calibrating = None, True
+        calibrator.begin()
         main.title = f"{title} — calibrating, don't touch the mouse…"
 
         def work() -> None:
@@ -291,6 +292,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             print(f"calibration failed: {error}", file=sys.stderr)
         elif error:
             bar.toast("Calibration cancelled")
+        elif settings and not settings.closed and calibrator:
+            settings.set_calibration(calibrator.value())
         if on_done:
             on_done(error)
 
@@ -347,7 +350,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 if event.type == pygame.USEREVENT and hasattr(event, "run"):
                     event.run()  # an agent reply, handled on this thread
                     continue
-                if paused(event, ai.locked()):  # checked per event: the lock starts the moment a tool does
+                if paused(event, ai.locked() and not calibrating):  # per event: the lock starts the moment a tool does; Cancel must work during an AI-started calibration
                     continue
                 if any(o and o.handle(event) for o in (settings, context_menu)) or popups.handle(event) or bar.handle(event):
                     continue
