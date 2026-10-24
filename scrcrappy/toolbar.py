@@ -100,6 +100,12 @@ def ui_font(size: int, bold: bool = False) -> pygame.font.Font:
 BG, FG, ON_BG, ON_FG, DISABLED, SEP = (28, 28, 30), (232, 232, 238), (96, 96, 104), (255, 255, 255), (110, 110, 118), (72, 72, 78)
 EDGE = (62, 62, 66)  # hairline on top of the bar
 HOVER = (255, 255, 255, 30)
+
+
+def shade(colour: tuple[int, int, int], hover: bool, pressed: bool) -> tuple[int, int, int]:
+    """`colour` as a button fill: lighter under the mouse, darker while pressed."""
+    f = 0.7 if pressed else 1.18 if hover else 1.0
+    return tuple(min(255, int(c * f)) for c in colour)
 TIP_BG, TIP_FG = (58, 58, 62), (242, 242, 247)
 TIP_DELAY, TIP_WIDTH = 0.5, 220
 
@@ -130,6 +136,7 @@ class Bar:
         self.main, self.actions = main, actions
         self._fonts: dict[tuple[bool, int], pygame.font.Font] = {}  # per instance: fonts die with pygame.quit()
         self.hover: Button | None = None
+        self.pressed: Button | None = None  # the button the left mouse button went down on
         self.hover_since = 0.0
         self.tip_text: str | None = None
         self.tip_hidden = False  # after a press: no tooltip until the mouse reaches another button
@@ -171,7 +178,7 @@ class Bar:
     def handle(self, event: pygame.event.Event) -> bool:
         """Consume the mouse events that land on the strip; everything else goes on to the phone."""
         if event.type in (pygame.WINDOWLEAVE, pygame.WINDOWFOCUSLOST) and getattr(event, "window", None) is self.main:
-            self.hover, self.tip_text = None, None
+            self.hover, self.tip_text, self.pressed = None, None, None
             self.phone_press = False  # the release of a press on the phone may never come: the controller lets go too
             return False
         if event.type not in (pygame.MOUSEMOTION, pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
@@ -187,6 +194,8 @@ class Bar:
         if event.pos[1] < self.top:
             if event.type == pygame.MOUSEMOTION:
                 self.hover, self.tip_text = None, None
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                self.pressed = None  # dragged off the strip: the press is over, no click
             return False
         if event.type == pygame.MOUSEMOTION:
             hit = self._hit(event.pos)
@@ -194,11 +203,17 @@ class Bar:
                 self.hover, self.hover_since, self.tip_text, self.tip_hidden = hit, time.monotonic(), None, False
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self.tip_text, self.tip_hidden = None, True  # a menu or panel may open right where the tooltip is
-        elif event.type == pygame.MOUSEBUTTONUP and (hit := self._hit(event.pos)):
             if event.button == 1:
-                self._click(hit)
-            elif event.button == 3 and hit.id.startswith("custom:"):
-                self.actions["menu"](int(hit.id[7:]))
+                self.pressed = self._hit(event.pos)
+        elif event.type == pygame.MOUSEBUTTONUP:
+            pressed = self.pressed
+            if event.button == 1:
+                self.pressed = None
+            if hit := self._hit(event.pos):
+                if event.button == 1 and pressed in (None, hit):  # released elsewhere than pressed: no click
+                    self._click(hit)
+                elif event.button == 3 and hit.id.startswith("custom:"):
+                    self.actions["menu"](int(hit.id[7:]))
         return True
 
     def _click(self, button: Button) -> None:
@@ -234,6 +249,9 @@ class Bar:
                 overlay = pygame.Surface(rect.size, pygame.SRCALPHA)
                 pygame.draw.circle(overlay, HOVER, (rect.width // 2, rect.height // 2), rect.width // 2)
                 surf.blit(overlay, rect)
+                if item is self.pressed:  # darker and a pixel smaller than the hover disc
+                    pygame.draw.circle(overlay, (0, 0, 0, 110), (rect.width // 2, rect.height // 2), rect.width // 2 - 1)
+                    surf.blit(overlay, rect)
             color = DISABLED if not item.enabled else ON_FG if item.toggled else FG
             glyph = self.icon_font(bool(item.toggled), max(8, int(rect.width * 0.6))).render(item.icon, True, color)
             surf.blit(glyph, glyph.get_rect(center=rect.center))

@@ -6,7 +6,7 @@ import pygame
 import pytest
 
 from scrcrappy.config import ICON_CHOICES, Custom
-from scrcrappy.dialog import Dialog, DialogState
+from scrcrappy.dialog import PANEL_W, Dialog, DialogState
 
 
 @pytest.fixture(autouse=True)
@@ -325,3 +325,178 @@ def test_settings_scrolls_in_a_window_shorter_than_the_panel():
     assert calls == [1]
     screen = pygame.Surface((300, 400))
     panel.draw(screen, 352)  # draws the scrolled view without error
+
+
+class FakeBoard:
+    """The parts of links.Link the Settings board section reads."""
+
+    def __init__(self, paired=True, peer=("3F:A2", "iPhone"), connected=True, last_seen=100.0):
+        import threading
+        self.paired, self.peer, self.last_seen = paired, peer, last_seen
+        self.connected = threading.Event()
+        if connected:
+            self.connected.set()
+        self.queries = self.forgets = 0
+
+    def query(self):
+        self.queries += 1
+
+    def forget(self):
+        self.forgets += 1
+
+
+def test_board_status_rows():
+    from scrcrappy.dialog import board_status
+    assert board_status(FakeBoard(), 101) == ("green", "Connected to iPhone (…3F:A2)")
+    assert board_status(FakeBoard(peer=("3F:A2", "")), 101) == ("green", "Connected (…3F:A2)")
+    assert board_status(FakeBoard(peer=None), 101) == ("green", "Connected")
+    assert board_status(FakeBoard(connected=False), 101) == ("grey", "Paired, not connected")
+    assert board_status(FakeBoard(paired=False, peer=None, connected=False), 101) == ("blue", "Open to pairing")
+    assert board_status(FakeBoard(paired=None, peer=None, connected=False), 101) == ("grey", "Reflash the board for status")
+    assert board_status(FakeBoard(), 103) == ("grey", "Board not answering")  # 3 s of silence
+
+
+def test_board_status_name_is_cleaned_and_truncated():
+    from scrcrappy.dialog import board_status
+    text = board_status(FakeBoard(peer=("3F:A2", "A\x07B" + "x" * 200)), 101)[1]
+    assert "\x07" not in text and "…3F:A2" in text and len(text) < 60
+
+
+def board_panel(mode="esp32", board=None):
+    from scrcrappy.config import Config
+    cfg = Config()
+    cfg.mouse = mode
+    return settings_panel(cfg, [], board=board)[0]
+
+
+def test_board_section_follows_the_board_not_the_saved_mode():
+    assert "forget" in board_panel(board=FakeBoard()).hits
+    assert "forget" not in board_panel(board=None).hits
+    assert "forget" in board_panel(mode="ble", board=FakeBoard()).hits  # launched with --mouse esp32, saved mode differs
+
+
+def test_forget_needs_two_clicks_within_three_seconds(monkeypatch):
+    from scrcrappy import dialog
+    clock = [50.0]
+    monkeypatch.setattr(dialog.time, "monotonic", lambda: clock[0])
+    board = FakeBoard()
+    panel = board_panel(board=board)
+    click(panel, "forget")
+    assert board.forgets == 0 and panel.confirming()
+    clock[0] += 3.5  # too late: starts over
+    assert not panel.confirming()
+    click(panel, "forget")
+    assert board.forgets == 0
+    clock[0] += 1
+    click(panel, "forget")
+    assert board.forgets == 1 and not panel.confirming()
+
+
+def test_tick_polls_once_a_second_only_while_open():
+    board = FakeBoard()
+    panel = board_panel(board=board)
+    panel.tick(10.0)
+    panel.tick(10.5)
+    panel.tick(11.1)
+    assert board.queries == 2
+    panel.close()
+    panel.tick(20.0)
+    assert board.queries == 2
+
+
+def test_tick_without_a_board_is_harmless():
+    board_panel(board=None).tick(1.0)
+
+
+def press(panel, key, kind=pygame.MOUSEBUTTONDOWN):
+    x, y = panel.hits[key].center
+    return panel.handle(pygame.event.Event(kind, button=1, pos=(x + panel.rect.x, y + panel.rect.y), window=panel.window))
+
+
+def test_settings_press_one_button_release_on_another_does_not_click():
+    calls = []
+    panel, _ = settings_panel(__import__("scrcrappy.config", fromlist=["Config"]).Config(), [], on_calibrate=lambda: calls.append(1),
+                              calibration=1.0)
+    press(panel, "calibrate")
+    assert panel.pressed == "calibrate"
+    press(panel, "natural", pygame.MOUSEBUTTONUP)
+    assert calls == [] and panel.pressed is None and not panel.closed
+
+
+def test_settings_press_and_release_on_the_same_button_clicks():
+    calls = []
+    panel, _ = settings_panel(__import__("scrcrappy.config", fromlist=["Config"]).Config(), [], on_calibrate=lambda: calls.append(1),
+                              calibration=1.0)
+    press(panel, "calibrate")
+    press(panel, "calibrate", pygame.MOUSEBUTTONUP)
+    assert calls == [1] and panel.pressed is None
+
+
+def test_menu_press_one_row_release_on_another_does_not_act():
+    calls = []
+    m, _ = menu_overlay(on_remove=lambda: calls.append("remove"), on_edit=lambda: calls.append("edit"))
+    m.handle(menu_event(m, pygame.MOUSEBUTTONDOWN, "edit"))
+    assert m.pressed == "edit"
+    m.handle(menu_event(m, pygame.MOUSEBUTTONUP, "remove"))
+    assert calls == [] and m.pressed is None
+
+
+def test_menu_pressed_cleared_on_focus_loss():
+    m, _ = menu_overlay()
+    m.handle(menu_event(m, pygame.MOUSEBUTTONDOWN, "edit"))
+    m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.window))
+    assert m.pressed is None
+
+
+def test_board_status_silence_counts_from_when_settings_opened():
+    from scrcrappy.dialog import board_status
+    stale = FakeBoard(last_seen=10.0)
+    assert board_status(stale, 100.0)[1] == "Board not answering"
+    assert board_status(stale, 100.0, opened=99.5)[1] == "Connected to iPhone (…3F:A2)"  # the reply to our '?' is on its way
+
+
+def test_board_status_long_name_keeps_the_id_visible():
+    from scrcrappy.dialog import board_status
+    board = FakeBoard(peer=("6F:BF", "Alessandro’s iPhone"))
+    text = board_status(board, 101, fits=lambda t: len(t) <= 30)[1]
+    assert len(text) <= 30 and text.endswith("(…6F:BF)") and "…" in text.split("(")[0]
+
+
+def test_status_text_fits_the_panel_in_pixels():
+    panel = board_panel(board=FakeBoard(peer=("6F:BF", "Alessandro’s iPhone with a very long name")))
+    text = panel.board_text(panel.opened_at + 0.5)[1]
+    assert panel.small.size(text)[0] <= PANEL_W - 2 * 16 - 18 and text.endswith("(…6F:BF)")
+
+
+def test_status_holds_while_a_snapshot_is_arriving():
+    panel = board_panel(board=FakeBoard(last_seen=50.0))
+    now = panel.opened_at + 1
+    panel.board.last_seen = now - 1
+    first = panel.board_text(now)
+    panel.board.paired, panel.board.peer = None, None  # the 'ready' of a new snapshot has just reset them
+    panel.board.connected.clear()
+    panel.board.last_seen = now - 0.01
+    assert panel.board_text(now) == first
+    assert panel.board_text(now + 0.5) != first  # a snapshot that never completes does show
+
+
+def test_calibrate_is_disabled_without_a_bluetooth_connection():
+    from scrcrappy.config import Config
+    started = []
+    panel, closed = settings_panel(Config(), [], calibration=1.5, on_calibrate=lambda: started.append(1),
+                                   connected=lambda: False)
+    click(panel, "calibrate")
+    assert started == [] and not closed and not panel.closed
+    panel.hover, panel.hover_since = "calibrate", 0.0
+    assert "connect" in panel.tip(now=100.0).lower()
+
+
+def test_calibrate_works_once_connected():
+    from scrcrappy.config import Config
+    state, started = [False], []
+    panel, _ = settings_panel(Config(), [], calibration=1.5, on_calibrate=lambda: started.append(1),
+                              connected=lambda: state[0])
+    click(panel, "calibrate")
+    state[0] = True
+    click(panel, "calibrate")
+    assert started == [1]

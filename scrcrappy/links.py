@@ -3,12 +3,15 @@
 host -> device: "dx dy buttons wheel" (mouse report), "k modifiers k1..k6" (keyboard report: modifier
                 bits + up to 6 held key usages, 0 = none), "?" (status query); reports are sent at once
 device -> host: "ready" (advertising), "connected" (phone subscribed to reports)
+ESP32 firmware only: "?" answers a snapshot ("ready", "unpaired" | "paired <id>", while connected "connected" and
+"peer <id> <name>"), "p" forgets the phone ("pairing"), "disconnected" when the phone goes
 """
 import os
 import select
 import subprocess
 import termios
 import threading
+import time
 import tty
 from pathlib import Path
 from typing import Callable
@@ -16,9 +19,12 @@ from typing import Callable
 
 class Link:
     def __init__(self, write: Callable[[bytes], object], read: Callable[[], bytes],
-                 close: Callable[[], object] = lambda: None) -> None:
+                 close: Callable[[], object] = lambda: None, on_pairing: Callable[[], None] | None = None) -> None:
         self.ready, self.connected = threading.Event(), threading.Event()
-        self._write, self.close = write, close
+        self._write, self.close, self.on_pairing = write, close, on_pairing
+        self.paired: bool | None = None  # ESP32 firmware's last snapshot; None = unknown (old firmware, or not yet answered)
+        self.peer: tuple[str, str] | None = None  # (id, name) of the connected phone
+        self.last_seen = 0.0  # time.monotonic() of the last line from the device
 
         def reader() -> None:
             buf = b""
@@ -26,11 +32,36 @@ class Link:
                 while chunk := read():
                     *lines, buf = (buf + chunk).split(b"\n")
                     for line in lines:
-                        {b"ready": self.ready, b"connected": self.connected}.get(line.strip(), threading.Event()).set()
+                        self._line_in(line.strip().decode(errors="replace"))
             except OSError:
                 pass  # port closed / device unplugged
 
         threading.Thread(target=reader, daemon=True).start()
+
+    def _line_in(self, line: str) -> None:
+        self.last_seen = time.monotonic()
+        word, _, rest = line.partition(" ")
+        if word == "ready":  # also the first line of every "?" snapshot: the lines after it fill the state again
+            self.paired, self.peer = None, None
+            self.connected.clear()
+            self.ready.set()
+        elif word == "connected":
+            self.connected.set()
+        elif word == "disconnected":
+            self.connected.clear()
+        elif word in ("paired", "unpaired"):
+            self.paired = word == "paired"
+        elif word == "peer":
+            id_, _, name = rest.partition(" ")
+            self.peer = (id_, name.strip())
+        elif word == "pairing" and self.on_pairing:
+            self.on_pairing()
+
+    def query(self) -> None:
+        self._line("?")
+
+    def forget(self) -> None:
+        self._line("p")
 
     def send(self, dx: int, dy: int, buttons: int, wheel: int) -> None:
         self._line(f"{dx} {dy} {buttons} {wheel}")

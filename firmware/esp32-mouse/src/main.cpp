@@ -3,9 +3,11 @@
 //   in:  "dx dy buttons wheel"        mouse report (dx/dy/wheel -127..127)
 //        "k modifiers k1 .. k6"       keyboard report: modifier bits + held key usages (0 = none)
 //        "?"                          status query
-//        "p"                          forget the paired phone and let a new one pair (pairing is otherwise
-//                                     closed once a phone is bonded)
-//   out: "ready" (advertising), "connected" (phone subscribed to reports)
+//        "p"                          forget the paired phone (dropping it if connected) and let a new one pair
+//                                     (pairing is otherwise closed once a phone is bonded)
+//   out: "ready" (advertising), "connected" (phone subscribed to reports), "disconnected" (phone gone),
+//        "pairing" (answer to "p"). "?" answers a snapshot: "ready", "unpaired" | "paired <id>", and while a phone
+//        is connected "connected" and "peer <id> <name>" (id = last two bytes of its address, name = its GAP name)
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <NimBLEHIDDevice.h>
@@ -33,6 +35,22 @@ static NimBLECharacteristic* keyboard;
 static bool subscribed = false;
 static bool pairing = true;  // open until the first phone bonds, and again after "p"
 static NimBLEServer* server;
+static char peerId[8] = "";    // "3F:A2": the connected phone, or the bonded one when none is connected
+static char peerName[64] = "";  // GAP Device Name of the connected phone, "" if unknown
+
+static void idOf(const NimBLEAddress& a, char* out) {
+    const uint8_t* v = a.getVal();  // least significant byte first
+    snprintf(out, 8, "%02X:%02X", v[1], v[0]);
+}
+
+static int nameCb(uint16_t, const struct ble_gatt_error* e, struct ble_gatt_attr* a, void*) {
+    if (e->status == 0 && a && a->om) {
+        memset(peerName, 0, sizeof(peerName));
+        os_mbuf_copydata(a->om, 0, min((int)OS_MBUF_PKTLEN(a->om), (int)sizeof(peerName) - 1), peerName);
+        for (char* c = peerName; *c; c++) if (*c == '\n' || *c == '\r') *c = ' ';
+    }
+    return 0;
+}
 
 class ReportCallbacks : public NimBLECharacteristicCallbacks {
     void onSubscribe(NimBLECharacteristic*, NimBLEConnInfo&, uint16_t subValue) override {
@@ -42,8 +60,15 @@ class ReportCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class ServerCallbacks : public NimBLEServerCallbacks {
-    void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override { subscribed = false; }
+    void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override {
+        subscribed = false;
+        peerName[0] = 0;
+        Serial.println("disconnected");
+    }
     void onAuthenticationComplete(NimBLEConnInfo& info) override {
+        idOf(info.getIdAddress(), peerId);
+        ble_uuid16_t gap = BLE_UUID16_INIT(0x2A00);  // the phone's Device Name
+        ble_gattc_read_by_uuid(info.getConnHandle(), 1, 0xffff, &gap.u, nameCb, nullptr);
         if (!info.isBonded()) return;
         if (pairing || NimBLEDevice::getNumBonds() <= 1) {  // the one phone we pair with
             pairing = false;
@@ -87,6 +112,12 @@ void setup() {
 void loop() {
     static char line[48];
     static size_t len = 0;
+    static uint32_t checked = 0;
+    if (millis() - checked > 500) {  // advertising must never stay off while no phone is connected (it did after "p")
+        checked = millis();
+        NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+        if (!server->getConnectedCount() && !adv->isAdvertising()) adv->start();
+    }
     while (Serial.available()) {
         char c = Serial.read();
         if (c != '\n') {
@@ -97,11 +128,22 @@ void loop() {
         len = 0;
         if (line[0] == '?') {
             Serial.println("ready");
-            if (subscribed) Serial.println("connected");
+            if (NimBLEDevice::getNumBonds() == 0) {
+                Serial.println("unpaired");
+            } else {
+                char id[8];
+                idOf(NimBLEDevice::getBondedAddress(0), id);
+                Serial.printf("paired %s\n", id);
+            }
+            if (subscribed) {
+                Serial.println("connected");
+                Serial.printf("peer %s %s\n", peerId, peerName);
+            }
             continue;
         }
         if (line[0] == 'p') {
             NimBLEDevice::deleteAllBonds();
+            if (server->getConnectedCount()) server->disconnect(server->getPeerInfo(0).getConnHandle());
             pairing = true;
             Serial.println("pairing");
             continue;

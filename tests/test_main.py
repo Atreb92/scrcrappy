@@ -99,9 +99,36 @@ def test_macos_skips_qvh_and_the_usb_reset(monkeypatch, capsys):
     monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
     monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
     monkeypatch.setattr(cli, "find_qvh", lambda flag: pytest.fail("macOS has no qvh"))
-    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev: pytest.fail("macOS never enters the QuickTime config"))
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: pytest.fail("macOS never enters the QuickTime config"))
     cap = type("Cap", (), {"poll": lambda self: 0, "log": "boom"})()
     monkeypatch.setattr(cli.video, "capture_avf", lambda frames, serial: contextlib.nullcontext(cap))
     monkeypatch.setattr(cli.app, "run", lambda *a, **k: False)
     assert cli.main(["--mouse", "none"]) == 1
     assert "boom" in capsys.readouterr().err
+
+
+def test_window_opens_without_a_connected_phone(monkeypatch, capsys):
+    """The ESP32 section of Settings is how you pair, so the window must not wait for the phone's Bluetooth."""
+    import contextlib
+    import threading
+
+    class NeverConnected:
+        connected = threading.Event()
+
+        def send(self, *a): pass
+        def send_keys(self, *a): pass
+        def close(self): pass
+
+    ran = threading.Event()
+    cap = type("Cap", (), {"poll": lambda self: None, "log": ""})()
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
+    monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: None)
+    monkeypatch.setattr(cli.video, "capture", lambda qvh, frames: contextlib.nullcontext(cap))
+    monkeypatch.setattr(cli.links, "esp32", lambda port: NeverConnected())
+    monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
+    t = threading.Thread(target=cli.main, args=(["--qvh", TRUE, "--mouse", "esp32"],), daemon=True)
+    t.start()
+    t.join(4)
+    assert ran.is_set() and not t.is_alive()
+    assert "Bluetooth" in capsys.readouterr().err

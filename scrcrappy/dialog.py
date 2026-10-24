@@ -9,7 +9,7 @@ import pygame
 
 from .config import ICON_CHOICES, Config, Custom
 from .agent import screenshot_dir, tilde
-from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, TIP_DELAY, draw_tip, ui_font
+from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, TIP_DELAY, draw_tip, shade, ui_font
 
 SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (10, 132, 255)  # iOS dark
 FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (68, 68, 74), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
@@ -178,6 +178,7 @@ class Menu:
         self.height = 78 + 15 * len(self.note)
         self.closed = False
         self.hover: str | None = None
+        self.pressed: str | None = None  # the row the left mouse button went down on
 
     @property
     def rect(self) -> pygame.Rect:
@@ -187,16 +188,19 @@ class Menu:
         if self.closed or getattr(event, "window", None) is not self.window:
             return False
         if event.type == pygame.WINDOWFOCUSLOST:
+            self.pressed = None
             self.close()
             return False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.close()
         elif event.type == pygame.MOUSEMOTION:
             self.hover = self._hit(event.pos)
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.pressed = self._hit(event.pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            hit = self._hit(event.pos)
+            hit, pressed, self.pressed = self._hit(event.pos), self.pressed, None
             self.close()  # a click outside just closes it
-            if hit:
+            if hit and pressed in (None, hit):
                 (self.on_edit if hit == "edit" else self.on_remove)()
         return event.type in INPUT
 
@@ -221,8 +225,8 @@ class Menu:
         surf.blit(_glass(screen, rect), (0, 0))
         for key, text in (("edit", "Edit…"), ("remove", "Remove")):
             r = self.hits[key]
-            if key == self.hover:
-                pygame.draw.rect(surf, ON_BG, r, border_radius=8)
+            if key == self.hover or key == self.pressed:
+                pygame.draw.rect(surf, shade(ON_BG, False, key == self.pressed), r, border_radius=8)
             surf.blit(self.font.render(text, True, TEXT), (r.x + 10, r.y + 6))
         pygame.draw.line(surf, SEP, (14, 70), (self.W - 14, 70))
         for i, line in enumerate(self.note):
@@ -262,8 +266,37 @@ def _glass(screen: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
 CALIBRATE_TIP = ("Measures the pointer speed again. Do it after changing Tracking Speed on the iPhone (Settings › "
                  "Accessibility › Touch › AssistiveTouch), or when the cursor overshoots or falls short. Open a plain, "
                  "light screen first and don't touch the mouse for about 20 s.")
+NEEDS_BT_TIP = "Needs the iPhone connected over Bluetooth: pair it in AssistiveTouch › Devices first."
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
+SILENT_S, POLL_S, CONFIRM_S = 2.5, 1.0, 3.0  # board: silence before "not answering", poll interval, Forget confirm window
+PAIRING_TOAST = "Board is open to pairing. Forget it on the phone too."
+BOARD_DOT = {"green": SWITCH_ON, "blue": ACCENT, "grey": (142, 142, 147)}
+
+
+def board_status(board, now: float, opened: float = 0.0, fits: Callable[[str], bool] = lambda t: True) -> tuple[str, str]:
+    """(dot colour, text) for the ESP32 board section, from what its `Link` last heard. `opened`: when Settings
+    opened (silence counts from then, the board's answer to our first `?` is still on its way); `fits(text)`:
+    whether a line of text fits, a long phone name is shortened until the id after it is visible."""
+    if now - max(board.last_seen, opened) > SILENT_S:
+        return "grey", "Board not answering"
+    if board.connected.is_set():
+        if not board.peer:
+            return "green", "Connected"
+        id_, name = board.peer
+        name = "".join(c for c in name if c.isprintable()).strip()
+        if len(name) > 24:
+            name = name[:24] + "…"
+
+        def line(n: str) -> str:
+            return f"Connected to {n} (…{id_})" if n else f"Connected (…{id_})"
+
+        while name and not fits(line(name)):
+            name = name[:-2].rstrip() + "…" if len(name) > 1 else ""
+        return "green", line(name)
+    if board.paired is None:
+        return "grey", "Reflash the board for status"
+    return ("grey", "Paired, not connected") if board.paired else ("blue", "Open to pairing")
 
 
 def post_run(fn: Callable[[], None]) -> None:
@@ -305,8 +338,11 @@ class Settings:
                  on_change: Callable[[], None], on_natural: Callable[[], None], on_close: Callable[[], None],
                  calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
-                 on_copy: Callable[[], None] | None = None) -> None:
-        """`calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
+                 on_copy: Callable[[], None] | None = None, board=None,
+                 connected: Callable[[], bool] = lambda: True) -> None:
+        """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
+        `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
+        `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
         self.window, self.where, self.cfg, self.on_change, self.on_natural, self.on_close = (
@@ -316,7 +352,11 @@ class Settings:
         self.calibration_lines = [] if calibration is None else _wrap(
             f"Current: {calibration:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
+        self.connected = connected
+        self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
+        self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
+        self.pressed: str | None = None  # the item the left mouse button went down on
         self.hover_since = 0.0
         self.scroll = 0  # how far the panel is scrolled, when the window is shorter than it
         self.default_folder = default_folder_label()  # once: it looks at the disk
@@ -340,6 +380,10 @@ class Settings:
         if self.cfg.mouse == "esp32":
             self.hits["port"] = pygame.Rect(PAD + 40, y, PANEL_W - 2 * PAD - 40, 26)
             y += 26 + 10
+        if self.board:  # whenever there is a board: the --mouse flag may differ from the saved mode
+            self.board_top = y
+            self.hits["forget"] = pygame.Rect(PAD, y + 22, PANEL_W - 2 * PAD, 28)
+            y += 22 + 28 + 10
         self.hits["natural"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
         y += 26 + 12
         self.shots_top = y
@@ -366,6 +410,7 @@ class Settings:
         if self.closed or getattr(event, "window", None) is not self.window:
             return False
         if event.type == pygame.WINDOWFOCUSLOST:
+            self.pressed = None
             if not self.picking:
                 self.close()
             return False  # the phone window still releases what is held
@@ -383,9 +428,13 @@ class Settings:
             hit = self._hit(event.pos)
             if hit != self.hover:
                 self.hover, self.hover_since = hit, time.monotonic()
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.pressed = self._hit(event.pos)
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            pressed, self.pressed = self.pressed, None
             if self.rect.collidepoint(event.pos):
-                self._click(self._hit(event.pos))
+                if pressed in (None, self._hit(event.pos)):  # released elsewhere than pressed: no click
+                    self._click(self._hit(event.pos))
             else:
                 self.close()  # on release: the press that started it never reached the phone either
         return event.type in INPUT
@@ -395,10 +444,32 @@ class Settings:
         local = (pos[0] - rect.x, pos[1] - rect.y + self.scroll)
         return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
 
+    def confirming(self, now: float | None = None) -> bool:
+        return (time.monotonic() if now is None else now) < self.confirm_until
+
+    def board_text(self, now: float) -> tuple[str, str]:
+        """The board's (colour, text); kept while a snapshot is still arriving (its lines land over a few ms and
+        the state is half-built until they are all in)."""
+        if self._board_text is None or now - self.board.last_seen >= 0.05:
+            self._board_text = board_status(self.board, now, self.opened_at,
+                                            lambda t: self.small.size(t)[0] <= PANEL_W - 2 * PAD - 18)
+        return self._board_text
+
+    def tick(self, now: float | None = None) -> None:
+        """Ask the board for its state once a second while the panel is open (called every frame)."""
+        now = time.monotonic() if now is None else now
+        if self.board and not self.closed and now - self.last_poll >= POLL_S:
+            self.last_poll = now
+            self.board.query()
+
     def tip(self, now: float | None = None) -> str | None:
         """The hover text of the item under the mouse, once it has been there for TIP_DELAY."""
         now = time.monotonic() if now is None else now
-        return self.tips.get(self.hover) if self.hover and now - self.hover_since >= TIP_DELAY else None
+        if not self.hover or now - self.hover_since < TIP_DELAY:
+            return None
+        if self.hover == "calibrate" and not self.connected():
+            return NEEDS_BT_TIP
+        return self.tips.get(self.hover)
 
     def _click(self, hit: str | None) -> None:
         if hit not in ("port", "screenshots"):
@@ -416,9 +487,16 @@ class Settings:
         elif hit == "ai" and self.on_ai:
             self.on_ai()
             self._relayout()
+        elif hit == "forget" and self.board:
+            now = time.monotonic()
+            if self.confirming(now):
+                self.confirm_until = 0.0
+                self.board.forget()
+            else:
+                self.confirm_until = now + CONFIRM_S
         elif hit == "copy" and self.on_copy:
             self.on_copy()
-        elif hit == "calibrate":
+        elif hit == "calibrate" and self.connected():
             self.close()
             self.on_calibrate()
         elif hit == "browse" and not self.picking:
@@ -458,6 +536,9 @@ class Settings:
             self._commit()
             self.closed = True
             self.on_close()
+
+    def _fill(self, name: str, base: tuple[int, int, int]) -> tuple[int, int, int]:
+        return shade(base, self.hover == name, self.pressed == name)
 
     def _switch(self, surf: pygame.Surface, key: str, label: str, on: bool) -> None:
         sw = self.hits[key]
@@ -505,11 +586,22 @@ class Settings:
         if "port" in self.hits:
             surf.blit(self.small.render("Port", True, FG), (PAD, self.hits["port"].y + 7))
             self._field(surf, "port", Config.port)
+        if "forget" in self.hits:
+            now = time.monotonic()
+            colour, text = self.board_text(now)
+            if colour != "blue" or int(now * 2) % 2:  # open to pairing: blink at 1 Hz
+                pygame.draw.circle(surf, BOARD_DOT[colour], (PAD + 5, self.board_top + 9), 5)
+            surf.blit(self.small.render(text, True, FG), (PAD + 18, self.board_top + 2))
+            f = self.hits["forget"]
+            pygame.draw.rect(surf, self._fill("forget", ACCENT if self.confirming(now) else FIELD), f, border_radius=f.height // 2)
+            label = self.small.render("Click again to confirm" if self.confirming(now) else "Forget phone & allow pairing",
+                                      True, (255, 255, 255) if self.confirming(now) else ACCENT)
+            surf.blit(label, label.get_rect(center=f.center))
         self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
         surf.blit(self.head.render("Screenshots", True, FG), (PAD, self.shots_top))
         self._field(surf, "screenshots", self.default_folder)
         b = self.hits["browse"]
-        pygame.draw.rect(surf, FIELD, b, border_radius=7)
+        pygame.draw.rect(surf, self._fill("browse", FIELD), b, border_radius=7)
         glyph = self.icons.render("\ue2c8", True, ACCENT)  # folder_open
         surf.blit(glyph, glyph.get_rect(center=b.center))
         self._switch(surf, "ai", "Allow AI control (MCP)", self.cfg.ai_control)
@@ -517,7 +609,7 @@ class Settings:
             surf.blit(self.small.render(line, True, MUTED), (PAD, self.ai_top + 28 + 16 * i))
         if "copy" in self.hits:
             c = self.hits["copy"]
-            pygame.draw.rect(surf, FIELD, c, border_radius=c.height // 2)
+            pygame.draw.rect(surf, self._fill("copy", FIELD), c, border_radius=c.height // 2)
             label = self.small.render("Copy MCP config", True, ACCENT)
             surf.blit(label, label.get_rect(center=c.center))
         if self.calibration_lines:
@@ -525,8 +617,9 @@ class Settings:
             for i, line in enumerate(self.calibration_lines):
                 surf.blit(self.small.render(line, True, MUTED), (PAD, self.calib_top + 20 + 16 * i))
             c = self.hits["calibrate"]
-            pygame.draw.rect(surf, ACCENT, c, border_radius=c.height // 2)
-            label = self.small.render("Calibrate", True, (255, 255, 255))
+            up = self.connected()
+            pygame.draw.rect(surf, self._fill("calibrate", ACCENT) if up else FIELD, c, border_radius=c.height // 2)
+            label = self.small.render("Calibrate", True, (255, 255, 255) if up else DISABLED)
             surf.blit(label, label.get_rect(center=c.center))
         view = surf.subsurface(pygame.Rect(0, self.scroll, min(rect.w, surf.get_width()), rect.h))
         _round(view, PANEL_R)

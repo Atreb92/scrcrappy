@@ -133,3 +133,27 @@ def test_a_press_whose_release_never_came_does_not_swallow_the_next_bar_click(ba
     bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, (100, 100)))
     bar.handle(pygame.event.Event(pygame.WINDOWLEAVE, window=bar.main))  # or the mouse left the window
     assert click(bar, "settings") is True and bar.seen == ["paste", "settings"]
+
+
+def test_press_on_one_button_release_on_another_does_not_click(bar):
+    bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, at(bar, "paste")))
+    assert bar.pressed is not None and bar.pressed.id == "paste"
+    bar.handle(ev(bar, pygame.MOUSEBUTTONUP, at(bar, "add")))
+    assert bar.seen == [] and bar.pressed is None
+
+
+def test_press_and_release_on_the_same_button_clicks_and_clears_pressed(bar):
+    click(bar, "paste")
+    assert bar.seen == ["paste"] and bar.pressed is None
+
+
+def test_pressed_cleared_when_focus_is_lost(bar):
+    bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, at(bar, "paste")))
+    bar.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=bar.main))
+    assert bar.pressed is None
+
+
+def test_dragging_off_the_bar_onto_the_phone_clears_pressed(bar):
+    bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, at(bar, "paste")))
+    bar.handle(ev(bar, pygame.MOUSEBUTTONUP, (50, 10)))  # released above the strip, on the phone image
+    assert bar.pressed is None and bar.seen == []

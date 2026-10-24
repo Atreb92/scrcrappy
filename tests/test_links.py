@@ -71,3 +71,62 @@ def test_send_keys_pads_to_six_slots():
     link = links.Link(out.append, lambda: b"")
     link.send_keys(0x02, [0x04, 0x05])
     assert out == [b"k 2 4 5 0 0 0 0\n"]
+
+
+def feed(*chunks: bytes) -> links.Link:
+    """A Link whose reader gets `chunks` and then EOF; the reader thread is joined by waiting on its end."""
+    queue, done = list(chunks), threading.Event()
+
+    def read() -> bytes:
+        if queue:
+            return queue.pop(0)
+        done.set()
+        return b""
+
+    link = links.Link(lambda b: None, read)
+    done.wait(2)
+    threading.Event().wait(0.05)
+    return link
+
+
+def test_snapshot_fills_state():
+    link = feed(b"ready\npaired 3F:A2\nconnected\npeer 3F:A2 My iPhone\n")
+    assert link.paired is True and link.peer == ("3F:A2", "My iPhone") and link.connected.is_set()
+    assert link.last_seen > 0
+
+
+def test_unpaired_snapshot():
+    assert feed(b"ready\nunpaired\n").paired is False
+
+
+def test_disconnected_clears_connected():
+    assert not feed(b"ready\nconnected\ndisconnected\n").connected.is_set()
+
+
+def test_ready_resets_state():
+    link = feed(b"ready\npaired 3F:A2\nconnected\npeer 3F:A2 x\n", b"ready\n")
+    assert link.paired is None and link.peer is None and not link.connected.is_set()
+
+
+def test_empty_peer_name():
+    assert feed(b"ready\nconnected\npeer 3F:A2\n").peer == ("3F:A2", "")
+
+
+def test_pairing_calls_hook():
+    calls = []
+    queue = [b"pairing\n"]
+
+    def read() -> bytes:
+        return queue.pop(0) if queue else b""
+
+    link = links.Link(lambda b: None, read, on_pairing=lambda: calls.append(1))
+    threading.Event().wait(0.1)
+    assert calls == [1] and link.on_pairing is not None
+
+
+def test_query_and_forget_write_lines():
+    written = []
+    link = links.Link(written.append, lambda: b"")
+    link.query()
+    link.forget()
+    assert written == [b"?\n", b"p\n"]

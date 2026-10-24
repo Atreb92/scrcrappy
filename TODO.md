@@ -20,7 +20,9 @@
 
 - [ ] BLE link speed: since the device advertises as a keyboard (appearance 0x03C1, keyboard-first descriptor) the phone delivers ~1 report / 15 ms (was ≥125/s as a mouse), so reports are paced at 15 ms and the cursor feels a bit less immediate than at the start. Experiment: advertise as a mouse again (keep keyboard-first + LED descriptor), re-pair, re-measure throughput at 8 ms and check the Hardware Keyboard setting still appears. User decided to keep 15 ms for now (usable).
 - [x] AssistiveTouch actions are now user-added custom buttons with in-app binding steps (+ on the toolbar).
+- [ ] Calibration (requested 2026-10-24): while it runs the Calibrate button becomes a red Cancel that stops the measurement and keeps the old table (needs a cancel flag in `calibrate.calibrate`, `Calibrator.cancel()`, and Settings staying open during the run); the user's mouse and keyboard must not reach the phone meanwhile (`controller` is already None during a run; check keys and the bar). Also while `controller` is None the bar's Copy / Home / Switcher / Lock actions call `controller.<x>()` unguarded in `app.py` (AttributeError if clicked mid-calibration).
 - [ ] Mouse wheel doesn't scroll iOS Settings lists (works in other apps). Investigate (wheel report size/pacing? AssistiveTouch scroll mode?).
+- [ ] Slow mouse movements make the pointer tracking fail (reported 2026-10-24, ESP32): the phone cursor drifts or stops following when the mouse moves slowly. Look at the small-delta end of the gain table in `mouse.py` (rounding of sub-count moves, `LENGTHS` starts at 1) and at how small moves are accumulated.
 - [ ] Long, mostly-vertical cursor moves land 5–10% short of the target. Options: calibrate the vertical axis too, or correct from the video (closed loop).
 - [ ] Paste types US layout, printable ASCII only; other characters are skipped. Other layouts / accented characters via Option dead keys.
 - [ ] Optional `--ctrl-as-cmd`: send Ctrl as Cmd so Ctrl+C/V/A work as iPhone shortcuts.
@@ -32,7 +34,7 @@
 - [x] Custom buttons: Edit… and Remove confirmed by the user.
 - [x] Saved config restores custom buttons / natural scrolling / pinned state after a restart: confirmed by the user.
 - [x] Toolbar: first click acts (SDL focus click-through): confirmed by user (the pill is gone: the bar is part of the phone window).
-- [ ] ESP32 firmware has never run on real hardware (only compiled for esp32 / -c3 / -s3).
+- [x] ESP32 firmware ran on real hardware: classic ESP32 (D0WD-V3, CH340) pairs with the iPhone 8 and steers the cursor. -C3 / -S3 still untested.
 - [x] macOS video: qvh cannot work there (libusb `-99` on the second context; QuickTime interface claim fails with `out of resources`, also as root), so macOS captures through AVFoundation (`video.capture_avf`, spec 2026-10-21). Mirroring and `--mouse agent` confirmed by the user.
 - [ ] macOS: rotation, click-through, the bar and Settings overlay, several iPhones at once (the first capture device that is not a screen wins), `--calibrate` (its 3 s start-up wait), Homebrew formula (macOS path untested until the next release).
 - [ ] Flaky tests: `tests/test_app.py` fails on some runs after the agent / AI tests (different test each time, also on `main`). Order-dependent pygame window state.
@@ -57,5 +59,6 @@
 
 - [ ] Laptop Bluetooth adapter was left `Pairable: yes` by early spikes (original value unknown).
 
-- [ ] Settings › "Forget paired phone" (ESP32 mode only): send the board a `p` line over the serial link it already holds, confirm first, toast on the board's `pairing` reply. Needs a mockup; build after the ESP32-C3 test confirms the one-phone pairing in `firmware/esp32-mouse` works (today: `echo p > /dev/ttyUSB0` with scrcrappy closed).
+- [x] Settings › ESP32 board section: status (connected / open to pairing / paired) and "Forget phone & allow pairing" (spec 2026-10-24). The phone name iOS gives the board is the generic `iPhone`, so the section also shows the address tail. Untested on -C3 / -S3.
+- [x] Buttons show hover and pressed states (bar, Settings, right-click menu). Not the Add/Edit dialog window or the mode selector.
 - [ ] Laptop Bluetooth helper (`--mouse ble`) accepts every pairing while it runs and the bonds stay after exit; decide how to restrict it without re-pairing each run.

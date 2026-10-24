@@ -112,3 +112,11 @@ def test_ui_font_has_every_character_we_draw():
 def test_screenshot_works_without_an_input_mode():
     by_id = {b.id: b for b in buttons(has_input=False, customs=[]) if b}
     assert by_id["screenshot"].enabled and by_id["screenshot"].tip == "Save a screenshot"  # it only needs the video
+
+
+def test_shade_pressed_darker_hover_lighter():
+    from scrcrappy.toolbar import shade
+    base = (68, 68, 74)
+    assert sum(shade(base, False, True)) < sum(base) < sum(shade(base, True, False))
+    assert shade(base, False, False) == base
+    assert max(shade((250, 250, 250), True, False)) <= 255
