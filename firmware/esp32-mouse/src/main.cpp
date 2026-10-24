@@ -112,6 +112,12 @@ void setup() {
 void loop() {
     static char line[48];
     static size_t len = 0;
+    static uint32_t checked = 0;
+    if (millis() - checked > 500) {  // advertising must never stay off while no phone is connected (it did after "p")
+        checked = millis();
+        NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+        if (!server->getConnectedCount() && !adv->isAdvertising()) adv->start();
+    }
     while (Serial.available()) {
         char c = Serial.read();
         if (c != '\n') {
