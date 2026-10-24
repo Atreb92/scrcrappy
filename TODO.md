@@ -32,7 +32,7 @@
 - [x] Custom buttons: Edit… and Remove confirmed by the user.
 - [x] Saved config restores custom buttons / natural scrolling / pinned state after a restart: confirmed by the user.
 - [x] Toolbar: first click acts (SDL focus click-through): confirmed by user (the pill is gone: the bar is part of the phone window).
-- [ ] ESP32 firmware has never run on real hardware (only compiled for esp32 / -c3 / -s3).
+- [x] ESP32 firmware ran on real hardware: classic ESP32 (D0WD-V3, CH340) pairs with the iPhone 8 and steers the cursor. -C3 / -S3 still untested.
 - [x] macOS video: qvh cannot work there (libusb `-99` on the second context; QuickTime interface claim fails with `out of resources`, also as root), so macOS captures through AVFoundation (`video.capture_avf`, spec 2026-10-21). Mirroring and `--mouse agent` confirmed by the user.
 - [ ] macOS: rotation, click-through, the bar and Settings overlay, several iPhones at once (the first capture device that is not a screen wins), `--calibrate` (its 3 s start-up wait), Homebrew formula (macOS path untested until the next release).
 - [ ] Flaky tests: `tests/test_app.py` fails on some runs after the agent / AI tests (different test each time, also on `main`). Order-dependent pygame window state.
