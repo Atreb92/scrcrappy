@@ -8,6 +8,7 @@ from typing import Callable
 import pygame
 
 from .config import ICON_CHOICES, Config, Custom
+from .modes import selectable
 from .agent import screenshot_dir, tilde
 from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, TIP_DELAY, draw_tip, shade, ui_font
 
@@ -268,6 +269,7 @@ CALIBRATE_TIP = ("Measures the pointer speed again. Do it after changing Trackin
                  "light screen first and don't touch the mouse for about 20 s.")
 CANCEL_TIP = "Stops the measurement. The previous calibration stays."
 RED = (255, 69, 58)  # iOS dark red
+NEEDS_LINUX_TIP = "Needs Linux (use ESP32 or Agent on macOS)"
 NEEDS_BT_TIP = "Needs the iPhone connected over Bluetooth: pair it in AssistiveTouch › Devices first."
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
@@ -342,10 +344,14 @@ class Settings:
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
                  on_copy: Callable[[], None] | None = None, board=None,
                  connected: Callable[[], bool] = lambda: True, calibrating: Callable[[], bool] = lambda: False,
-                 on_cancel: Callable[[], None] | None = None) -> None:
+                 on_cancel: Callable[[], None] | None = None, on_mode: Callable[[str], None] | None = None,
+                 on_port: Callable[[str], None] | None = None, active_mode: Callable[[], str] | None = None) -> None:
         """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
+        `on_mode(name)`: the app switches the input mode (it writes `cfg.mouse` itself once that worked); without
+        it a click only edits the saved default, applied at the next launch. `on_port(port)`: same for the ESP32 port
+        while ESP32 is the active mode.
         `calibrating()`: a measurement is running; the button is then a red Cancel that calls `on_cancel`.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
@@ -356,6 +362,7 @@ class Settings:
         self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
         self.connected, self.calibrating, self.on_cancel = connected, calibrating, on_cancel
+        self.on_mode, self.on_port, self.asked_port, self.active_mode = on_mode, on_port, cfg.port, active_mode
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
         self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
@@ -380,7 +387,7 @@ class Settings:
         for i in range(len(MODES)):
             self.hits[f"mode:{i}"] = pygame.Rect(PAD + i * cell, 34, cell, 28)
         y = 34 + 28 + 10
-        if self.cfg.mouse == "esp32":
+        if self.mode() == "esp32":
             self.hits["port"] = pygame.Rect(PAD + 40, y, PANEL_W - 2 * PAD - 40, 26)
             y += 26 + 10
         if self.board:  # whenever there is a board: the --mouse flag may differ from the saved mode
@@ -447,6 +454,21 @@ class Settings:
         local = (pos[0] - rect.x, pos[1] - rect.y + self.scroll)
         return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
 
+    def mode(self) -> str:
+        """The input mode that is running (`--mouse` may differ from the saved default in `cfg.mouse`)."""
+        return self.active_mode() if self.active_mode else self.cfg.mouse
+
+    @property
+    def shows_next_launch_tag(self) -> bool:
+        return self.on_mode is None
+
+    def rebind(self, calibration: float | None, board, connected: Callable[[], bool]) -> None:
+        """The input mode changed under an open panel: show the new mode's calibration and board sections."""
+        self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
+        self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}
+        self.board, self.connected, self._board_text = board, connected, None
+        self._relayout()
+
     def _calibration_lines(self, value: float) -> list[str]:
         return _wrap(f"Current: {value:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
 
@@ -478,6 +500,8 @@ class Settings:
         now = time.monotonic() if now is None else now
         if not self.hover or now - self.hover_since < TIP_DELAY:
             return None
+        if self.hover and self.hover.startswith("mode:") and not selectable(MODES[int(self.hover[5:])][0]):
+            return NEEDS_LINUX_TIP
         if self.hover == "calibrate" and self.calibrating():
             return CANCEL_TIP
         if self.hover == "calibrate" and not self.connected():
@@ -488,7 +512,12 @@ class Settings:
         if hit not in ("port", "screenshots"):
             self._commit()
         if hit and hit.startswith("mode:"):
-            self.cfg.mouse = MODES[int(hit[5:])][0]
+            mode = MODES[int(hit[5:])][0]
+            if self.on_mode:
+                if mode != self.mode() and selectable(mode):
+                    self.on_mode(mode)
+                return
+            self.cfg.mouse = mode
             self.on_change()
             self._relayout()  # the port row comes and goes with ESP32
         elif hit in ("port", "screenshots") and hit != self.editing:
@@ -540,7 +569,11 @@ class Settings:
         if self.editing == "port":
             value = value or Config.port
         self.text[self.editing] = value
-        if getattr(self.cfg, self.editing) != value:
+        if self.editing == "port" and self.on_port and self.mode() == "esp32":
+            if value != self.asked_port:  # the app restarts ESP32 on it and saves it once that worked
+                self.asked_port = value
+                self.on_port(value)
+        elif getattr(self.cfg, self.editing) != value:
             setattr(self.cfg, self.editing, value)
             self.on_change()
         self.editing = None
@@ -585,18 +618,19 @@ class Settings:
         self.scroll = max(0, min(self.scroll, self.height - rect.height))  # the window may have grown
         surf.blit(_glass(screen, rect), (0, self.scroll))  # the glass belongs to the visible part
         surf.blit(self.head.render("Input", True, FG), (PAD, 14))
-        tag = self.small.render("next launch", True, (0xF2, 0xB7, 0x05))
-        tag_bg = tag.get_rect(topleft=(PAD + 50, 13)).inflate(10, 4)
-        pygame.draw.rect(surf, (0x4A, 0x3A, 0x12), tag_bg, border_radius=tag_bg.height // 2)
-        surf.blit(tag, tag.get_rect(center=tag_bg.center))
+        if self.shows_next_launch_tag:
+            tag = self.small.render("next launch", True, (0xF2, 0xB7, 0x05))
+            tag_bg = tag.get_rect(topleft=(PAD + 50, 13)).inflate(10, 4)
+            pygame.draw.rect(surf, (0x4A, 0x3A, 0x12), tag_bg, border_radius=tag_bg.height // 2)
+            surf.blit(tag, tag.get_rect(center=tag_bg.center))
         first, last = self.hits["mode:0"], self.hits[f"mode:{len(MODES) - 1}"]  # iOS segmented control
         pygame.draw.rect(surf, FIELD, first.union(last), border_radius=8)
         for i, (mode, name) in enumerate(MODES):
             r = self.hits[f"mode:{i}"]
-            on = self.cfg.mouse == mode
+            on = self.mode() == mode
             if on:
                 pygame.draw.rect(surf, ON_BG, r.inflate(-4, -4), border_radius=6)
-            label = self.small.render(name, True, ON_FG if on else FG)
+            label = self.small.render(name, True, ON_FG if on else FG if selectable(mode) else DISABLED)
             surf.blit(label, label.get_rect(center=r.center))
         if "port" in self.hits:
             surf.blit(self.small.render("Port", True, FG), (PAD, self.hits["port"].y + 7))

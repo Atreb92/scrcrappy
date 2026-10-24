@@ -125,7 +125,7 @@ def test_window_opens_without_a_connected_phone(monkeypatch, capsys):
     monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
     monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: None)
     monkeypatch.setattr(cli.video, "capture", lambda qvh, frames: contextlib.nullcontext(cap))
-    monkeypatch.setattr(cli.links, "esp32", lambda port: NeverConnected())
+    monkeypatch.setattr(cli.modes.links, "esp32", lambda port: NeverConnected())
     monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
     t = threading.Thread(target=cli.main, args=(["--qvh", TRUE, "--mouse", "esp32"],), daemon=True)
     t.start()

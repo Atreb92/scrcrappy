@@ -536,3 +536,89 @@ def test_calibration_number_follows_a_finished_run():
     panel.set_calibration(2.5)
     assert any("2.50" in line for line in panel.calibration_lines)
     assert panel.rect.height == panel.height
+
+
+def mode_panel(mode="none", **kw):
+    from scrcrappy.config import Config
+    cfg, changes = Config(), []
+    cfg.mouse = mode
+    panel, _ = settings_panel(cfg, changes, **kw)
+    return panel, cfg, changes
+
+
+def test_mode_click_asks_the_app_and_leaves_cfg_alone():
+    asked = []
+    panel, cfg, changes = mode_panel(on_mode=asked.append)
+    click(panel, "mode:3")
+    assert asked == ["agent"] and cfg.mouse == "none" and changes == []
+
+
+def test_clicking_the_active_mode_does_nothing():
+    asked = []
+    panel, _, _ = mode_panel("esp32", on_mode=asked.append)
+    click(panel, "mode:2")
+    assert asked == []
+
+
+def test_next_launch_tag_only_without_on_mode():
+    assert mode_panel()[0].shows_next_launch_tag
+    assert not mode_panel(on_mode=lambda m: None)[0].shows_next_launch_tag
+
+
+def test_ble_cell_is_disabled_when_not_selectable(monkeypatch):
+    from scrcrappy import dialog
+    monkeypatch.setattr(dialog, "selectable", lambda name, platform=None: name != "ble")
+    asked = []
+    panel, _, _ = mode_panel(on_mode=asked.append)
+    click(panel, "mode:1")
+    assert asked == []
+    panel.hover, panel.hover_since = "mode:1", 0.0
+    assert "Needs Linux" in panel.tip(now=100.0)
+    click(panel, "mode:2")
+    assert asked == ["esp32"]
+
+
+def test_port_change_in_esp32_mode_goes_to_the_app_not_cfg():
+    ports = []
+    panel, cfg, changes = mode_panel("esp32", on_mode=lambda m: None, on_port=ports.append)
+    panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
+    panel._commit()
+    assert ports == ["/dev/ttyUSB7"] and cfg.port != "/dev/ttyUSB7" and changes == []
+
+
+def test_port_change_without_on_port_still_saves_to_cfg():
+    panel, cfg, changes = mode_panel("esp32")
+    panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
+    panel._commit()
+    assert cfg.port == "/dev/ttyUSB7" and changes
+
+
+def test_rebind_swaps_calibration_and_board_sections():
+    panel, _, _ = mode_panel("esp32", calibration=1.0, board=FakeBoard())
+    assert "calibrate" in panel.hits and "forget" in panel.hits
+    panel.rebind(None, None, lambda: True)
+    assert "calibrate" not in panel.hits and "forget" not in panel.hits and not panel.tips
+    assert panel.rect.height == panel.height
+    panel.rebind(2.0, FakeBoard(), lambda: True)
+    assert "calibrate" in panel.hits and "forget" in panel.hits and "calibrate" in panel.tips
+
+
+def test_settings_follow_the_running_mode_not_the_saved_default():
+    asked, ports = [], []
+    panel, cfg, _ = mode_panel("none", on_mode=asked.append, on_port=ports.append, active_mode=lambda: "esp32")
+    assert "port" in panel.hits  # the running mode is ESP32 although the saved default is None
+    click(panel, "mode:2")
+    assert asked == []  # already running
+    click(panel, "mode:0")
+    assert asked == ["none"]
+    panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
+    panel._commit()
+    assert ports == ["/dev/ttyUSB7"]
+
+
+def test_a_port_edit_while_another_mode_runs_does_not_switch():
+    ports = []
+    panel, cfg, changes = mode_panel("esp32", on_mode=lambda m: None, on_port=ports.append, active_mode=lambda: "none")
+    panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
+    panel._commit()
+    assert ports == []

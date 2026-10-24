@@ -130,3 +130,49 @@ def test_query_and_forget_write_lines():
     link.query()
     link.forget()
     assert written == [b"?\n", b"p\n"]
+
+
+class _Pipe:
+    closed = False
+
+    def write(self, b):
+        return len(b)
+
+    def close(self):
+        self.closed = True
+
+
+class _Out:
+    def __init__(self):
+        self.first = True
+
+    def read(self, n):
+        out, self.first = (b"ready\n" if self.first else b""), False
+        return out
+
+
+class _Proc:
+    def __init__(self, stubborn=False):
+        self.stdin, self.stdout, self.stubborn, self.waited, self.killed = _Pipe(), _Out(), stubborn, [], False
+
+    def wait(self, timeout=None):
+        self.waited.append(timeout)
+        if self.stubborn and not self.killed:
+            raise links.subprocess.TimeoutExpired("blemouse", timeout)
+
+    def kill(self):
+        self.killed = True
+
+
+def test_ble_close_ends_the_helper(monkeypatch):
+    proc = _Proc()
+    monkeypatch.setattr(links.subprocess, "Popen", lambda *a, **k: proc)
+    links.ble("python3").close()
+    assert proc.stdin.closed and proc.waited and not proc.killed
+
+
+def test_ble_close_kills_a_helper_that_will_not_exit(monkeypatch):
+    proc = _Proc(stubborn=True)
+    monkeypatch.setattr(links.subprocess, "Popen", lambda *a, **k: proc)
+    links.ble("python3").close()
+    assert proc.killed
