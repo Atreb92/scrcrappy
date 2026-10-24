@@ -11,7 +11,7 @@ from .keyqueue import KeyQueue
 from .links import Link
 from .mouse import Pointer
 from . import agent as agent_mod, ai as ai_mod, config
-from .calibrate import Calibrator
+from .calibrate import Calibrator, Cancelled
 from .config import Config, Custom
 from .dialog import PAIRING_TOAST, PANEL_W, Dialog, DialogState, Menu, Popups, Settings, post_run
 from .toolbar import BAR_H, ICONS, Bar, buttons, next_free
@@ -20,6 +20,7 @@ from .video import LatestFrame
 
 PANEL_MARGIN = 8  # between the Settings panel and the strip / the window's top
 CALIBRATE_WAIT_S = 120  # the AI's calibrate tool gives up waiting (a run takes well under a minute)
+CANCELLED = "calibration cancelled"  # the error calibrated() gets when the user cancels: not a failure
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
 # SDL ignores the click that focuses a window by default: the toolbar would need two clicks
 os.environ.setdefault("SDL_MOUSE_FOCUS_CLICKTHROUGH", "1")
@@ -269,18 +270,27 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             try:
                 calibrator.run()
                 error = None
+            except Cancelled:
+                error = CANCELLED
             except Exception as e:  # whatever went wrong, the pointer must come back
                 error = str(e) or type(e).__name__
             post_run(lambda: calibrated(error, on_done))
 
         threading.Thread(target=work, daemon=True).start()
 
+    def cancel_calibration() -> None:
+        if calibrating and calibrator:
+            calibrator.cancel()
+
     def calibrated(error: str | None, on_done: Callable[[str | None], None] | None) -> None:
         nonlocal calibrating
         calibrating = False
-        main.title = f"{title} — calibration failed, see the terminal" if error else title
-        if error:
+        failed = error and error != CANCELLED
+        main.title = f"{title} — calibration failed, see the terminal" if failed else title
+        if failed:
             print(f"calibration failed: {error}", file=sys.stderr)
+        elif error:
+            bar.toast("Calibration cancelled")
         if on_done:
             on_done(error)
 
@@ -303,16 +313,17 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 controller.release()  # a key held right now would otherwise stay down on the phone: the overlay eats its release
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
-                                board=board, connected=connected)
+                                board=board, connected=connected, calibrating=lambda: calibrating,
+                                on_cancel=cancel_calibration)
         bar.set_items(items())
 
     bar = Bar(main, items(), {
         "paste": paste,
-        "copy": lambda: controller.copy(),
+        "copy": lambda: controller and controller.copy(),  # None while calibrating
         "screenshot": screenshot,
-        "home": lambda: controller.home(),
-        "switcher": lambda: controller.switcher(),
-        "lock": lambda: controller.lock(),
+        "home": lambda: controller and controller.home(),
+        "switcher": lambda: controller and controller.switcher(),
+        "lock": lambda: controller and controller.lock(),
         "custom": click,
         "add": edit,
         "menu": open_menu,
