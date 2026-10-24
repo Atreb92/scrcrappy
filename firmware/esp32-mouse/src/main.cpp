@@ -5,7 +5,8 @@
 //        "?"                          status query
 //        "p"                          forget the paired phone (dropping it if connected) and let a new one pair
 //                                     (pairing is otherwise closed once a phone is bonded)
-//   out: "ready" (advertising), "connected" (phone subscribed to reports), "disconnected" (phone gone),
+//   out: "dbg ..." lines (connect, auth result, disconnect reason code) say why a pairing fails; scrcrappy ignores them
+//        "ready" (advertising), "connected" (phone subscribed to reports), "disconnected" (phone gone),
 //        "pairing" (answer to "p"). "?" answers a snapshot: "ready", "unpaired" | "paired <id>", and while a phone
 //        is connected "connected" and "peer <id> <name>" (id = last two bytes of its address, name = its GAP name)
 #include <Arduino.h>
@@ -60,12 +61,17 @@ class ReportCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class ServerCallbacks : public NimBLEServerCallbacks {
-    void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override {
+    void onConnect(NimBLEServer*, NimBLEConnInfo& info) override {
+        Serial.printf("dbg connect %s bonds=%d\n", info.getAddress().toString().c_str(), NimBLEDevice::getNumBonds());
+    }
+    void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int reason) override {
+        Serial.printf("dbg disconnect reason=%d\n", reason);
         subscribed = false;
         peerName[0] = 0;
         Serial.println("disconnected");
     }
     void onAuthenticationComplete(NimBLEConnInfo& info) override {
+        Serial.printf("dbg auth enc=%d bonded=%d auth=%d\n", info.isEncrypted(), info.isBonded(), info.isAuthenticated());
         idOf(info.getIdAddress(), peerId);
         ble_uuid16_t gap = BLE_UUID16_INIT(0x2A00);  // the phone's Device Name
         ble_gattc_read_by_uuid(info.getConnHandle(), 1, 0xffff, &gap.u, nameCb, nullptr);
