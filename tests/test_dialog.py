@@ -325,3 +325,84 @@ def test_settings_scrolls_in_a_window_shorter_than_the_panel():
     assert calls == [1]
     screen = pygame.Surface((300, 400))
     panel.draw(screen, 352)  # draws the scrolled view without error
+
+
+class FakeBoard:
+    """The parts of links.Link the Settings board section reads."""
+
+    def __init__(self, paired=True, peer=("3F:A2", "iPhone"), connected=True, last_seen=100.0):
+        import threading
+        self.paired, self.peer, self.last_seen = paired, peer, last_seen
+        self.connected = threading.Event()
+        if connected:
+            self.connected.set()
+        self.queries = self.forgets = 0
+
+    def query(self):
+        self.queries += 1
+
+    def forget(self):
+        self.forgets += 1
+
+
+def test_board_status_rows():
+    from scrcrappy.dialog import board_status
+    assert board_status(FakeBoard(), 101) == ("green", "Connected to iPhone (…3F:A2)")
+    assert board_status(FakeBoard(peer=("3F:A2", "")), 101) == ("green", "Connected (…3F:A2)")
+    assert board_status(FakeBoard(peer=None), 101) == ("green", "Connected")
+    assert board_status(FakeBoard(connected=False), 101) == ("grey", "Paired, not connected")
+    assert board_status(FakeBoard(paired=False, peer=None, connected=False), 101) == ("blue", "Open to pairing")
+    assert board_status(FakeBoard(paired=None, peer=None, connected=False), 101) == ("grey", "Reflash the board for status")
+    assert board_status(FakeBoard(), 103) == ("grey", "Board not answering")  # 3 s of silence
+
+
+def test_board_status_name_is_cleaned_and_truncated():
+    from scrcrappy.dialog import board_status
+    text = board_status(FakeBoard(peer=("3F:A2", "A\x07B" + "x" * 200)), 101)[1]
+    assert "\x07" not in text and "…3F:A2" in text and len(text) < 60
+
+
+def board_panel(mode="esp32", board=None):
+    from scrcrappy.config import Config
+    cfg = Config()
+    cfg.mouse = mode
+    return settings_panel(cfg, [], board=board)[0]
+
+
+def test_board_section_only_with_a_board_in_esp32_mode():
+    assert "forget" in board_panel(board=FakeBoard()).hits
+    assert "forget" not in board_panel(board=None).hits
+    assert "forget" not in board_panel(mode="ble", board=FakeBoard()).hits
+
+
+def test_forget_needs_two_clicks_within_three_seconds(monkeypatch):
+    from scrcrappy import dialog
+    clock = [50.0]
+    monkeypatch.setattr(dialog.time, "monotonic", lambda: clock[0])
+    board = FakeBoard()
+    panel = board_panel(board=board)
+    click(panel, "forget")
+    assert board.forgets == 0 and panel.confirming()
+    clock[0] += 3.5  # too late: starts over
+    assert not panel.confirming()
+    click(panel, "forget")
+    assert board.forgets == 0
+    clock[0] += 1
+    click(panel, "forget")
+    assert board.forgets == 1 and not panel.confirming()
+
+
+def test_tick_polls_once_a_second_only_while_open():
+    board = FakeBoard()
+    panel = board_panel(board=board)
+    panel.tick(10.0)
+    panel.tick(10.5)
+    panel.tick(11.1)
+    assert board.queries == 2
+    panel.close()
+    panel.tick(20.0)
+    assert board.queries == 2
+
+
+def test_tick_without_a_board_is_harmless():
+    board_panel(board=None).tick(1.0)

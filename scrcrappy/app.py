@@ -8,11 +8,12 @@ import pygame
 
 from .geometry import aspect_size, fit, inside, reshaped_size, to_frame
 from .keyqueue import KeyQueue
+from .links import Link
 from .mouse import Pointer
 from . import agent as agent_mod, ai as ai_mod, config
 from .calibrate import Calibrator
 from .config import Config, Custom
-from .dialog import PANEL_W, Dialog, DialogState, Menu, Popups, Settings, post_run
+from .dialog import PAIRING_TOAST, PANEL_W, Dialog, DialogState, Menu, Popups, Settings, post_run
 from .toolbar import BAR_H, ICONS, Bar, buttons, next_free
 from .video import LatestFrame
 
@@ -115,10 +116,11 @@ def save_or_warn(save: Callable[[Config], None], cfg: Config) -> None:
 def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[tuple[int, int]], Pointer] | None = None,
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
         save: Callable[[Config], None] = config.save, title: str = "scrcrappy",
-        agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False) -> bool:
+        agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False,
+        board: "Link | None" = None) -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
-    with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings.
+    with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings; `board` (the ESP32 link) adds its status and Forget button.
     Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip
@@ -299,7 +301,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             if controller:
                 controller.release()  # a key held right now would otherwise stay down on the phone: the overlay eats its release
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
-                                calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config)
+                                calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
+                                board=board)
         bar.set_items(items())
 
     bar = Bar(main, items(), {
@@ -314,6 +317,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "menu": open_menu,
         "settings": open_settings,
     })
+    if board:
+        board.on_pairing = lambda: post_run(lambda: bar.toast(PAIRING_TOAST))
     if agent and controller:
         controller.notify = bar.toast  # "Screenshot saved: …", "Copied N characters"
     if cfg.ai_control or mcp:  # --mcp: on for this run only, cfg.ai_control (what's saved) stays as it is
@@ -375,6 +380,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                                        10 + (now - t) * 40, 3)
             bar.led_colour = ai.led()
             bar.update()
+            if settings:
+                settings.tick()
             for overlay in (settings, context_menu):
                 if overlay:
                     overlay.draw(screen, bar.top)

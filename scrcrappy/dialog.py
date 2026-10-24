@@ -264,6 +264,25 @@ CALIBRATE_TIP = ("Measures the pointer speed again. Do it after changing Trackin
                  "light screen first and don't touch the mouse for about 20 s.")
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
+SILENT_S, POLL_S, CONFIRM_S = 2.5, 1.0, 3.0  # board: silence before "not answering", poll interval, Forget confirm window
+PAIRING_TOAST = "Board is open to pairing. Forget it on the phone too."
+GREY, BOARD_DOT = (142, 142, 147), {"green": SWITCH_ON, "blue": ACCENT, "grey": (142, 142, 147)}
+
+
+def board_status(board, now: float) -> tuple[str, str]:
+    """(dot colour, text) for the ESP32 board section, from what its `Link` last heard."""
+    if now - board.last_seen > SILENT_S:
+        return "grey", "Board not answering"
+    if board.connected.is_set():
+        if not board.peer:
+            return "green", "Connected"
+        id_, name = board.peer
+        name = "".join(c for c in name if c.isprintable()).strip()
+        name = name if len(name) <= 24 else name[:24] + "…"
+        return "green", f"Connected to {name} (…{id_})" if name else f"Connected (…{id_})"
+    if board.paired is None:
+        return "grey", "Reflash the board for status"
+    return ("grey", "Paired, not connected") if board.paired else ("blue", "Open to pairing")
 
 
 def post_run(fn: Callable[[], None]) -> None:
@@ -305,8 +324,9 @@ class Settings:
                  on_change: Callable[[], None], on_natural: Callable[[], None], on_close: Callable[[], None],
                  calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
-                 on_copy: Callable[[], None] | None = None) -> None:
-        """`calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
+                 on_copy: Callable[[], None] | None = None, board=None) -> None:
+        """`board`: the ESP32 `Link`; with `--mouse esp32` selected Settings shows its status and a Forget button.
+        `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
         self.window, self.where, self.cfg, self.on_change, self.on_natural, self.on_close = (
@@ -316,6 +336,7 @@ class Settings:
         self.calibration_lines = [] if calibration is None else _wrap(
             f"Current: {calibration:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
+        self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
         self.hover: str | None = None
         self.hover_since = 0.0
         self.scroll = 0  # how far the panel is scrolled, when the window is shorter than it
@@ -340,6 +361,10 @@ class Settings:
         if self.cfg.mouse == "esp32":
             self.hits["port"] = pygame.Rect(PAD + 40, y, PANEL_W - 2 * PAD - 40, 26)
             y += 26 + 10
+            if self.board:
+                self.board_top = y
+                self.hits["forget"] = pygame.Rect(PAD, y + 22, PANEL_W - 2 * PAD, 28)
+                y += 22 + 28 + 10
         self.hits["natural"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
         y += 26 + 12
         self.shots_top = y
@@ -395,6 +420,16 @@ class Settings:
         local = (pos[0] - rect.x, pos[1] - rect.y + self.scroll)
         return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
 
+    def confirming(self, now: float | None = None) -> bool:
+        return (time.monotonic() if now is None else now) < self.confirm_until
+
+    def tick(self, now: float | None = None) -> None:
+        """Ask the board for its state once a second while the panel is open (called every frame)."""
+        now = time.monotonic() if now is None else now
+        if self.board and not self.closed and now - self.last_poll >= POLL_S:
+            self.last_poll = now
+            self.board.query()
+
     def tip(self, now: float | None = None) -> str | None:
         """The hover text of the item under the mouse, once it has been there for TIP_DELAY."""
         now = time.monotonic() if now is None else now
@@ -416,6 +451,13 @@ class Settings:
         elif hit == "ai" and self.on_ai:
             self.on_ai()
             self._relayout()
+        elif hit == "forget" and self.board:
+            now = time.monotonic()
+            if self.confirming(now):
+                self.confirm_until = 0.0
+                self.board.forget()
+            else:
+                self.confirm_until = now + CONFIRM_S
         elif hit == "copy" and self.on_copy:
             self.on_copy()
         elif hit == "calibrate":
@@ -505,6 +547,17 @@ class Settings:
         if "port" in self.hits:
             surf.blit(self.small.render("Port", True, FG), (PAD, self.hits["port"].y + 7))
             self._field(surf, "port", Config.port)
+        if "forget" in self.hits:
+            now = time.monotonic()
+            colour, text = board_status(self.board, now)
+            if colour != "blue" or int(now * 2) % 2:  # open to pairing: blink at 1 Hz
+                pygame.draw.circle(surf, BOARD_DOT[colour], (PAD + 5, self.board_top + 9), 5)
+            surf.blit(self.small.render(text, True, FG), (PAD + 18, self.board_top + 2))
+            f = self.hits["forget"]
+            pygame.draw.rect(surf, ACCENT if self.confirming(now) else FIELD, f, border_radius=f.height // 2)
+            label = self.small.render("Click again to confirm" if self.confirming(now) else "Forget phone & allow pairing",
+                                      True, (255, 255, 255) if self.confirming(now) else ACCENT)
+            surf.blit(label, label.get_rect(center=f.center))
         self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
         surf.blit(self.head.render("Screenshots", True, FG), (PAD, self.shots_top))
         self._field(surf, "screenshots", self.default_folder)

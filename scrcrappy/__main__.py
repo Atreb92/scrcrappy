@@ -137,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg.natural_scroll = args.natural_scroll
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer, keys=keys,
                                  cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator, mcp=args.mcp,
+                                 board=link if args.mouse == "esp32" else None,
                                  device_name="scrcrappy ESP32" if args.mouse == "esp32" else "scrcrappy PC")
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), {'log' if mac else 'qvh log'}:\n{proc.log}", file=sys.stderr)
