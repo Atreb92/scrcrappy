@@ -13,6 +13,7 @@ from .mouse import Pointer
 from . import agent as agent_mod, ai as ai_mod, config
 from .calibrate import Calibrator, Cancelled
 from .config import Config, Custom
+from .modes import LABELS, Mode, ModeError
 from .dialog import PAIRING_TOAST, PANEL_W, Dialog, DialogState, Menu, Popups, Settings, post_run
 from .toolbar import BAR_H, ICONS, Bar, buttons, next_free
 from .video import LatestFrame
@@ -118,12 +119,17 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
         save: Callable[[Config], None] = config.save, title: str = "scrcrappy",
         agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False,
-        board: "Link | None" = None, connected: Callable[[], bool] = lambda: True) -> bool:
+        board: "Link | None" = None, connected: Callable[[], bool] = lambda: True,
+        mode: Mode | None = None, start_mode: Callable[[str, str], Mode] | None = None, mode_name: str = "",
+        port: str = "") -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
     with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings; `board` (the ESP32 link) adds its status and Forget button; `connected()` says whether the phone is up over
     Bluetooth (Calibrate is grayed out while it isn't).
-    Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
+    Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once.
+    With `start_mode(name, port)` (raises ModeError) Settings switches the input mode while running; `mode` is the
+    mode running at the start (it overrides the loose parameters above and is closed on exit or on a switch),
+    `port` the ESP32 port it was started on."""
     pygame.init()
     main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip
     main.minimum_size = (PANEL_W + 2 * PANEL_MARGIN, BAR_H + 150)  # wide enough for the Settings panel
@@ -134,6 +140,13 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     clock = pygame.time.Clock()
     img, controller = None, None
     cfg = cfg or Config()
+    if mode:
+        make_pointer, keys, agent, calibrator, board, connected, device_name = (
+            mode.make_pointer, mode.keys, mode.session, mode.calibrator, mode.board, mode.connected, mode.device_name)
+        mode_name = mode.name
+    else:
+        mode = Mode(mode_name or "none", make_pointer, keys, agent, calibrator, board, device_name)
+    active_port, switching, pending = port or cfg.port, False, None  # pending: (Mode, port) built, waiting to be swapped in
     if agent:
         controller = agent_mod.Controller(agent, cfg.natural_scroll)
         controller.screenshots = cfg.screenshots
@@ -307,6 +320,91 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             raise RuntimeError(result[0])
         return f"calibrated: {calibrator.value():.2f} screen px per count for a 12-count report"
 
+    def request_switch(name: str, new_port: str | None = None) -> None:
+        """Settings › Input: build mode `name` on a thread; `swap` brings it in on this one. Changing the ESP32 port
+        (`new_port`) restarts it: the serial port is the same resource, so the old one closes first."""
+        nonlocal switching, controller
+        if start_mode is None or switching or pending:
+            return
+        restart = name == mode.name
+        if restart and (new_port is None or new_port == active_port):
+            return
+        if calibrating:
+            return bar.toast("Not while calibrating")
+        if ai.locked():
+            return bar.toast("Not while an AI action runs")
+        use_port = new_port or cfg.port
+        old_name, old_port = mode.name, active_port
+        switching = True
+        main.title = f"{title} — switching to {LABELS[name]}…"
+        if restart:
+            if controller:
+                controller.release_all()
+                controller.stop()
+            controller = None
+            mode.close()
+
+        def work() -> None:
+            try:
+                new, error = start_mode(name, use_port), None
+            except ModeError as e:
+                new, error = None, str(e)
+                if restart:  # the old port again; failing that, no input
+                    try:
+                        new = start_mode(old_name, old_port)
+                        error += " (previous port restored)"
+                    except ModeError:
+                        new = Mode("none")
+                        error += " (input off)"
+            post_run(lambda: built(new, use_port if not error else old_port, error))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def built(new: Mode | None, new_port: str, error: str | None) -> None:
+        nonlocal switching, pending
+        if error:
+            bar.toast(error)
+        if new:
+            pending = (new, new_port, error is None)
+        else:
+            switching = False
+            main.title = title
+
+    def swap(new: Mode, new_port: str, chosen: bool) -> None:
+        """Make `new` the active mode (window thread): let go of held input, close the old mode, rebind everything
+        that follows the mode, and save the choice."""
+        nonlocal mode, active_port, make_pointer, keys, agent, calibrator, board, connected, device_name
+        nonlocal device_key, customs, controller, switching, pending
+        if controller:
+            controller.release_all()
+            controller.stop()
+        mode.close()
+        mode, pending, switching, active_port = new, None, False, new_port
+        make_pointer, keys, agent, calibrator = new.make_pointer, new.keys, new.session, new.calibrator
+        board, connected, device_name = new.board, new.connected, new.device_name
+        device_key = f"{device_key.rsplit('/', 1)[0]}/{new.name}"
+        customs = cfg.customs.setdefault(device_key, [])
+        controller = None  # a pointer mode's controller is built by the loop once there is a frame
+        if agent:
+            controller = agent_mod.Controller(agent, cfg.natural_scroll)
+            controller.screenshots = cfg.screenshots
+            controller.notify = bar.toast
+            pygame.key.set_repeat(400, 33)
+        else:
+            pygame.key.set_repeat()
+        ai.rebind(session=agent, keys=keys, calibrate=(lambda: ai_calibrate()) if calibrator else None,
+                  pointer=(lambda: controller.pointer if controller else None) if make_pointer else None)
+        if chosen:
+            cfg.mouse = new.name
+            if new.name == "esp32":
+                cfg.port = new_port
+            save_or_warn(save, cfg)
+            bar.toast(f"Input: {LABELS[new.name]}")
+        if settings and not settings.closed:
+            settings.rebind(calibrator.value() if calibrator else None, board, connected)
+        bar.set_items(items())
+        main.title = title
+
     def open_settings() -> None:
         nonlocal settings
         if settings and not settings.closed:
@@ -317,7 +415,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
                                 board=board, connected=connected, calibrating=lambda: calibrating,
-                                on_cancel=cancel_calibration)
+                                on_cancel=cancel_calibration, on_mode=request_switch if start_mode else None,
+                                on_port=(lambda p: request_switch("esp32", p)) if start_mode else None)
         bar.set_items(items())
 
     bar = Bar(main, items(), {
@@ -375,11 +474,13 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                     shaped_for = size
                     reshape(reshaped_size(size, main.size, BAR_H))
                     last_size = main.size
-            if img and make_pointer and not controller and not calibrating:  # (also after calibrating on a still screen)
+            if img and make_pointer and not controller and not calibrating and not switching:  # (also after calibrating on a still screen)
                 pointer = make_pointer(img.get_size())
                 pointer.home()
                 pointer.start()
                 controller = Controller(pointer, cfg.natural_scroll, keys)
+            if pending and not ai.locked() and not calibrating:
+                swap(*pending)
             if ai.locked() != was_locked:
                 was_locked = not was_locked
                 if was_locked and controller:
@@ -409,4 +510,5 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if controller:
             controller.release_all()
             controller.stop()
+        mode.close()
         pygame.quit()

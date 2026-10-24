@@ -375,3 +375,13 @@ def test_open_url_errors_are_tool_errors():
     old = ai.AiControl(frames(), session=FakeSession({"open_url": {"error": "unknown command"}}))
     with pytest.raises(ToolError, match="0.5.0"):
         tool(old, "open_url").run({"url": "https://example.com"})
+
+
+def test_rebind_changes_the_tool_list_with_the_mode():
+    control = ai.AiControl(frames(), session=FakeSession({}))
+    assert "home" in [t.name for t in control.tools()]
+    control.rebind(pointer=lambda: FakePointer(), calibrate=lambda: "ok")
+    names = [t.name for t in control.tools()]
+    assert "check_pointer" in names and "calibrate" in names and "home" not in names
+    control.rebind()
+    assert "tap" not in [t.name for t in control.tools()]  # no input: screenshots only

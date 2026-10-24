@@ -46,6 +46,11 @@ class AiControl:
         self._rings_lock = threading.Lock()  # added on the MCP thread, drawn on the window's
         self._down: tuple | None = None  # a press that hasn't been released yet (for cleanup)
 
+    def rebind(self, session=None, pointer: Callable | None = None, keys=None,
+               calibrate: Callable[[], str] | None = None) -> None:
+        """The input mode changed: point the tools at the new session / pointer / keys (the list is read per request)."""
+        self.session, self.pointer, self.keys, self.calibrate_pointer = session, pointer, keys, calibrate
+
     # --- server
     def enable(self, cfg: Config) -> None:
         cfg.mcp_token = cfg.mcp_token or secrets.token_urlsafe(24)
