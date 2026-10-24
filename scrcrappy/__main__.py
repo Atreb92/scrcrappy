@@ -116,10 +116,10 @@ def main(argv: list[str] | None = None) -> int:
         atexit.register(link.close)
         send, connected, keys = link.send, link.connected, KeyQueue(link.send_keys)
         keys.start()
-        if not connected.wait(5):
-            print("waiting for the iPhone to connect to 'scrcrappy PC' / 'scrcrappy ESP32' "
-                  "(AssistiveTouch on; pair it in Settings > Bluetooth the first time)...", file=sys.stderr)
-            connected.wait()
+        if not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
+            print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
+                  "(AssistiveTouch on; pair it in Settings > Accessibility > Touch > AssistiveTouch > Devices)",
+                  file=sys.stderr)
         make_pointer = lambda size: mouse.Pointer(send, mouse.Gain(calibrate.load(serial)), size)  # noqa: E731
         calibrator = calibrate.Calibrator(serial, send, frames)  # loaded again after Settings › Calibrate
 
