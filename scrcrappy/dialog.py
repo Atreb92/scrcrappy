@@ -266,6 +266,8 @@ def _glass(screen: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
 CALIBRATE_TIP = ("Measures the pointer speed again. Do it after changing Tracking Speed on the iPhone (Settings › "
                  "Accessibility › Touch › AssistiveTouch), or when the cursor overshoots or falls short. Open a plain, "
                  "light screen first and don't touch the mouse for about 20 s.")
+CANCEL_TIP = "Stops the measurement. The previous calibration stays."
+RED = (255, 69, 58)  # iOS dark red
 NEEDS_BT_TIP = "Needs the iPhone connected over Bluetooth: pair it in AssistiveTouch › Devices first."
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
@@ -339,20 +341,21 @@ class Settings:
                  calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
                  on_copy: Callable[[], None] | None = None, board=None,
-                 connected: Callable[[], bool] = lambda: True) -> None:
+                 connected: Callable[[], bool] = lambda: True, calibrating: Callable[[], bool] = lambda: False,
+                 on_cancel: Callable[[], None] | None = None) -> None:
         """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
+        `calibrating()`: a measurement is running; the button is then a red Cancel that calls `on_cancel`.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
         self.window, self.where, self.cfg, self.on_change, self.on_natural, self.on_close = (
             window, where, cfg, on_change, on_natural, on_close)
         self.on_calibrate, self.on_ai, self.ai_status, self.on_copy = on_calibrate, on_ai, ai_status, on_copy
         self.font, self.small, self.head = ui_font(14), ui_font(12), ui_font(14, True)
-        self.calibration_lines = [] if calibration is None else _wrap(
-            f"Current: {calibration:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
+        self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
-        self.connected = connected
+        self.connected, self.calibrating, self.on_cancel = connected, calibrating, on_cancel
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
         self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
@@ -444,6 +447,14 @@ class Settings:
         local = (pos[0] - rect.x, pos[1] - rect.y + self.scroll)
         return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
 
+    def _calibration_lines(self, value: float) -> list[str]:
+        return _wrap(f"Current: {value:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
+
+    def set_calibration(self, value: float) -> None:
+        """A run just finished: show its number (the panel stays open while it runs)."""
+        self.calibration_lines = self._calibration_lines(value)
+        self._relayout()
+
     def confirming(self, now: float | None = None) -> bool:
         return (time.monotonic() if now is None else now) < self.confirm_until
 
@@ -467,6 +478,8 @@ class Settings:
         now = time.monotonic() if now is None else now
         if not self.hover or now - self.hover_since < TIP_DELAY:
             return None
+        if self.hover == "calibrate" and self.calibrating():
+            return CANCEL_TIP
         if self.hover == "calibrate" and not self.connected():
             return NEEDS_BT_TIP
         return self.tips.get(self.hover)
@@ -496,9 +509,11 @@ class Settings:
                 self.confirm_until = now + CONFIRM_S
         elif hit == "copy" and self.on_copy:
             self.on_copy()
+        elif hit == "calibrate" and self.calibrating():
+            if self.on_cancel:
+                self.on_cancel()
         elif hit == "calibrate" and self.connected():
-            self.close()
-            self.on_calibrate()
+            self.on_calibrate()  # the panel stays open: the button turns into Cancel
         elif hit == "browse" and not self.picking:
             self.picking = True
 
@@ -617,9 +632,10 @@ class Settings:
             for i, line in enumerate(self.calibration_lines):
                 surf.blit(self.small.render(line, True, MUTED), (PAD, self.calib_top + 20 + 16 * i))
             c = self.hits["calibrate"]
-            up = self.connected()
-            pygame.draw.rect(surf, self._fill("calibrate", ACCENT) if up else FIELD, c, border_radius=c.height // 2)
-            label = self.small.render("Calibrate", True, (255, 255, 255) if up else DISABLED)
+            running, up = self.calibrating(), self.connected()
+            fill = self._fill("calibrate", RED if running else ACCENT) if running or up else FIELD
+            pygame.draw.rect(surf, fill, c, border_radius=c.height // 2)
+            label = self.small.render("Cancel" if running else "Calibrate", True, (255, 255, 255) if running or up else DISABLED)
             surf.blit(label, label.get_rect(center=c.center))
         view = surf.subsurface(pygame.Rect(0, self.scroll, min(rect.w, surf.get_width()), rect.h))
         _round(view, PANEL_R)

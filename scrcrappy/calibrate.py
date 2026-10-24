@@ -1,5 +1,6 @@
 """Measure the pointer gain table from the video: move by known counts, find the cursor, divide."""
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -33,11 +34,20 @@ def to_array(frame: Frame) -> np.ndarray:
     return np.frombuffer(pixels, np.uint8).reshape(h, pitch)[:, : w * 3].reshape(h, w, 3)
 
 
-def calibrate(send: Send, frames: LatestFrame) -> dict[int, float]:
+class Cancelled(Exception):
+    """The user cancelled a running calibration; nothing was saved."""
+
+
+def calibrate(send: Send, frames: LatestFrame, cancel: threading.Event | None = None) -> dict[int, float]:
+    """Measure the gain table. `cancel`, once set, stops it within a report (raises Cancelled)."""
     def paced(reports: list[tuple[int, int]]) -> tuple[float, float] | None:
         for dx, dy in reports:
+            if cancel and cancel.is_set():
+                raise Cancelled()
             send(dx, dy, 0, 0)
             time.sleep(TICK)
+        if cancel and cancel.is_set():
+            raise Cancelled()
         time.sleep(0.35)  # let the last frames arrive
         frame = frames.peek()
         return find_cursor(to_array(frame)) if frame else None
@@ -82,10 +92,23 @@ class Calibrator:
 
     def __init__(self, serial: str, send: Send, frames: LatestFrame) -> None:
         self.serial, self.send, self.frames = serial, send, frames
+        self._cancel = threading.Event()
 
     def value(self) -> float:
         """Screen px per count for a medium report (12 counts): the one number Settings shows."""
         return Gain(load(self.serial))(12)
 
+    def begin(self) -> None:
+        """Forget an earlier cancel; the app calls this on its own thread just before starting the worker, so a
+        Cancel clicked right after the start can't be erased by the worker."""
+        self._cancel.clear()
+
     def run(self) -> None:
-        save(self.serial, calibrate(self.send, self.frames))
+        """Measure and save; raises Cancelled (saving nothing) after `cancel()`, even one during the last measurement."""
+        table = calibrate(self.send, self.frames, self._cancel)
+        if self._cancel.is_set():
+            raise Cancelled()
+        save(self.serial, table)
+
+    def cancel(self) -> None:
+        self._cancel.set()

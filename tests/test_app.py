@@ -219,18 +219,18 @@ def test_calibrator_reports_current_value_and_saves_a_new_table(monkeypatch, tmp
     monkeypatch.setenv("HOME", str(tmp_path))
     c = calibrate.Calibrator("abc", send=lambda *a: None, frames=None)
     assert c.value() == pytest.approx(1.66, abs=0.01)  # default table, medium move (12 counts)
-    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames: {1: 1.0, 12: 2.5, 24: 3.0})
+    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, cancel=None: {1: 1.0, 12: 2.5, 24: 3.0})
     c.run()
     assert c.value() == pytest.approx(2.5)
     assert calibrate.load("abc")[12.0] == 2.5
 
 
-@pytest.mark.parametrize("failure", [None, OSError("disk full")])
-def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch, failure):  # also when it blows up
+@pytest.mark.parametrize("failure", [None, OSError("disk full"), "cancelled"])
+def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch, capsys, failure):  # also when it blows up
     import os
     import time
     os.environ["SDL_VIDEODRIVER"] = "dummy"
-    from scrcrappy import app as app_module
+    from scrcrappy import app as app_module, calibrate
     from scrcrappy.toolbar import Bar
     from scrcrappy.video import LatestFrame
 
@@ -244,8 +244,13 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch, 
         def value(self):
             return 1.86
 
+        def begin(self):
+            pass
+
         def run(self):
             runs.append(len(pointers))  # pointers built so far when the measurement runs
+            if failure == "cancelled":
+                raise calibrate.Cancelled()
             if failure:
                 raise failure
 
@@ -275,6 +280,59 @@ def test_calibrate_from_settings_stops_the_pointer_and_rebuilds_it(monkeypatch, 
     assert runs == [1]  # measured once, with the old pointer stopped and no new one yet
     assert ("stop",) in pointers[0].calls
     assert len(pointers) == 2  # rebuilt afterwards, with the new table
+    assert ("calibration failed" in capsys.readouterr().err) == isinstance(failure, OSError)  # a cancel is no failure
+
+
+def test_bar_actions_do_nothing_while_calibrating(monkeypatch):
+    import os
+    import threading
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.toolbar import Bar
+    from scrcrappy.video import LatestFrame
+
+    bars, gate, pressed = [], threading.Event(), []
+
+    class SlowCalibrator:
+        def value(self):
+            return 1.86
+
+        def begin(self):
+            pass
+
+        def run(self):
+            gate.wait(2)
+
+    orig_bar, orig_settings = Bar.__init__, app_module.Settings.__init__
+
+    def bar_init(self, *a, **kw):
+        orig_bar(self, *a, **kw)
+        bars.append(self)
+
+    def settings_init(self, *a, **kw):
+        orig_settings(self, *a, **kw)
+        self._click("calibrate")
+
+    monkeypatch.setattr(Bar, "__init__", bar_init)
+    monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
+    frames, t0, loops = LatestFrame(), time.time(), []
+
+    def alive():
+        loops.append(1)
+        if len(loops) == 3:
+            bars[0].actions["settings"]()
+        if len(loops) == 6:  # calibrating: the pointer controller is gone
+            for name in ("copy", "paste", "home", "switcher", "lock"):
+                bars[0].actions[name]()
+                pressed.append(name)
+            gate.set()
+        if len(loops) <= 3:
+            frames.put((bytes(30 * 60 * 3), (30, 60), 90))
+        return time.time() - t0 < 1.0
+
+    app_module.run(frames, alive, make_pointer=lambda size: FakePointer(), calibrator=SlowCalibrator(), save=lambda c: None)
+    assert pressed == ["copy", "paste", "home", "switcher", "lock"]
 
 
 def test_mcp_flag_is_never_saved(monkeypatch):
@@ -414,3 +472,67 @@ def test_window_enter_is_paused_while_the_ai_acts():
     from scrcrappy.app import paused
     assert paused(pygame.event.Event(pygame.WINDOWENTER), True)  # else the pointer homes mid-press
     assert not paused(pygame.event.Event(pygame.WINDOWENTER), False)
+
+
+def test_cancel_reaches_the_calibrator_even_while_an_ai_tool_holds_the_lock(monkeypatch):
+    """An AI-started calibration locks the user's input out; the red Cancel must still work (and toast)."""
+    import os
+    import threading
+    import time
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module, calibrate
+    from scrcrappy.toolbar import Bar
+    from scrcrappy.video import LatestFrame
+
+    bars, panels, pointers, cancelled = [], [], [], threading.Event()
+
+    class WaitingCalibrator:
+        def value(self):
+            return 1.86
+
+        def begin(self):
+            cancelled.clear()
+
+        def cancel(self):
+            cancelled.set()
+
+        def run(self):
+            if cancelled.wait(3):
+                raise calibrate.Cancelled()
+
+    orig_bar, orig_settings = Bar.__init__, app_module.Settings.__init__
+
+    def bar_init(self, *a, **kw):
+        orig_bar(self, *a, **kw)
+        bars.append(self)
+
+    def settings_init(self, *a, **kw):
+        orig_settings(self, *a, **kw)
+        panels.append(self)
+        self._click("calibrate")
+
+    monkeypatch.setattr(Bar, "__init__", bar_init)
+    monkeypatch.setattr(app_module.Settings, "__init__", settings_init)
+    monkeypatch.setattr(app_module.ai_mod.AiControl, "locked", lambda self: True)
+    frames, t0, loops = LatestFrame(), time.time(), []
+
+    def make_pointer(size):
+        pointers.append(FakePointer())
+        return pointers[-1]
+
+    def alive():
+        loops.append(1)
+        if len(loops) == 3:
+            bars[0].actions["settings"]()
+        if len(loops) == 6:
+            p = panels[0]
+            x, y = p.hits["calibrate"].center
+            pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONUP, button=1, window=p.window,
+                                                 pos=(p.rect.x + x, p.rect.y + y - p.scroll)))
+        if len(loops) <= 3:
+            frames.put((bytes(30 * 60 * 3), (30, 60), 90))
+        return time.time() - t0 < 1.5
+
+    app_module.run(frames, alive, make_pointer=make_pointer, calibrator=WaitingCalibrator(), save=lambda c: None)
+    assert cancelled.is_set() and bars[0].toast_text == "Calibration cancelled"
+    assert len(pointers) == 2  # rebuilt after the cancel

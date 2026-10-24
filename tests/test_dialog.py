@@ -209,7 +209,7 @@ def test_calibration_section_only_with_a_mouse_and_calibrate_closes_the_panel():
     assert len(panel.calibration_lines) == 1  # short; the explanation is the Calibrate button's tooltip
     assert "Tracking Speed" in panel.tips["calibrate"]
     click(panel, "calibrate")
-    assert started == [1] and closed == [1] and panel.closed
+    assert started == [1] and closed == [] and not panel.closed  # stays open: the button becomes Cancel while it runs
 
 
 def test_ai_switch_shows_status_and_copy():
@@ -500,3 +500,39 @@ def test_calibrate_works_once_connected():
     state[0] = True
     click(panel, "calibrate")
     assert started == [1]
+
+
+def calibrating_panel(**kw):
+    from scrcrappy.config import Config
+    calls = {"start": 0, "cancel": 0}
+    panel, closed = settings_panel(Config(), [], calibration=1.5, on_calibrate=lambda: calls.__setitem__("start", calls["start"] + 1),
+                                   on_cancel=lambda: calls.__setitem__("cancel", calls["cancel"] + 1), **kw)
+    return panel, closed, calls
+
+
+def test_calibrate_button_cancels_while_calibrating_even_if_bluetooth_dropped():
+    panel, closed, calls = calibrating_panel(calibrating=lambda: True, connected=lambda: False)
+    click(panel, "calibrate")
+    assert calls == {"start": 0, "cancel": 1} and not panel.closed and not closed
+    panel.hover, panel.hover_since = "calibrate", 0.0
+    assert "stays" in panel.tip(now=100.0)
+
+
+def test_cancel_button_is_red_and_calibrate_is_blue():
+    def centre_colour(calibrating):
+        panel, _, _ = calibrating_panel(calibrating=lambda: calibrating)
+        screen = pygame.Surface((375, 715))
+        panel.draw(screen, 667)
+        x, y = panel.hits["calibrate"].center
+        return screen.get_at((panel.rect.x + x - 40, panel.rect.y + y - panel.scroll))[:3]  # left of the label
+
+    red, blue = centre_colour(True), centre_colour(False)
+    assert red[0] > red[2] + 80 and blue[2] > blue[0] + 80
+
+
+def test_calibration_number_follows_a_finished_run():
+    from scrcrappy.config import Config
+    panel, _ = settings_panel(Config(), [], calibration=1.0)
+    panel.set_calibration(2.5)
+    assert any("2.50" in line for line in panel.calibration_lines)
+    assert panel.rect.height == panel.height
