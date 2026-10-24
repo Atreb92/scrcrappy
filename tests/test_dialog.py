@@ -6,7 +6,7 @@ import pygame
 import pytest
 
 from scrcrappy.config import ICON_CHOICES, Custom
-from scrcrappy.dialog import Dialog, DialogState
+from scrcrappy.dialog import PANEL_W, Dialog, DialogState
 
 
 @pytest.fixture(autouse=True)
@@ -369,10 +369,10 @@ def board_panel(mode="esp32", board=None):
     return settings_panel(cfg, [], board=board)[0]
 
 
-def test_board_section_only_with_a_board_in_esp32_mode():
+def test_board_section_follows_the_board_not_the_saved_mode():
     assert "forget" in board_panel(board=FakeBoard()).hits
     assert "forget" not in board_panel(board=None).hits
-    assert "forget" not in board_panel(mode="ble", board=FakeBoard()).hits
+    assert "forget" in board_panel(mode="ble", board=FakeBoard()).hits  # launched with --mouse esp32, saved mode differs
 
 
 def test_forget_needs_two_clicks_within_three_seconds(monkeypatch):
@@ -446,3 +446,35 @@ def test_menu_pressed_cleared_on_focus_loss():
     m.handle(menu_event(m, pygame.MOUSEBUTTONDOWN, "edit"))
     m.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=m.window))
     assert m.pressed is None
+
+
+def test_board_status_silence_counts_from_when_settings_opened():
+    from scrcrappy.dialog import board_status
+    stale = FakeBoard(last_seen=10.0)
+    assert board_status(stale, 100.0)[1] == "Board not answering"
+    assert board_status(stale, 100.0, opened=99.5)[1] == "Connected to iPhone (…3F:A2)"  # the reply to our '?' is on its way
+
+
+def test_board_status_long_name_keeps_the_id_visible():
+    from scrcrappy.dialog import board_status
+    board = FakeBoard(peer=("6F:BF", "Alessandro’s iPhone"))
+    text = board_status(board, 101, fits=lambda t: len(t) <= 30)[1]
+    assert len(text) <= 30 and text.endswith("(…6F:BF)") and "…" in text.split("(")[0]
+
+
+def test_status_text_fits_the_panel_in_pixels():
+    panel = board_panel(board=FakeBoard(peer=("6F:BF", "Alessandro’s iPhone with a very long name")))
+    text = panel.board_text(panel.opened_at + 0.5)[1]
+    assert panel.small.size(text)[0] <= PANEL_W - 2 * 16 - 18 and text.endswith("(…6F:BF)")
+
+
+def test_status_holds_while_a_snapshot_is_arriving():
+    panel = board_panel(board=FakeBoard(last_seen=50.0))
+    now = panel.opened_at + 1
+    panel.board.last_seen = now - 1
+    first = panel.board_text(now)
+    panel.board.paired, panel.board.peer = None, None  # the 'ready' of a new snapshot has just reset them
+    panel.board.connected.clear()
+    panel.board.last_seen = now - 0.01
+    assert panel.board_text(now) == first
+    assert panel.board_text(now + 0.5) != first  # a snapshot that never completes does show

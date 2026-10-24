@@ -151,3 +151,9 @@ def test_pressed_cleared_when_focus_is_lost(bar):
     bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, at(bar, "paste")))
     bar.handle(pygame.event.Event(pygame.WINDOWFOCUSLOST, window=bar.main))
     assert bar.pressed is None
+
+
+def test_dragging_off_the_bar_onto_the_phone_clears_pressed(bar):
+    bar.handle(ev(bar, pygame.MOUSEBUTTONDOWN, at(bar, "paste")))
+    bar.handle(ev(bar, pygame.MOUSEBUTTONUP, (50, 10)))  # released above the strip, on the phone image
+    assert bar.pressed is None and bar.seen == []

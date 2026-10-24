@@ -194,6 +194,8 @@ class Bar:
         if event.pos[1] < self.top:
             if event.type == pygame.MOUSEMOTION:
                 self.hover, self.tip_text = None, None
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                self.pressed = None  # dragged off the strip: the press is over, no click
             return False
         if event.type == pygame.MOUSEMOTION:
             hit = self._hit(event.pos)

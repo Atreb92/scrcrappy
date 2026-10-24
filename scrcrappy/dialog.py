@@ -273,17 +273,26 @@ PAIRING_TOAST = "Board is open to pairing. Forget it on the phone too."
 BOARD_DOT = {"green": SWITCH_ON, "blue": ACCENT, "grey": (142, 142, 147)}
 
 
-def board_status(board, now: float) -> tuple[str, str]:
-    """(dot colour, text) for the ESP32 board section, from what its `Link` last heard."""
-    if now - board.last_seen > SILENT_S:
+def board_status(board, now: float, opened: float = 0.0, fits: Callable[[str], bool] = lambda t: True) -> tuple[str, str]:
+    """(dot colour, text) for the ESP32 board section, from what its `Link` last heard. `opened`: when Settings
+    opened (silence counts from then, the board's answer to our first `?` is still on its way); `fits(text)`:
+    whether a line of text fits, a long phone name is shortened until the id after it is visible."""
+    if now - max(board.last_seen, opened) > SILENT_S:
         return "grey", "Board not answering"
     if board.connected.is_set():
         if not board.peer:
             return "green", "Connected"
         id_, name = board.peer
         name = "".join(c for c in name if c.isprintable()).strip()
-        name = name if len(name) <= 24 else name[:24] + "…"
-        return "green", f"Connected to {name} (…{id_})" if name else f"Connected (…{id_})"
+        if len(name) > 24:
+            name = name[:24] + "…"
+
+        def line(n: str) -> str:
+            return f"Connected to {n} (…{id_})" if n else f"Connected (…{id_})"
+
+        while name and not fits(line(name)):
+            name = name[:-2].rstrip() + "…" if len(name) > 1 else ""
+        return "green", line(name)
     if board.paired is None:
         return "grey", "Reflash the board for status"
     return ("grey", "Paired, not connected") if board.paired else ("blue", "Open to pairing")
@@ -329,7 +338,7 @@ class Settings:
                  calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
                  on_copy: Callable[[], None] | None = None, board=None) -> None:
-        """`board`: the ESP32 `Link`; with `--mouse esp32` selected Settings shows its status and a Forget button.
+        """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
@@ -341,6 +350,7 @@ class Settings:
             f"Current: {calibration:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
+        self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
         self.pressed: str | None = None  # the item the left mouse button went down on
         self.hover_since = 0.0
@@ -366,10 +376,10 @@ class Settings:
         if self.cfg.mouse == "esp32":
             self.hits["port"] = pygame.Rect(PAD + 40, y, PANEL_W - 2 * PAD - 40, 26)
             y += 26 + 10
-            if self.board:
-                self.board_top = y
-                self.hits["forget"] = pygame.Rect(PAD, y + 22, PANEL_W - 2 * PAD, 28)
-                y += 22 + 28 + 10
+        if self.board:  # whenever there is a board: the --mouse flag may differ from the saved mode
+            self.board_top = y
+            self.hits["forget"] = pygame.Rect(PAD, y + 22, PANEL_W - 2 * PAD, 28)
+            y += 22 + 28 + 10
         self.hits["natural"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
         y += 26 + 12
         self.shots_top = y
@@ -432,6 +442,14 @@ class Settings:
 
     def confirming(self, now: float | None = None) -> bool:
         return (time.monotonic() if now is None else now) < self.confirm_until
+
+    def board_text(self, now: float) -> tuple[str, str]:
+        """The board's (colour, text); kept while a snapshot is still arriving (its lines land over a few ms and
+        the state is half-built until they are all in)."""
+        if self._board_text is None or now - self.board.last_seen >= 0.05:
+            self._board_text = board_status(self.board, now, self.opened_at,
+                                            lambda t: self.small.size(t)[0] <= PANEL_W - 2 * PAD - 18)
+        return self._board_text
 
     def tick(self, now: float | None = None) -> None:
         """Ask the board for its state once a second while the panel is open (called every frame)."""
@@ -562,7 +580,7 @@ class Settings:
             self._field(surf, "port", Config.port)
         if "forget" in self.hits:
             now = time.monotonic()
-            colour, text = board_status(self.board, now)
+            colour, text = self.board_text(now)
             if colour != "blue" or int(now * 2) % 2:  # open to pairing: blink at 1 Hz
                 pygame.draw.circle(surf, BOARD_DOT[colour], (PAD + 5, self.board_top + 9), 5)
             surf.blit(self.small.render(text, True, FG), (PAD + 18, self.board_top + 2))
