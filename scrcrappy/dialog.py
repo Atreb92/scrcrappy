@@ -266,6 +266,7 @@ def _glass(screen: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
 CALIBRATE_TIP = ("Measures the pointer speed again. Do it after changing Tracking Speed on the iPhone (Settings › "
                  "Accessibility › Touch › AssistiveTouch), or when the cursor overshoots or falls short. Open a plain, "
                  "light screen first and don't touch the mouse for about 20 s.")
+NEEDS_BT_TIP = "Needs the iPhone connected over Bluetooth: pair it in AssistiveTouch › Devices first."
 MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")]
 PANEL_W, SWITCH = 260, (34, 18)
 SILENT_S, POLL_S, CONFIRM_S = 2.5, 1.0, 3.0  # board: silence before "not answering", poll interval, Forget confirm window
@@ -337,9 +338,11 @@ class Settings:
                  on_change: Callable[[], None], on_natural: Callable[[], None], on_close: Callable[[], None],
                  calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
-                 on_copy: Callable[[], None] | None = None, board=None) -> None:
+                 on_copy: Callable[[], None] | None = None, board=None,
+                 connected: Callable[[], bool] = lambda: True) -> None:
         """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
+        `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
         self.window, self.where, self.cfg, self.on_change, self.on_natural, self.on_close = (
@@ -349,6 +352,7 @@ class Settings:
         self.calibration_lines = [] if calibration is None else _wrap(
             f"Current: {calibration:.2f} px per mouse count", self.small, PANEL_W - 2 * PAD)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
+        self.connected = connected
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
         self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
@@ -461,7 +465,11 @@ class Settings:
     def tip(self, now: float | None = None) -> str | None:
         """The hover text of the item under the mouse, once it has been there for TIP_DELAY."""
         now = time.monotonic() if now is None else now
-        return self.tips.get(self.hover) if self.hover and now - self.hover_since >= TIP_DELAY else None
+        if not self.hover or now - self.hover_since < TIP_DELAY:
+            return None
+        if self.hover == "calibrate" and not self.connected():
+            return NEEDS_BT_TIP
+        return self.tips.get(self.hover)
 
     def _click(self, hit: str | None) -> None:
         if hit not in ("port", "screenshots"):
@@ -488,7 +496,7 @@ class Settings:
                 self.confirm_until = now + CONFIRM_S
         elif hit == "copy" and self.on_copy:
             self.on_copy()
-        elif hit == "calibrate":
+        elif hit == "calibrate" and self.connected():
             self.close()
             self.on_calibrate()
         elif hit == "browse" and not self.picking:
@@ -609,8 +617,9 @@ class Settings:
             for i, line in enumerate(self.calibration_lines):
                 surf.blit(self.small.render(line, True, MUTED), (PAD, self.calib_top + 20 + 16 * i))
             c = self.hits["calibrate"]
-            pygame.draw.rect(surf, self._fill("calibrate", ACCENT), c, border_radius=c.height // 2)
-            label = self.small.render("Calibrate", True, (255, 255, 255))
+            up = self.connected()
+            pygame.draw.rect(surf, self._fill("calibrate", ACCENT) if up else FIELD, c, border_radius=c.height // 2)
+            label = self.small.render("Calibrate", True, (255, 255, 255) if up else DISABLED)
             surf.blit(label, label.get_rect(center=c.center))
         view = surf.subsurface(pygame.Rect(0, self.scroll, min(rect.w, surf.get_width()), rect.h))
         _round(view, PANEL_R)

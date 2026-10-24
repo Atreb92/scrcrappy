@@ -117,10 +117,11 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         keys: KeyQueue | None = None, cfg: Config | None = None, device_key: str = "", device_name: str = "scrcrappy PC",
         save: Callable[[Config], None] = config.save, title: str = "scrcrappy",
         agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False,
-        board: "Link | None" = None) -> bool:
+        board: "Link | None" = None, connected: Callable[[], bool] = lambda: True) -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
-    with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings; `board` (the ESP32 link) adds its status and Forget button.
+    with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings; `board` (the ESP32 link) adds its status and Forget button; `connected()` says whether the phone is up over
+    Bluetooth (Calibrate is grayed out while it isn't).
     Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once."""
     pygame.init()
     main = pygame.Window(title, (375, 667 + BAR_H), resizable=True)  # the phone image above the toolbar strip
@@ -302,7 +303,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 controller.release()  # a key held right now would otherwise stay down on the phone: the overlay eats its release
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
-                                board=board)
+                                board=board, connected=connected)
         bar.set_items(items())
 
     bar = Bar(main, items(), {

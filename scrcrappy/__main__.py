@@ -99,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         video.reset_if_stuck(dev, qvh)
 
     make_pointer, keys, session, calibrator = None, None, None, None
+    bt_up = lambda: True  # noqa: E731  # replaced below by the link's connected flag
     frames = video.LatestFrame()
     if args.mouse == "agent":
         try:
@@ -115,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         atexit.register(link.close)
         send, connected, keys = link.send, link.connected, KeyQueue(link.send_keys)
+        bt_up = connected.is_set
         keys.start()
         if not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
             print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
@@ -125,6 +127,9 @@ def main(argv: list[str] | None = None) -> int:
 
     with (video.capture_avf(frames, serial) if mac else video.capture(qvh, frames)) as proc:
         if args.calibrate:
+            if not connected.is_set():  # the window no longer waits for the phone, but measuring needs it
+                print("waiting for the iPhone to connect over Bluetooth...", file=sys.stderr)
+                connected.wait()
             time.sleep(3)  # stream start-up
             try:
                 table = calibrate.calibrate(send, frames)
@@ -137,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
             cfg.natural_scroll = args.natural_scroll
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer, keys=keys,
                                  cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator, mcp=args.mcp,
-                                 board=link if args.mouse == "esp32" else None,
+                                 board=link if args.mouse == "esp32" else None, connected=bt_up,
                                  device_name="scrcrappy ESP32" if args.mouse == "esp32" else "scrcrappy PC")
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), {'log' if mac else 'qvh log'}:\n{proc.log}", file=sys.stderr)

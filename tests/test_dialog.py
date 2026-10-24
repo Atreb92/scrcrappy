@@ -478,3 +478,25 @@ def test_status_holds_while_a_snapshot_is_arriving():
     panel.board.last_seen = now - 0.01
     assert panel.board_text(now) == first
     assert panel.board_text(now + 0.5) != first  # a snapshot that never completes does show
+
+
+def test_calibrate_is_disabled_without_a_bluetooth_connection():
+    from scrcrappy.config import Config
+    started = []
+    panel, closed = settings_panel(Config(), [], calibration=1.5, on_calibrate=lambda: started.append(1),
+                                   connected=lambda: False)
+    click(panel, "calibrate")
+    assert started == [] and not closed and not panel.closed
+    panel.hover, panel.hover_since = "calibrate", 0.0
+    assert "connect" in panel.tip(now=100.0).lower()
+
+
+def test_calibrate_works_once_connected():
+    from scrcrappy.config import Config
+    state, started = [False], []
+    panel, _ = settings_panel(Config(), [], calibration=1.5, on_calibrate=lambda: started.append(1),
+                              connected=lambda: state[0])
+    click(panel, "calibrate")
+    state[0] = True
+    click(panel, "calibrate")
+    assert started == [1]
