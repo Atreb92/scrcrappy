@@ -345,7 +345,7 @@ class Settings:
                  on_copy: Callable[[], None] | None = None, board=None,
                  connected: Callable[[], bool] = lambda: True, calibrating: Callable[[], bool] = lambda: False,
                  on_cancel: Callable[[], None] | None = None, on_mode: Callable[[str], None] | None = None,
-                 on_port: Callable[[str], None] | None = None) -> None:
+                 on_port: Callable[[str], None] | None = None, active_mode: Callable[[], str] | None = None) -> None:
         """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
@@ -362,7 +362,7 @@ class Settings:
         self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
         self.connected, self.calibrating, self.on_cancel = connected, calibrating, on_cancel
-        self.on_mode, self.on_port, self.asked_port = on_mode, on_port, cfg.port
+        self.on_mode, self.on_port, self.asked_port, self.active_mode = on_mode, on_port, cfg.port, active_mode
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
         self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
@@ -387,7 +387,7 @@ class Settings:
         for i in range(len(MODES)):
             self.hits[f"mode:{i}"] = pygame.Rect(PAD + i * cell, 34, cell, 28)
         y = 34 + 28 + 10
-        if self.cfg.mouse == "esp32":
+        if self.mode() == "esp32":
             self.hits["port"] = pygame.Rect(PAD + 40, y, PANEL_W - 2 * PAD - 40, 26)
             y += 26 + 10
         if self.board:  # whenever there is a board: the --mouse flag may differ from the saved mode
@@ -454,6 +454,10 @@ class Settings:
         local = (pos[0] - rect.x, pos[1] - rect.y + self.scroll)
         return next((k for k, r in self.hits.items() if r.collidepoint(local)), None) if rect.collidepoint(pos) else None
 
+    def mode(self) -> str:
+        """The input mode that is running (`--mouse` may differ from the saved default in `cfg.mouse`)."""
+        return self.active_mode() if self.active_mode else self.cfg.mouse
+
     @property
     def shows_next_launch_tag(self) -> bool:
         return self.on_mode is None
@@ -510,7 +514,7 @@ class Settings:
         if hit and hit.startswith("mode:"):
             mode = MODES[int(hit[5:])][0]
             if self.on_mode:
-                if mode != self.cfg.mouse and selectable(mode):
+                if mode != self.mode() and selectable(mode):
                     self.on_mode(mode)
                 return
             self.cfg.mouse = mode
@@ -565,7 +569,7 @@ class Settings:
         if self.editing == "port":
             value = value or Config.port
         self.text[self.editing] = value
-        if self.editing == "port" and self.on_port and self.cfg.mouse == "esp32":
+        if self.editing == "port" and self.on_port and self.mode() == "esp32":
             if value != self.asked_port:  # the app restarts ESP32 on it and saves it once that worked
                 self.asked_port = value
                 self.on_port(value)
@@ -623,7 +627,7 @@ class Settings:
         pygame.draw.rect(surf, FIELD, first.union(last), border_radius=8)
         for i, (mode, name) in enumerate(MODES):
             r = self.hits[f"mode:{i}"]
-            on = self.cfg.mouse == mode
+            on = self.mode() == mode
             if on:
                 pygame.draw.rect(surf, ON_BG, r.inflate(-4, -4), border_radius=6)
             label = self.small.render(name, True, ON_FG if on else FG if selectable(mode) else DISABLED)

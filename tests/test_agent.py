@@ -252,3 +252,14 @@ def test_a_relative_xdg_config_home_is_ignored(home, monkeypatch):
     (home / ".config" / "user-dirs.dirs").write_text('XDG_PICTURES_DIR="$HOME/Immagini"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", "relative/dir")
     assert agent.screenshot_dir("") == home / "Immagini"  # falls back to ~/.config
+
+
+def test_a_closed_session_does_not_reconnect(monkeypatch):
+    import time
+    monkeypatch.setattr(agent, "POLL", 0.05)
+    ours, phone = socket.socketpair()
+    reopened = []
+    s = agent.Session(ours, post=lambda fn: fn(), reopen=lambda: reopened.append(1) or socket.socketpair()[0])
+    s.close()
+    time.sleep(0.5)
+    assert reopened == []

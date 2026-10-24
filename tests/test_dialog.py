@@ -601,3 +601,24 @@ def test_rebind_swaps_calibration_and_board_sections():
     assert panel.rect.height == panel.height
     panel.rebind(2.0, FakeBoard(), lambda: True)
     assert "calibrate" in panel.hits and "forget" in panel.hits and "calibrate" in panel.tips
+
+
+def test_settings_follow_the_running_mode_not_the_saved_default():
+    asked, ports = [], []
+    panel, cfg, _ = mode_panel("none", on_mode=asked.append, on_port=ports.append, active_mode=lambda: "esp32")
+    assert "port" in panel.hits  # the running mode is ESP32 although the saved default is None
+    click(panel, "mode:2")
+    assert asked == []  # already running
+    click(panel, "mode:0")
+    assert asked == ["none"]
+    panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
+    panel._commit()
+    assert ports == ["/dev/ttyUSB7"]
+
+
+def test_a_port_edit_while_another_mode_runs_does_not_switch():
+    ports = []
+    panel, cfg, changes = mode_panel("esp32", on_mode=lambda m: None, on_port=ports.append, active_mode=lambda: "none")
+    panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
+    panel._commit()
+    assert ports == []

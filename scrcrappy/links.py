@@ -6,6 +6,7 @@ device -> host: "ready" (advertising), "connected" (phone subscribed to reports)
 ESP32 firmware only: "?" answers a snapshot ("ready", "unpaired" | "paired <id>", while connected "connected" and
 "peer <id> <name>"), "p" forgets the phone ("pairing"), "disconnected" when the phone goes
 """
+import contextlib
 import os
 import select
 import subprocess
@@ -80,7 +81,15 @@ def ble(python: str) -> Link:
     """This computer's Bluetooth adapter (Linux), via blemouse.py under the system python."""
     proc = subprocess.Popen([python, "-I", str(Path(__file__).with_name("blemouse.py"))],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
-    link = Link(proc.stdin.write, lambda: proc.stdout.read(4096))
+    def close() -> None:  # the helper quits on EOF; without this it stays advertised (and connected) after a mode switch
+        with contextlib.suppress(OSError):
+            proc.stdin.close()
+        try:
+            proc.wait(2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    link = Link(proc.stdin.write, lambda: proc.stdout.read(4096), close)
     if not link.ready.wait(10):  # the helper prints its reason on stderr
         proc.kill()
         raise RuntimeError("Bluetooth mouse helper failed to start")

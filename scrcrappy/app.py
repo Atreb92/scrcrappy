@@ -320,6 +320,17 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             raise RuntimeError(result[0])
         return f"calibrated: {calibrator.value():.2f} screen px per count for a 12-count report"
 
+    def let_go() -> None:
+        """Release held input and wait until the key reports have really been sent, before the old mode closes."""
+        if controller:
+            controller.release()
+        if keys:
+            keys.wait_idle(0.5)
+
+    def wire_board() -> None:
+        if board:
+            board.on_pairing = lambda: post_run(lambda: bar.toast(PAIRING_TOAST))
+
     def request_switch(name: str, new_port: str | None = None) -> None:
         """Settings › Input: build mode `name` on a thread; `swap` brings it in on this one. Changing the ESP32 port
         (`new_port`) restarts it: the serial port is the same resource, so the old one closes first."""
@@ -338,8 +349,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         switching = True
         main.title = f"{title} — switching to {LABELS[name]}…"
         if restart:
+            let_go()
             if controller:
-                controller.release_all()
                 controller.stop()
             controller = None
             mode.close()
@@ -375,13 +386,14 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         that follows the mode, and save the choice."""
         nonlocal mode, active_port, make_pointer, keys, agent, calibrator, board, connected, device_name
         nonlocal device_key, customs, controller, switching, pending
+        let_go()
         if controller:
-            controller.release_all()
             controller.stop()
         mode.close()
         mode, pending, switching, active_port = new, None, False, new_port
         make_pointer, keys, agent, calibrator = new.make_pointer, new.keys, new.session, new.calibrator
         board, connected, device_name = new.board, new.connected, new.device_name
+        wire_board()
         device_key = f"{device_key.rsplit('/', 1)[0]}/{new.name}"
         customs = cfg.customs.setdefault(device_key, [])
         controller = None  # a pointer mode's controller is built by the loop once there is a frame
@@ -415,7 +427,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
                                 board=board, connected=connected, calibrating=lambda: calibrating,
-                                on_cancel=cancel_calibration, on_mode=request_switch if start_mode else None,
+                                on_cancel=cancel_calibration, on_mode=request_switch if start_mode else None, active_mode=lambda: mode.name,
                                 on_port=(lambda p: request_switch("esp32", p)) if start_mode else None)
         bar.set_items(items())
 
@@ -431,8 +443,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         "menu": open_menu,
         "settings": open_settings,
     })
-    if board:
-        board.on_pairing = lambda: post_run(lambda: bar.toast(PAIRING_TOAST))
+    wire_board()
     if agent and controller:
         controller.notify = bar.toast  # "Screenshot saved: …", "Copied N characters"
     if cfg.ai_control or mcp:  # --mcp: on for this run only, cfg.ai_control (what's saved) stays as it is

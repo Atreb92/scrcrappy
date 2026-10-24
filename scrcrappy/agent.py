@@ -89,7 +89,7 @@ class Session:
     def __init__(self, sock, post: Callable[[Callable[[], None]], None] = _post,
                  reopen: Callable[[], socket.socket] | None = None) -> None:
         self.sock, self.post, self.reopen = sock, post, reopen
-        self.orientation, self.warned = 1, False
+        self.orientation, self.warned, self.closed = 1, False, False
         self.lock = threading.Lock()
         self.jobs: queue.Queue = queue.Queue()
         threading.Thread(target=self._work, daemon=True).start()
@@ -158,9 +158,9 @@ class Session:
                 job()
             except (OSError, ValueError, AgentError) as e:
                 print(f"agent: connection lost ({e}), reconnecting", file=sys.stderr)
-                if not self.reopen:
+                if not self.reopen or self.closed:
                     return
-                while not self._reconnect():
+                while not self.closed and not self._reconnect():
                     time.sleep(1)
 
     def _reconnect(self) -> bool:
@@ -175,6 +175,7 @@ class Session:
         return True
 
     def close(self) -> None:
+        self.closed = True  # the worker must not reconnect a session that was closed on purpose
         self.sock.close()
 
 

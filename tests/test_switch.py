@@ -20,7 +20,11 @@ class FakePointer:
         return lambda *a: None
 
 
+EVENTS = []
+
+
 class FakeKeys:
+    def wait_idle(self, timeout=1.0): EVENTS.append("wait_idle")
     def report(self, *a): pass
     def type_text(self, text): return 0
     def stop(self): pass
@@ -78,6 +82,7 @@ def make(name, **kw):
 
 @pytest.fixture
 def harness(monkeypatch):
+    EVENTS.clear()
     ctx = SimpleNamespace(bar=None, settings=None, saved=[], log=[])
     orig_bar, orig_settings = Bar.__init__, Settings.__init__
 
@@ -273,3 +278,17 @@ def test_failed_port_change_rebuilds_the_old_port(harness):
     assert calls == [("esp32", "/dev/bad"), ("esp32", Config().port)]
     assert old.closes == [1] and rebuilt.closes == [1] and ctx.cfg.port == Config().port and ctx.saved == []
     assert "restored" in ctx.bar.toast_text
+
+
+def test_queued_key_releases_are_sent_before_the_old_mode_closes(harness):
+    old = make("esp32")
+    real = old.close
+    old.close = lambda: (EVENTS.append("close"), real())
+    harness.run(lambda n, c: n == 8 and c.settings._click("mode:0"), old, lambda name, port: make(name))
+    assert "wait_idle" in EVENTS and EVENTS.index("wait_idle") < EVENTS.index("close")
+
+
+def test_the_pairing_toast_follows_a_switch_to_esp32(harness):
+    new = make("esp32")
+    harness.run(lambda n, c: n == 5 and c.settings._click("mode:2"), make("agent"), lambda name, port: new)
+    assert new.link.on_pairing is not None
