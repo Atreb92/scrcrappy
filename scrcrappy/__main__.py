@@ -124,9 +124,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.natural_scroll is not None:
             cfg.natural_scroll = args.natural_scroll
-        closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=mode.make_pointer, keys=mode.keys,
-                                 cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=mode.session, calibrator=mode.calibrator,
-                                 mcp=args.mcp, board=mode.board, connected=mode.connected, device_name=mode.device_name)
+        closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, mode=mode, cfg=cfg,
+                                 device_key=f"{serial}/{args.mouse}", mcp=args.mcp, port=args.port, mode_name=args.mouse,
+                                 start_mode=lambda name, port: modes.start_mode(name, port, serial, frames, args.ble_python))
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), {'log' if mac else 'qvh log'}:\n{proc.log}", file=sys.stderr)
         return 1
