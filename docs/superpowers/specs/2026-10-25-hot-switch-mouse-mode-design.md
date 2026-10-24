@@ -36,6 +36,10 @@ Changing mode means closing and reopening the app, which also restarts the video
 - **Changing the ESP32 port while in ESP32 mode** (Settings › Port, committed with Enter or by leaving the field)
   restarts the ESP32 mode on the new port, with the same failure rules; the port is saved only on success.
 - Choosing the mode that is already active does nothing.
+- **On macOS the BT cell is not selectable** (the Linux adapter helper doesn't exist there): it is drawn grayed out,
+  ignores clicks, and its tooltip says "Needs Linux (use ESP32 or Agent on macOS)". Selectable modes are decided in
+  one place (a function of `sys.platform`) so Settings and the switch agree; `start_mode("ble")` on macOS still
+  fails with the existing message if reached some other way (e.g. a saved `mouse: ble` or `--mouse ble`).
 
 ## Goals
 
@@ -69,10 +73,9 @@ Changing mode means closing and reopening the app, which also restarts the video
   from `main()` and switches later modes itself. Toasts exist (`bar.toast`).
 - **AI during a switch**: the new mode is built on the worker thread without touching `AiControl`. The swap itself
   (release held input, tear down the old mode, re-point `AiControl`/controller/toolbar) runs synchronously on the
-  window thread, so a tool call sees either the old mode or the new one; while building, tools keep running on the
-  old mode. A switch is refused while a tool holds the lock; a tool that starts during the build runs on the old
-  mode and the swap happens when it is done is NOT supported: if a tool has started when the build finishes, the
-  swap waits for the lock to clear (poll each frame) instead of interrupting it.
+  window thread, so a tool call sees either the old mode or the new one. While building, tools keep running on the
+  old mode. If a tool has started by the time the build finishes, the swap waits (checked every frame) until the
+  tool's lock clears instead of interrupting it.
 - **Selector**: keeps showing the old mode until the switch succeeds (no optimistic highlight); the title says
   `switching to <mode>…`; the old mode stays fully usable meanwhile; `release_all()` runs on the window thread just
   before the swap.
