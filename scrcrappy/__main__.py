@@ -5,15 +5,13 @@ import os
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")  # before pygame loads: `scrcrappy agent` stdout is JSON only
 
 import shutil
-import socket
 import sys
 import time
 from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
 
-from . import agent, app, calibrate, config, links, mouse, video
-from .keyqueue import KeyQueue
+from . import app, calibrate, config, modes, video
 
 PACKAGED_QVH = Path(__file__).resolve().parent / "bin" / "qvh"  # from scripts/build-qvh.sh, shipped in the package
 
@@ -98,32 +96,18 @@ def main(argv: list[str] | None = None) -> int:
     if not mac:
         video.reset_if_stuck(dev, qvh)
 
-    make_pointer, keys, session, calibrator = None, None, None, None
-    bt_up = lambda: True  # noqa: E731  # replaced below by the link's connected flag
     frames = video.LatestFrame()
-    if args.mouse == "agent":
-        try:
-            host = socket.gethostname()
-            session = agent.Session(agent.connect(host).sock, reopen=lambda: agent.connect(host, wait=1).sock)
-        except (OSError, agent.AgentError) as e:
-            print(f"error: agent: {e}", file=sys.stderr)
-            return 1
-    elif args.mouse != "none":
-        try:
-            link = links.ble(args.ble_python) if args.mouse == "ble" else links.esp32(args.port)
-        except (OSError, RuntimeError) as e:
-            print(f"error: {e}", file=sys.stderr)
-            return 1
-        atexit.register(link.close)
-        send, connected, keys = link.send, link.connected, KeyQueue(link.send_keys)
-        bt_up = connected.is_set
-        keys.start()
-        if not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
-            print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
-                  "(AssistiveTouch on; pair it in Settings > Accessibility > Touch > AssistiveTouch > Devices)",
-                  file=sys.stderr)
-        make_pointer = lambda size: mouse.Pointer(send, mouse.Gain(calibrate.load(serial)), size)  # noqa: E731
-        calibrator = calibrate.Calibrator(serial, send, frames)  # loaded again after Settings › Calibrate
+    try:
+        mode = modes.start_mode(args.mouse, args.port, serial, frames, args.ble_python)
+    except modes.ModeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    atexit.register(mode.close)
+    connected = mode.link.connected if mode.link else None
+    if connected and not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
+        print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
+              "(AssistiveTouch on; pair it in Settings > Accessibility > Touch > AssistiveTouch > Devices)",
+              file=sys.stderr)
 
     with (video.capture_avf(frames, serial) if mac else video.capture(qvh, frames)) as proc:
         if args.calibrate:
@@ -132,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
                 connected.wait()
             time.sleep(3)  # stream start-up
             try:
-                table = calibrate.calibrate(send, frames)
+                table = calibrate.calibrate(mode.link.send, frames)
             except RuntimeError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 1
@@ -140,10 +124,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.natural_scroll is not None:
             cfg.natural_scroll = args.natural_scroll
-        closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=make_pointer, keys=keys,
-                                 cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=session, calibrator=calibrator, mcp=args.mcp,
-                                 board=link if args.mouse == "esp32" else None, connected=bt_up,
-                                 device_name="scrcrappy ESP32" if args.mouse == "esp32" else "scrcrappy PC")
+        closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, make_pointer=mode.make_pointer, keys=mode.keys,
+                                 cfg=cfg, device_key=f"{serial}/{args.mouse}", agent=mode.session, calibrator=mode.calibrator,
+                                 mcp=args.mcp, board=mode.board, connected=mode.connected, device_name=mode.device_name)
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), {'log' if mac else 'qvh log'}:\n{proc.log}", file=sys.stderr)
         return 1
