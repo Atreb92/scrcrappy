@@ -3,6 +3,7 @@ import errno
 import glob
 import logging
 import os
+import re
 import select
 import sys
 import time
@@ -42,7 +43,14 @@ def _read(fd: int, seconds: float, until: bytes = b"") -> bytes:
 
 
 def _show(data: bytes) -> str:
-    return f"{len(data)} bytes: {data[:200].hex(' ')} | {data[:200].decode(errors='replace')!r}"
+    """What the board sent, safe to paste: the phone's name is cut off its `peer` line, text goes through `scrub`, and
+    data that isn't text (a wrong baud rate) is shown as hex with every readable byte masked, so no MAC or name
+    can hide in the dump."""
+    text = re.sub(r"(?m)^peer (\S+).*$", r"peer \1", data.decode(errors="replace"))
+    if sum(c.isprintable() or c in "\r\n\t" for c in text) >= 0.9 * max(len(text), 1):
+        return f"{len(data)} bytes: {debuglog.scrub(text[:200])!r}"
+    masked = bytes(0x2E if 0x20 <= b < 0x7F else b for b in data[:200])
+    return f"{len(data)} bytes, mostly not text (wrong baud rate?): {masked.hex(' ')}"
 
 
 def diagnose_esp32(port: str | None, write: Callable[[str], None] = print, boot_wait: float = 3.0, tries: int = 5,
@@ -80,7 +88,11 @@ def diagnose_esp32(port: str | None, write: Callable[[str], None] = print, boot_
             say(f"[{time.monotonic() - t0:.2f}s] boot output: {_show(boot) if boot else 'nothing'}")
             reply = b""
             for attempt in range(tries):
-                os.write(fd, b"?\n")
+                try:
+                    os.write(fd, b"?\n")
+                except OSError as e:  # e.g. the board was unplugged meanwhile
+                    say(f"[{time.monotonic() - t0:.2f}s] write failed: {e}")
+                    break
                 reply = _read(fd, reply_wait, until=b"ready")
                 say(f"[{time.monotonic() - t0:.2f}s] sent '?' (try {attempt + 1}): {_show(reply) if reply else 'no reply'}")
                 if b"ready" in reply:

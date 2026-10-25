@@ -336,11 +336,14 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             bar.toast("Debug report copied")
         except pygame.error:  # no clipboard (e.g. some Wayland setups): a file next to the log instead
             where = (debuglog.current_path() or debuglog.log_path()).with_name("report.txt")
-            where.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(where, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w") as f:
-                f.write(text)
-            bar.toast(f"Debug report saved: {debuglog.scrub(tilde_path(where))}")
+            try:
+                where.parent.mkdir(parents=True, exist_ok=True)
+                fd = os.open(where, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    f.write(text)
+                bar.toast(f"Debug report saved: {debuglog.scrub(tilde_path(where))}")
+            except OSError as e:
+                bar.toast(f"Debug report could not be saved: {debuglog.scrub(str(e))}")
 
     def let_go() -> None:
         """Release held input and wait until the key reports have really been sent, before the old mode closes."""

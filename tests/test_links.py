@@ -213,3 +213,16 @@ def test_fw_line_sets_firmware_and_is_part_of_the_snapshot():
     link = feed(b"ready\nfw debug Oct 25 2026 21:00:00\npaired 3F:A2\n")
     assert link.firmware == "debug Oct 25 2026 21:00:00"
     assert feed(b"ready\npaired 3F:A2\n").firmware == ""  # an older firmware has no such line
+
+
+def test_open_serial_does_not_block_on_carrier_and_ends_up_blocking():
+    import fcntl
+    import termios
+    master, slave = os.openpty()
+    fd = links.open_serial(os.ttyname(slave))
+    try:
+        assert not fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_NONBLOCK  # reads/writes are blocking again
+        assert termios.tcgetattr(fd)[2] & termios.CLOCAL  # ignore the carrier line (macOS tty.* waits for it)
+    finally:
+        os.close(fd)
+        os.close(master)

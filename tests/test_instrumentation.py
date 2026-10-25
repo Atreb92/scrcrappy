@@ -226,3 +226,24 @@ def test_boot_text_after_a_restart_is_logged_even_when_the_cap_was_used_up(logfi
     time.sleep(0.2)
     assert "after-restart-text" in logfile()
     link.close()
+
+
+def test_a_reconnect_after_a_disconnect_is_never_swallowed_by_the_dedupe(logfile):
+    link = links.Link(lambda b: None, lambda: b"")
+    snapshot = ["ready", "fw normal x", "paired 3F:A2", "connected", "peer 3F:A2 n"]
+
+    def poll(lines):
+        link._asked_at = time.monotonic()  # lines arriving right after our own '?'
+        for line in lines:
+            link._line_in(line)
+
+    poll(snapshot)
+    poll(snapshot)
+    link._asked_at = -1.0  # unsolicited lines, long after any '?'
+    link._line_in("disconnected")
+    poll(snapshot[:3])  # the poll while the phone is away
+    link._asked_at = -1.0
+    link._line_in("connected")  # the phone comes back, unasked
+    link._line_in("ready")  # the board restarted, unasked
+    text = logfile()
+    assert text.count("board: connected") == 2 and text.count("board: ready") == 2 and "board: disconnected" in text

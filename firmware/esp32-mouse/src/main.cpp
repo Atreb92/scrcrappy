@@ -28,7 +28,8 @@ static uint32_t rxReports = 0, notifyOk = 0, notifyFail = 0;
 
 // HCI disconnect reasons worth naming (the host stack adds 0x200 to them: 534 = 0x200 + 0x16)
 static const char* hciReason(int r) {
-    switch (r >= 0x200 ? r - 0x200 : r) {
+    if (r < 0x200) return "stack error";  // not an HCI code at all
+    switch (r - 0x200) {
         case 0x05: return "authentication failure";
         case 0x06: return "pin or key missing";
         case 0x08: return "supervision timeout";

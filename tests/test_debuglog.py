@@ -61,6 +61,10 @@ def test_config_view_is_an_allowlist(tmp_path):
     assert "SECRET-TOKEN" not in str(view) and "private" not in str(view)
 
 
+def file_handlers():
+    return [h for h in logging.getLogger("scrcrappy").handlers if not isinstance(h, logging.NullHandler)]
+
+
 def read(path):
     for h in logging.getLogger("scrcrappy").handlers:
         h.flush()
@@ -82,7 +86,7 @@ def test_enable_twice_adds_one_handler(tmp_path):
     path = tmp_path / "l.log"
     debuglog.enable(Config(), [], path)
     debuglog.enable(Config(), [], path)
-    assert len(logging.getLogger("scrcrappy").handlers) == 1
+    assert len(file_handlers()) == 1
 
 
 def test_disable_removes_handler_and_restores_hooks(tmp_path):
@@ -91,7 +95,7 @@ def test_disable_removes_handler_and_restores_hooks(tmp_path):
     assert (sys.excepthook, threading.excepthook) != before
     debuglog.disable()
     assert (sys.excepthook, threading.excepthook) == before
-    assert logging.getLogger("scrcrappy").handlers == [] and not debuglog.is_enabled()
+    assert file_handlers() == [] and not debuglog.is_enabled()
 
 
 def test_unwritable_directory_warns_and_returns_none(tmp_path, capsys):
@@ -131,3 +135,19 @@ def test_rotation_caps_the_file(tmp_path, monkeypatch):
 def test_startup_facts_show_the_effective_debug_log_setting(tmp_path):
     path = debuglog.enable(Config(debug_log=False), ["--debug"], tmp_path / "l.log")
     assert "'debug_log': True" in read(path)
+
+
+def test_scrub_masks_the_dashless_24_hex_serial_that_qvh_prints():
+    out = debuglog.scrub("requested usb-serial:'00008020001A2D3C0E78002E' from udid:00008020001A2D3C0E78002E")
+    assert "001A2D3C0E78002E" not in out and out.count("0000…") == 2
+
+
+def test_no_stderr_output_from_the_package_when_the_log_is_off():
+    import subprocess
+    code = ("from scrcrappy import modes, links\n"
+            "links.esp32 = lambda p: (_ for _ in ()).throw(OSError(2, 'nope'))\n"
+            "modes.start_mode('esp32', '/dev/x', 's', None)\n")
+    root = Path(__file__).resolve().parent.parent
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=root,
+                         env={**os.environ, "PYTHONPATH": str(root)})
+    assert out.returncode == 0 and out.stderr == ""

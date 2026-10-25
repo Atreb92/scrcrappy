@@ -7,6 +7,7 @@ ESP32 firmware only: "?" answers a snapshot ("ready", "unpaired" | "paired <id>"
 "peer <id> <name>"), "p" forgets the phone ("pairing"), "disconnected" when the phone goes
 """
 import contextlib
+import fcntl
 import logging
 import os
 import select
@@ -20,6 +21,7 @@ from typing import Callable
 
 
 log = logging.getLogger("scrcrappy.links")
+REPLY_WINDOW = 0.5  # seconds after a quiet "?" in which snapshot lines count as its answer
 COUNT_EVERY = 1.0  # seconds between the "sent N reports" log lines
 CONTROL = {"ready", "connected", "disconnected", "unpaired", "paired", "peer", "pairing", "dbg", "fw"}  # lines worth logging
 SNAPSHOT = {"ready", "fw", "unpaired", "paired", "connected", "peer"}  # the board's answer to "?": logged only when it changes
@@ -36,6 +38,7 @@ class Link:
         self.firmware = ""  # "<normal|debug> <build date>" from the board's `fw` line; "" on older firmware
         self._sent, self._count_at, self._odd = [0, 0], time.monotonic(), 0  # reports sent (mouse, keys), for the log
         self._prev, self._cur, self._same = [], [], False  # the last snapshot and the one arriving, for the log
+        self._asked_at = -1.0  # when query() last asked; replies arriving soon after are the quiet kind
         self._write_failing = False  # inside a streak of failed writes (an unplugged board fails every 15 ms)
 
         def reader() -> None:
@@ -55,7 +58,9 @@ class Link:
         word, _, rest = line.partition(" ")
         if word in CONTROL:  # what the board says about itself; never the phone's name or any input
             quiet = False
-            if word in SNAPSHOT:  # the Settings panel asks every second: log an answer only when it differs
+            if word in SNAPSHOT and time.monotonic() - self._asked_at < REPLY_WINDOW:
+                # the Settings panel asks every second: log an answer to it only when it differs. Lines that
+                # arrive on their own (a phone reconnecting, the board restarting) are always logged.
                 if word == "ready":
                     self._prev, self._cur, self._same, self._odd = self._cur, [], True, 0  # (a reboot's text is news again)
                 i = len(self._cur)
@@ -86,6 +91,7 @@ class Link:
             self.on_pairing()
 
     def query(self) -> None:
+        self._asked_at = time.monotonic()
         self._line("?", quiet=True)  # polled every second while Settings is open: not worth a log line
 
     def forget(self) -> None:
@@ -143,10 +149,12 @@ def ble(python: str) -> Link:
 
 def open_serial(port: str, baud: int = 115200) -> int:
     """The serial port as a raw file descriptor at `baud` (what the ESP32 link and `--diagnose-esp32` both open)."""
-    fd = os.open(port, os.O_RDWR | os.O_NOCTTY)
+    fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)  # macOS tty.* ports wait for a carrier line otherwise
     try:
+        fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) & ~os.O_NONBLOCK)  # then ordinary blocking I/O
         tty.setraw(fd)
         attrs = termios.tcgetattr(fd)
+        attrs[2] |= termios.CLOCAL  # a USB-serial board has no carrier line
         attrs[4] = attrs[5] = getattr(termios, f"B{baud}")
         termios.tcsetattr(fd, termios.TCSANOW, attrs)
     except (termios.error, AttributeError) as e:  # not an OSError: a port that opens but isn't a serial line
@@ -180,6 +188,7 @@ def esp32(port: str, baud: int = 115200, wait: float = 10) -> Link:
     link = Link(lambda b: os.write(fd, b), read, close)
     for attempt in range(int(wait / 0.5)):  # opening the port may reboot the board: ask until it answers
         log.debug("handshake attempt %d", attempt + 1)
+        link._asked_at = time.monotonic()  # its answer is the first snapshot the quiet polls are compared with
         os.write(fd, b"?\n")
         if link.ready.wait(0.5):
             log.info("the board answered on %s", port)

@@ -22,7 +22,7 @@ _secrets: set[str] = set()
 _handler: RotatingFileHandler | None = None
 _hooks: tuple | None = None  # (sys.excepthook, threading.excepthook) as they were before enable()
 
-_UDID = re.compile(r"\b(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16})\b")
+_UDID = re.compile(r"\b(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{24}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{16})\b")  # old / dashless / new
 _MAC = re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){4}([0-9A-Fa-f]{2})[:-]([0-9A-Fa-f]{2})\b")
 _BEARER = re.compile(r"Bearer\s+\S+")
 
@@ -157,3 +157,4 @@ def disable() -> None:
         _handler.close()
         _handler = None
         log.propagate = True
+        log.setLevel(logging.NOTSET)

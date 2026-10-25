@@ -389,3 +389,18 @@ def test_a_new_port_restarts_an_unavailable_board(harness):
     ports = []
     harness.run(lambda n, c: n == 5 and c.settings.on_port("/dev/ttyUSB3"), broken, lambda name, port: ports.append(port) or make(name))
     assert ports == ["/dev/ttyUSB3"]
+
+
+def test_report_button_survives_no_clipboard_and_an_unwritable_folder(harness, monkeypatch, tmp_path):
+    from scrcrappy import debuglog
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+
+    def broken(text):
+        raise pygame.error("no clipboard")
+
+    monkeypatch.setattr(app_module.pygame.scrap, "put_text", broken)
+    monkeypatch.setattr(debuglog, "log_path", lambda *a, **k: blocker / "sub" / "scrcrappy.log")
+    ctx = harness.run(lambda n, c: n == 5 and c.settings._click("report"), make("esp32"), None,
+                      report=lambda: "REPORT", set_debug=lambda want: want)
+    assert ctx.bar.toast_text.startswith("Debug report could not be saved")

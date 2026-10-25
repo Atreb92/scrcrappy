@@ -124,3 +124,28 @@ def test_report_scrubs_everything_including_old_log_lines(logpath, tmp_path, mon
     finally:
         debuglog._secrets.discard("tok-canary-9")
     assert "tok-canary-9" not in text and str(tmp_path / "home") not in text
+
+
+def test_diagnose_never_shows_the_phone_name_or_a_full_mac_even_in_hex():
+    master, slave = os.openpty()
+    reply = b"ready\npeer 3F:A2 Alice Smith's iPhone\n"
+    fake_board(master, reply, [], boot=b"dbg connect 4c:57:ca:12:3f:a2 bonds=1\n")
+    rc, text = run(os.ttyname(slave), boot_wait=0.4)
+    assert "Alice" not in text and "Smith" not in text and "4c:57:ca" not in text.lower()
+    assert "41 6c 69 63 65" not in text and "34 63 3a 35 37" not in text  # no hex of either
+    assert "peer 3F:A2" in text and rc == 0
+
+
+def test_garbage_is_shown_as_hex_with_readable_bytes_masked():
+    shown = diagnose._show(b"\x00\x80x\x80" * 10 + b"4c:57:ca:12:3f:a2")
+    assert "mostly not text" in shown and "34 63 3a" not in shown and "4c:57" not in shown
+
+
+def test_a_failed_write_is_a_verdict_not_a_traceback(monkeypatch):
+    master, slave = os.openpty()
+    fake_board(master, None, [])
+    real_write = os.write
+    monkeypatch.setattr(diagnose.os, "write", lambda fd, data: (_ for _ in ()).throw(OSError(5, "Input/output error")))
+    rc, text = run(os.ttyname(slave))
+    assert rc == 1 and "write failed" in text and "Traceback" not in text
+    monkeypatch.setattr(diagnose.os, "write", real_write)

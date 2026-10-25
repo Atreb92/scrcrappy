@@ -117,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         print("error: no iPhone connected over USB", file=sys.stderr)
         return 1
     serial = video.serial_number(dev)
+    debuglog.add_secret(serial)  # however qvh or anything else spells it
     if not mac:
         video.reset_if_stuck(dev, qvh)
 
