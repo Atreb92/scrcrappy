@@ -21,8 +21,8 @@ from typing import Callable
 
 log = logging.getLogger("scrcrappy.links")
 COUNT_EVERY = 1.0  # seconds between the "sent N reports" log lines
-CONTROL = {"ready", "connected", "disconnected", "unpaired", "paired", "peer", "pairing", "dbg"}  # lines worth logging
-SNAPSHOT = {"ready", "unpaired", "paired", "connected", "peer"}  # the board's answer to "?": logged only when it changes
+CONTROL = {"ready", "connected", "disconnected", "unpaired", "paired", "peer", "pairing", "dbg", "fw"}  # lines worth logging
+SNAPSHOT = {"ready", "fw", "unpaired", "paired", "connected", "peer"}  # the board's answer to "?": logged only when it changes
 
 
 class Link:
@@ -33,6 +33,7 @@ class Link:
         self.paired: bool | None = None  # ESP32 firmware's last snapshot; None = unknown (old firmware, or not yet answered)
         self.peer: tuple[str, str] | None = None  # (id, name) of the connected phone
         self.last_seen = 0.0  # time.monotonic() of the last line from the device
+        self.firmware = ""  # "<normal|debug> <build date>" from the board's `fw` line; "" on older firmware
         self._sent, self._count_at, self._odd = [0, 0], time.monotonic(), 0  # reports sent (mouse, keys), for the log
         self._prev, self._cur, self._same = [], [], False  # the last snapshot and the one arriving, for the log
         self._write_failing = False  # inside a streak of failed writes (an unplugged board fails every 15 ms)
@@ -76,6 +77,8 @@ class Link:
             self.connected.clear()
         elif word in ("paired", "unpaired"):
             self.paired = word == "paired"
+        elif word == "fw":
+            self.firmware = rest
         elif word == "peer":
             id_, _, name = rest.partition(" ")
             self.peer = (id_, name.strip())

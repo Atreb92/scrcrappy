@@ -191,6 +191,14 @@ typed text, key presses, screenshots, the phone's name, or your computer's and a
 as `~`, phone serials and Bluetooth addresses are cut to a few characters, and mouse and key reports are only counted.
 Reports are scrubbed the same way, and nothing is ever sent anywhere by scrcrappy: skim the report before you post it.
 
+**Debug firmware.** If the log isn't enough (pairing that fails, a laggy cursor), flash the board with the debug build of
+the same firmware: `cd firmware/esp32-mouse && pio run -e esp32dev-debug -t upload` (`esp32-c3-debug`, `esp32-s3-debug`
+for those chips). Go back with the normal environment. It adds `dbg` lines that scrcrappy puts into the debug log: the
+link parameters (connection interval, latency, timeout), MTU and PHY of each connection, and every 5 s while the mouse
+is in use the number of reports received, notifications sent and failed (with the heap left). Every build, normal or
+debug, also says which one it is: the log has a `board: fw <normal|debug> <build date>` line. A disconnect reason such as
+`534` is the stack's offset (`0x200`) plus an HCI code; the log names the common ones (e.g. `534 = local host terminated`).
+
 ## FAQ
 
 **Is "agent" the same as crappytouch?** crappytouch is the tweak installed on the phone. "Agent" is only

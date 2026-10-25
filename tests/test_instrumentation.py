@@ -204,3 +204,13 @@ def test_a_dead_link_logs_one_failure_per_streak(logfile):
     link.send(1, 2, 0, 0)
     text = logfile()
     assert text.count("write failed") == 2 and text.count("writes work again") == 1
+
+
+def test_firmware_line_is_logged_once_across_polls(logfile):
+    link, _ = esp32_link(b"ready\nfw debug Oct 25 2026 21:00:00\nunpaired\n")
+    for _ in range(4):
+        link.query()
+        time.sleep(0.05)
+    text = logfile()
+    assert text.count("board: fw debug Oct 25 2026 21:00:00") == 1 and "unrecognised" not in text
+    link.close()

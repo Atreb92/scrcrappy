@@ -207,3 +207,9 @@ def test_open_serial_turns_termios_errors_into_oserror_and_closes_the_fd(monkeyp
     with pytest.raises(OSError):
         os.fstat(opened[0])  # closed
     os.close(master)
+
+
+def test_fw_line_sets_firmware_and_is_part_of_the_snapshot():
+    link = feed(b"ready\nfw debug Oct 25 2026 21:00:00\npaired 3F:A2\n")
+    assert link.firmware == "debug Oct 25 2026 21:00:00"
+    assert feed(b"ready\npaired 3F:A2\n").firmware == ""  # an older firmware has no such line

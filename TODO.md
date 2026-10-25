@@ -23,6 +23,7 @@
 - [x] Calibration: while it runs the button is a red Cancel (Settings stays open) that stops the measurement and keeps the old table; the bar's Copy / Home / Switcher / Lock do nothing mid-run. Tried on a real phone (2026-10-24): works.
 - [x] Switch the input mode from Settings without restarting (spec 2026-10-25): BT is not selectable on macOS; a failed start keeps the old mode and toasts the reason. Tried live: see the merge notes.
 - [x] Opt-in debug log, `--diagnose-esp32`, `--report` and Settings › Debug log / Copy debug report (spec 2026-10-25). Still to learn from a real macOS report: why the ESP32 gave nothing there (suspects: `tty.*` blocking on open, termios, DTR reset timing).
+- [ ] Pre-built firmware images (normal + debug, merged flash image per board) attached to the GitHub release, flashable with `esptool` for people without PlatformIO (needs the release workflow to build them; not done).
 - [ ] Mouse wheel doesn't scroll iOS Settings lists (works in other apps). Investigate (wheel report size/pacing? AssistiveTouch scroll mode?).
 - [ ] Slow mouse movements make the pointer tracking fail (reported 2026-10-24, ESP32): the phone cursor drifts or stops following when the mouse moves slowly. Look at the small-delta end of the gain table in `mouse.py` (rounding of sub-count moves, `LENGTHS` starts at 1) and at how small moves are accumulated.
 - [ ] Long, mostly-vertical cursor moves land 5–10% short of the target. Options: calibrate the vertical axis too, or correct from the video (closed loop).
