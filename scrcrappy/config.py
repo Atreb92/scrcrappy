@@ -34,6 +34,7 @@ class Config:
     screenshots: str = ""  # folder; "" = the desktop's Pictures folder, else ~/Pictures, else home
     ai_control: bool = False  # MCP server in the window (Settings)
     mcp_token: str = ""  # created when AI control is first turned on
+    debug_log: bool = False  # Settings › Debug log: write the opt-in log file
 
 
 def load(path: Path = PATH) -> Config:
