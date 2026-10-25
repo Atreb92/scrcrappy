@@ -83,14 +83,22 @@ def test_unrecognised_board_output_is_logged_truncated_and_capped(logfile):
 
 
 def test_mode_failure_is_logged_with_traceback(logfile, monkeypatch):
-    def boom(port):
-        raise OSError("no such port /dev/ttyUSB9")
+    def boom(python):
+        raise OSError("no such helper /dev/ttyUSB9")
 
-    monkeypatch.setattr(modes.links, "esp32", boom)
+    monkeypatch.setattr(modes.links, "ble", boom)
+    monkeypatch.setattr(modes, "selectable", lambda name, platform=None: True)
     with pytest.raises(modes.ModeError):
-        modes.start_mode("esp32", "/dev/ttyUSB9", "abc", None)
+        modes.start_mode("ble", "/dev/ttyUSB9", "abc", None)
     text = logfile()
-    assert "no such port" in text and "Traceback" in text
+    assert "no such helper" in text and "Traceback" in text
+
+
+def test_an_unavailable_esp32_is_logged_with_traceback_and_does_not_raise(logfile, monkeypatch):
+    monkeypatch.setattr(modes.links, "esp32", lambda port: (_ for _ in ()).throw(OSError(2, "No such file")))
+    mode = modes.start_mode("esp32", "/dev/ttyUSB9", "abc", None)
+    text = logfile()
+    assert mode.error and "mode esp32 failed to start" in text and "Traceback" in text
 
 
 def test_canary_secrets_never_reach_the_log_file(logfile, tmp_path, monkeypatch):
@@ -105,9 +113,12 @@ def test_canary_secrets_never_reach_the_log_file(logfile, tmp_path, monkeypatch)
     link.send_keys(0, [4, 5, 6])
     link.send(55, 77, 1, 0)
     # a failing mode start whose message carries canaries
-    monkeypatch.setattr(modes.links, "esp32", lambda port: (_ for _ in ()).throw(OSError(f"{home}/x {udid} {token}")))
+    monkeypatch.setattr(modes.links, "ble", lambda python: (_ for _ in ()).throw(OSError(f"{home}/x {udid} {token}")))
+    monkeypatch.setattr(modes, "selectable", lambda name, platform=None: True)
     with pytest.raises(modes.ModeError):
-        modes.start_mode("esp32", "/dev/x", udid, None)
+        modes.start_mode("ble", "/dev/x", udid, None)
+    monkeypatch.setattr(modes.links, "esp32", lambda port: (_ for _ in ()).throw(OSError(f"{home}/y {udid} {token}")))
+    assert modes.start_mode("esp32", "/dev/x", udid, None).error  # unavailable, and its text is scrubbed in the log
     # an agent session that loses its connection
     ours, phone = socket.socketpair()
     session = agent.Session(ours, post=lambda fn: fn(), reopen=lambda: socket.socketpair()[0])

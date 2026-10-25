@@ -5,7 +5,7 @@ import sys
 from dataclasses import dataclass
 from typing import Callable
 
-from . import agent, calibrate, links, mouse
+from . import agent, calibrate, diagnose, links, mouse
 from .calibrate import Calibrator
 from .keyqueue import KeyQueue
 from .links import Link
@@ -29,6 +29,7 @@ class Mode:
     link: Link | None = None
     device_name: str = "scrcrappy PC"
     closed: bool = False
+    error: str = ""  # ESP32 only: why the board isn't usable (the mode still runs, so Settings can fix the port)
 
     @property
     def board(self) -> Link | None:
@@ -49,6 +50,11 @@ class Mode:
             self.link.close()
         if self.session:
             self.session.close()
+
+
+def _why(port: str, e: Exception) -> str:
+    hint = diagnose.HINTS.get(getattr(e, "errno", None), "").split(" (")[0]
+    return f"{port}: {hint}" if hint else str(e)
 
 
 def selectable(name: str, platform: str | None = None) -> bool:
@@ -76,6 +82,8 @@ def start_mode(name: str, port: str, serial: str, frames: LatestFrame, ble_pytho
         link = links.ble(ble_python) if name == "ble" else links.esp32(port)
     except (OSError, RuntimeError) as e:
         log.error("mode %s failed to start", name, exc_info=True)
+        if name == "esp32":  # the port is set in Settings, which is only reachable in this mode: run without the board
+            return Mode("esp32", device_name="scrcrappy ESP32", error=_why(port, e))
         raise ModeError(str(e)) from e
     keys = KeyQueue(link.send_keys)
     keys.start()

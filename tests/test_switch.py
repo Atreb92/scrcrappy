@@ -354,3 +354,38 @@ def test_debug_switch_enables_saves_and_reverts_when_it_cannot(harness):
     ctx = harness.run(script, make("esp32"), None, report=lambda: "r", set_debug=set_debug)
     assert seen == [True, False, True] and ctx.cfg.debug_log is False
     assert any(saved for saved in ctx.saved)
+
+
+def test_esp32_without_a_board_still_becomes_the_mode_and_toasts_why(harness):
+    broken = make("esp32", make_pointer=None, keys=None, link=None, calibrator=None)
+    broken.error = "cannot open /dev/ttyUSB0: no such device"
+    ctx = harness.run(lambda n, c: n == 5 and c.settings.on_mode("esp32"), make("none"), lambda name, port: broken)
+    assert ctx.cfg.mouse == "esp32" and ctx.bar.toast_text.startswith("ESP32 not available: cannot open")
+    assert "port" in ctx.settings.hits and ctx.settings.problem_lines
+
+
+def test_clicking_esp32_again_retries_an_unavailable_board(harness):
+    broken = make("esp32", make_pointer=None, keys=None, link=None, calibrator=None)
+    broken.error = "cannot open /dev/ttyUSB0"
+    good, calls = make("esp32"), []
+
+    def factory(name, port):
+        calls.append(port)
+        return broken if len(calls) == 1 else good
+
+    def script(n, c):
+        if n == 5:
+            c.settings.on_mode("esp32")
+        if n == 15:
+            c.settings.on_mode("esp32")
+
+    ctx = harness.run(script, make("none"), factory, seconds=2.2)
+    assert len(calls) == 2 and ctx.bar.toast_text == "Input: ESP32" and "forget" in ctx.settings.hits
+
+
+def test_a_new_port_restarts_an_unavailable_board(harness):
+    broken = make("esp32", make_pointer=None, keys=None, link=None, calibrator=None)
+    broken.error = "cannot open /dev/ttyUSB0"
+    ports = []
+    harness.run(lambda n, c: n == 5 and c.settings.on_port("/dev/ttyUSB3"), broken, lambda name, port: ports.append(port) or make(name))
+    assert ports == ["/dev/ttyUSB3"]

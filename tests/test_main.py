@@ -10,6 +10,15 @@ TRUE = shutil.which("true")  # /bin/true on Linux, /usr/bin/true on macOS
 
 
 @pytest.fixture(autouse=True)
+def isolated(monkeypatch):
+    """main() reads the real config (which may have the debug log on): tests get defaults and leave no log behind."""
+    from scrcrappy.config import Config
+    monkeypatch.setattr(cli.config, "load", lambda: Config())
+    yield
+    cli.debuglog.disable()
+
+
+@pytest.fixture(autouse=True)
 def linux(monkeypatch):
     monkeypatch.setattr(cli.sys, "platform", "linux")  # the qvh path; macOS captures through AVFoundation
 
@@ -179,3 +188,19 @@ def test_report_and_diagnose_need_no_phone(monkeypatch, capsys):
     assert "scrcrappy debug report" in capsys.readouterr().out
     assert cli.main(["--diagnose-esp32", "--port", "/nonexistent/ttyUSB9"]) == 1
     assert "cannot open" in capsys.readouterr().out
+
+
+def test_esp32_mode_opens_the_window_even_without_a_board(monkeypatch, capsys):
+    """Settings is where the port is fixed, so a missing board must not stop the window."""
+    import contextlib
+    import threading
+    ran = threading.Event()
+    cap = type("Cap", (), {"poll": lambda self: None, "log": ""})()
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
+    monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: None)
+    monkeypatch.setattr(cli.video, "capture", lambda qvh, frames: contextlib.nullcontext(cap))
+    monkeypatch.setattr(cli.modes.links, "esp32", lambda port: (_ for _ in ()).throw(FileNotFoundError(2, "No such file")))
+    monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
+    assert cli.main(["--qvh", TRUE, "--mouse", "esp32", "--port", "/dev/ttyUSB9"]) == 0
+    assert ran.is_set()

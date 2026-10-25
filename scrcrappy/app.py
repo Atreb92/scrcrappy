@@ -360,8 +360,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if start_mode is None or switching or pending:
             return
         restart = name == mode.name
-        if restart and (new_port is None or new_port == active_port):
-            return
+        if restart and (new_port is None or new_port == active_port) and not mode.error:
+            return  # the same, working mode (an unavailable ESP32 is retried by clicking it again)
         if calibrating:
             return bar.toast("Not while calibrating")
         if ai.locked():
@@ -436,9 +436,9 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             if new.name == "esp32":
                 cfg.port = new_port
             save_or_warn(save, cfg)
-            bar.toast(f"Input: {LABELS[new.name]}")
+            bar.toast(f"ESP32 not available: {new.error}" if new.error else f"Input: {LABELS[new.name]}")
         if settings and not settings.closed:
-            settings.rebind(calibrator.value() if calibrator else None, board, connected)
+            settings.rebind(calibrator.value() if calibrator else None, board, connected, new.error)
         bar.set_items(items())
         main.title = title
 
@@ -455,7 +455,8 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                                 on_cancel=cancel_calibration, on_mode=request_switch if start_mode else None, active_mode=lambda: mode.name,
                                 on_port=(lambda p: request_switch("esp32", p)) if start_mode else None,
                                 on_debug=toggle_debug if set_debug else None, on_report=copy_report if report else None,
-                                debug_path=lambda: debuglog.scrub(tilde_path(debuglog.current_path() or "")))
+                                debug_path=lambda: debuglog.scrub(tilde_path(debuglog.current_path() or "")),
+                                problem=lambda: mode.error)
         bar.set_items(items())
 
     bar = Bar(main, items(), {

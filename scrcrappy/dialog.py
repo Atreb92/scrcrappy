@@ -347,13 +347,14 @@ class Settings:
                  on_cancel: Callable[[], None] | None = None, on_mode: Callable[[str], None] | None = None,
                  on_port: Callable[[str], None] | None = None, active_mode: Callable[[], str] | None = None,
                  on_debug: Callable[[], None] | None = None, on_report: Callable[[], None] | None = None,
-                 debug_path: Callable[[], str] = lambda: "") -> None:
+                 debug_path: Callable[[], str] = lambda: "", problem: Callable[[], str] = lambda: "") -> None:
         """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
         `on_mode(name)`: the app switches the input mode (it writes `cfg.mouse` itself once that worked); without
         it a click only edits the saved default, applied at the next launch. `on_port(port)`: same for the ESP32 port
         while ESP32 is the active mode.
+        `problem()`: why the ESP32 isn't usable (shown instead of its board section, the port stays editable).
         `on_debug` flips the debug log (its switch), `debug_path()` is where the log is, `on_report` copies the debug
         report; the section is hidden without `on_debug`.
         `calibrating()`: a measurement is running; the button is then a red Cancel that calls `on_cancel`.
@@ -368,6 +369,7 @@ class Settings:
         self.connected, self.calibrating, self.on_cancel = connected, calibrating, on_cancel
         self.on_mode, self.on_port, self.asked_port, self.active_mode = on_mode, on_port, cfg.port, active_mode
         self.on_debug, self.on_report, self.debug_path, self.debug_lines = on_debug, on_report, debug_path, []
+        self.problem, self.problem_lines = problem, []
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
         self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
@@ -395,10 +397,15 @@ class Settings:
         if self.mode() == "esp32":
             self.hits["port"] = pygame.Rect(PAD + 40, y, PANEL_W - 2 * PAD - 40, 26)
             y += 26 + 10
+        self.problem_lines = []
         if self.board:  # whenever there is a board: the --mouse flag may differ from the saved mode
             self.board_top = y
             self.hits["forget"] = pygame.Rect(PAD, y + 22, PANEL_W - 2 * PAD, 28)
             y += 22 + 28 + 10
+        elif self.mode() == "esp32" and self.problem():
+            self.problem_top = y
+            self.problem_lines = _wrap(self.problem(), self.small, PANEL_W - 2 * PAD - 18)
+            y += 16 * len(self.problem_lines) + 10
         self.hits["natural"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
         y += 26 + 12
         self.shots_top = y
@@ -477,11 +484,12 @@ class Settings:
     def shows_next_launch_tag(self) -> bool:
         return self.on_mode is None
 
-    def rebind(self, calibration: float | None, board, connected: Callable[[], bool]) -> None:
+    def rebind(self, calibration: float | None, board, connected: Callable[[], bool], problem: str = "") -> None:
         """The input mode changed under an open panel: show the new mode's calibration and board sections."""
         self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}
         self.board, self.connected, self._board_text = board, connected, None
+        self.problem = lambda: problem
         self._relayout()
 
     def _calibration_lines(self, value: float) -> list[str]:
@@ -529,8 +537,8 @@ class Settings:
         if hit and hit.startswith("mode:"):
             mode = MODES[int(hit[5:])][0]
             if self.on_mode:
-                if mode != self.mode() and selectable(mode):
-                    self.on_mode(mode)
+                if selectable(mode):
+                    self.on_mode(mode)  # also the running one: the app retries it if it is unavailable
                 return
             self.cfg.mouse = mode
             self.on_change()
@@ -655,6 +663,10 @@ class Settings:
         if "port" in self.hits:
             surf.blit(self.small.render("Port", True, FG), (PAD, self.hits["port"].y + 7))
             self._field(surf, "port", Config.port)
+        for i, line in enumerate(self.problem_lines):
+            if i == 0:
+                pygame.draw.circle(surf, (0xF2, 0xB7, 0x05), (PAD + 5, self.problem_top + 7), 5)
+            surf.blit(self.small.render(line, True, (0xF2, 0xB7, 0x05)), (PAD + 18, self.problem_top + 16 * i))
         if "forget" in self.hits:
             now = time.monotonic()
             colour, text = self.board_text(now)

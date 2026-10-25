@@ -553,11 +553,11 @@ def test_mode_click_asks_the_app_and_leaves_cfg_alone():
     assert asked == ["agent"] and cfg.mouse == "none" and changes == []
 
 
-def test_clicking_the_active_mode_does_nothing():
+def test_clicking_the_active_mode_still_asks_the_app_which_retries_an_unavailable_one():
     asked = []
     panel, _, _ = mode_panel("esp32", on_mode=asked.append)
     click(panel, "mode:2")
-    assert asked == []
+    assert asked == ["esp32"]
 
 
 def test_next_launch_tag_only_without_on_mode():
@@ -607,8 +607,6 @@ def test_settings_follow_the_running_mode_not_the_saved_default():
     asked, ports = [], []
     panel, cfg, _ = mode_panel("none", on_mode=asked.append, on_port=ports.append, active_mode=lambda: "esp32")
     assert "port" in panel.hits  # the running mode is ESP32 although the saved default is None
-    click(panel, "mode:2")
-    assert asked == []  # already running
     click(panel, "mode:0")
     assert asked == ["none"]
     panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
@@ -651,3 +649,17 @@ def test_debug_section_hidden_without_callbacks():
     from scrcrappy.config import Config
     panel, _ = settings_panel(Config(), [])
     assert "debug" not in panel.hits and "report" not in panel.hits
+
+
+def test_unavailable_esp32_shows_the_reason_and_the_port_field_but_no_forget_button():
+    panel, _, _ = mode_panel("none", active_mode=lambda: "esp32", on_mode=lambda m: None, on_port=lambda p: None,
+                             problem=lambda: "cannot open /dev/ttyUSB0: no such device")
+    assert "port" in panel.hits and "forget" not in panel.hits
+    assert "cannot open" in " ".join(panel.problem_lines) and panel.rect.height == panel.height
+
+
+def test_rebind_updates_the_problem_line():
+    panel, _, _ = mode_panel("esp32", on_mode=lambda m: None, active_mode=lambda: "esp32", problem=lambda: "boom")
+    assert panel.problem_lines
+    panel.rebind(None, None, lambda: True, problem="")
+    assert panel.problem_lines == []

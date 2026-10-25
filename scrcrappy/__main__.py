@@ -127,6 +127,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     atexit.register(mode.close)
+    if mode.error:
+        print(f"note: ESP32 not available ({mode.error}); the window opens so you can fix the port in Settings",
+              file=sys.stderr)
     connected = mode.link.connected if mode.link else None
     if connected and not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
         print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
@@ -135,6 +138,9 @@ def main(argv: list[str] | None = None) -> int:
 
     with (video.capture_avf(frames, serial) if mac else video.capture(qvh, frames)) as proc:
         if args.calibrate:
+            if not mode.link:
+                print(f"error: --calibrate needs the board: {mode.error}", file=sys.stderr)
+                return 1
             if not connected.is_set():  # the window no longer waits for the phone, but measuring needs it
                 print("waiting for the iPhone to connect over Bluetooth...", file=sys.stderr)
                 connected.wait()
