@@ -622,3 +622,32 @@ def test_a_port_edit_while_another_mode_runs_does_not_switch():
     panel.editing, panel.text["port"] = "port", "/dev/ttyUSB7"
     panel._commit()
     assert ports == []
+
+
+def debug_panel(debug_on=False, **kw):
+    from scrcrappy.config import Config
+    cfg = Config(debug_log=debug_on)
+    calls = []
+    panel, _ = settings_panel(cfg, [], on_debug=lambda: calls.append("debug"), on_report=lambda: calls.append("report"),
+                              debug_path=lambda: "~/.local/state/scrcrappy/scrcrappy.log", **kw)
+    return panel, cfg, calls
+
+
+def test_debug_switch_and_report_button_call_back():
+    panel, _, calls = debug_panel()
+    click(panel, "debug")
+    click(panel, "report")
+    assert calls == ["debug", "report"] and panel.rect.height == panel.height
+
+
+def test_debug_path_line_only_when_the_log_is_on():
+    off, _, _ = debug_panel(False)
+    on, _, _ = debug_panel(True)
+    assert off.debug_lines == [] and "scrcrappy.log" in " ".join(on.debug_lines)
+    assert on.height > off.height
+
+
+def test_debug_section_hidden_without_callbacks():
+    from scrcrappy.config import Config
+    panel, _ = settings_panel(Config(), [])
+    assert "debug" not in panel.hits and "report" not in panel.hits

@@ -98,7 +98,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(Settings, "__init__", settings_init)
     monkeypatch.setattr(app_module.ai_mod.AiControl, "locked", lambda self: ctx.locked() if hasattr(ctx, "locked") else False)
 
-    def run(script, initial, factory, cfg=None, seconds=1.6):
+    def run(script, initial, factory, cfg=None, seconds=1.6, **extra):
         cfg = cfg or Config()
         cfg.mouse = initial.name
         frames, t0, n = LatestFrame(), time.time(), [0]
@@ -114,7 +114,7 @@ def harness(monkeypatch):
 
         app_module.run(frames, alive, mode=initial, cfg=cfg,
                        device_key=f"abc/{initial.name}",
-                       save=lambda c: ctx.saved.append((c.mouse, c.port)), start_mode=factory, mode_name=initial.name)
+                       save=lambda c: ctx.saved.append((c.mouse, c.port)), start_mode=factory, mode_name=initial.name, **extra)
         ctx.cfg = cfg
         return ctx
 
@@ -312,3 +312,45 @@ def test_switches_and_failures_are_logged(harness, caplog):
     text = caplog.text
     assert "switch to agent requested" in text and "switch failed: agent: nobody home" in text
     assert "switch to none requested" in text and "now running mode none" in text
+
+
+def test_report_button_copies_to_the_clipboard(harness, monkeypatch):
+    put = []
+    monkeypatch.setattr(app_module.pygame.scrap, "put_text", put.append)
+    ctx = harness.run(lambda n, c: n == 5 and c.settings._click("report"), make("esp32"), None,
+                      report=lambda: "REPORT TEXT", set_debug=lambda want: want)
+    assert put == ["REPORT TEXT"] and ctx.bar.toast_text == "Debug report copied"
+
+
+def test_report_button_falls_back_to_a_file(harness, monkeypatch, tmp_path):
+    from scrcrappy import debuglog
+
+    def broken(text):
+        raise pygame.error("no clipboard")
+
+    monkeypatch.setattr(app_module.pygame.scrap, "put_text", broken)
+    monkeypatch.setattr(debuglog, "log_path", lambda *a, **k: tmp_path / "logs" / "scrcrappy.log")
+    ctx = harness.run(lambda n, c: n == 5 and c.settings._click("report"), make("esp32"), None,
+                      report=lambda: "REPORT TEXT", set_debug=lambda want: want)
+    assert (tmp_path / "logs" / "report.txt").read_text() == "REPORT TEXT"
+    assert ctx.bar.toast_text.startswith("Debug report saved: ")
+
+
+def test_debug_switch_enables_saves_and_reverts_when_it_cannot(harness):
+    seen = []
+
+    def set_debug(want):
+        seen.append(want)
+        return want and len(seen) == 1  # the second enable attempt fails
+
+    def script(n, c):
+        if n == 5:
+            c.settings._click("debug")
+        if n == 8:
+            c.settings._click("debug")  # off
+        if n == 11:
+            c.settings._click("debug")  # on again: refused
+
+    ctx = harness.run(script, make("esp32"), None, report=lambda: "r", set_debug=set_debug)
+    assert seen == [True, False, True] and ctx.cfg.debug_log is False
+    assert any(saved for saved in ctx.saved)

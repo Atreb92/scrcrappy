@@ -107,6 +107,10 @@ def is_enabled() -> bool:
     return _handler is not None
 
 
+def current_path() -> Path | None:
+    return Path(_handler.baseFilename) if _handler else None
+
+
 def enable(cfg: Config, args: list[str], path: Path | None = None) -> Path | None:
     """Start logging to `path` (default `log_path()`); None, with a warning, when the file can't be written."""
     global _handler, _hooks

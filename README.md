@@ -175,6 +175,22 @@ has a generic icon. To add it for your user (untested): copy `packaging/scrcrapp
 `~/.local/share/applications/` and `scrcrappy/icons/scrcrappy.png` to
 `~/.local/share/icons/hicolor/256x256/apps/scrcrappy.png`.
 
+## Reporting a problem
+
+Nothing is logged unless you ask. To help with a bug report:
+
+1. `scrcrappy --diagnose-esp32` (add `--port /dev/cu.usbserial-…` if you know it) checks the ESP32's serial line on its own: no
+   phone or window needed. It lists the serial ports, opens one, shows what the board prints, sends `?` and says
+   whether the firmware answered or why not. On a Mac use the `cu.*` name, not `tty.*`.
+2. Turn on **Settings › Debug log** (or start with `--debug`), reproduce the problem, then `scrcrappy --report` (or
+   **Copy debug report** in Settings) and paste the result into the issue.
+
+The log is a small rotating file (`~/Library/Logs/scrcrappy/scrcrappy.log` on macOS, `~/.local/state/scrcrappy/` on
+Linux, readable only by you). It never contains the AI control token, the agent pairing code or key, clipboard or
+typed text, key presses, screenshots, the phone's name, or your computer's and account names; the home folder shows
+as `~`, phone serials and Bluetooth addresses are cut to a few characters, and mouse and key reports are only counted.
+Reports are scrubbed the same way, and nothing is ever sent anywhere by scrcrappy: skim the report before you post it.
+
 ## FAQ
 
 **Is "agent" the same as crappytouch?** crappytouch is the tweak installed on the phone. "Agent" is only

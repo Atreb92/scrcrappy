@@ -72,13 +72,15 @@ def pick_video_driver(env: Mapping[str, str], platform: str, x11: bool = False) 
     return "x11" if env.get("DISPLAY") else None
 
 
-def apply_debug(cfg: config.Config, want: bool, argv: list[str]) -> None:
-    """Turn the debug log on or off (the startup flag and the Settings switch both come through here)."""
+def apply_debug(cfg: config.Config, want: bool, argv: list[str]) -> bool:
+    """Turn the debug log on or off (the startup flag and the Settings switch both come through here); returns
+    whether it is on now."""
     if want:
         if path := debuglog.enable(cfg, argv):
             print(f"debug log: {path}", file=sys.stderr)
     else:
         debuglog.disable()
+    return debuglog.is_enabled()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -148,7 +150,9 @@ def main(argv: list[str] | None = None) -> int:
             cfg.natural_scroll = args.natural_scroll
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, mode=mode, cfg=cfg,
                                  device_key=f"{serial}/{args.mouse}", mcp=args.mcp, port=args.port, mode_name=args.mouse,
-                                 start_mode=lambda name, port: modes.start_mode(name, port, serial, frames, args.ble_python))
+                                 start_mode=lambda name, port: modes.start_mode(name, port, serial, frames, args.ble_python),
+                                 set_debug=lambda want: apply_debug(cfg, want, argv),
+                                 report=lambda: diagnose.build_report(cfg, argv))
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), {'log' if mac else 'qvh log'}:\n{proc.log}", file=sys.stderr)
         return 1

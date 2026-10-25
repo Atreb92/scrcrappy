@@ -345,13 +345,17 @@ class Settings:
                  on_copy: Callable[[], None] | None = None, board=None,
                  connected: Callable[[], bool] = lambda: True, calibrating: Callable[[], bool] = lambda: False,
                  on_cancel: Callable[[], None] | None = None, on_mode: Callable[[str], None] | None = None,
-                 on_port: Callable[[str], None] | None = None, active_mode: Callable[[], str] | None = None) -> None:
+                 on_port: Callable[[str], None] | None = None, active_mode: Callable[[], str] | None = None,
+                 on_debug: Callable[[], None] | None = None, on_report: Callable[[], None] | None = None,
+                 debug_path: Callable[[], str] = lambda: "") -> None:
         """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
         `on_mode(name)`: the app switches the input mode (it writes `cfg.mouse` itself once that worked); without
         it a click only edits the saved default, applied at the next launch. `on_port(port)`: same for the ESP32 port
         while ESP32 is the active mode.
+        `on_debug` flips the debug log (its switch), `debug_path()` is where the log is, `on_report` copies the debug
+        report; the section is hidden without `on_debug`.
         `calibrating()`: a measurement is running; the button is then a red Cancel that calls `on_cancel`.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
@@ -363,6 +367,7 @@ class Settings:
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}  # hover texts by hit name
         self.connected, self.calibrating, self.on_cancel = connected, calibrating, on_cancel
         self.on_mode, self.on_port, self.asked_port, self.active_mode = on_mode, on_port, cfg.port, active_mode
+        self.on_debug, self.on_report, self.debug_path, self.debug_lines = on_debug, on_report, debug_path, []
         self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
         self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
@@ -413,6 +418,16 @@ class Settings:
             y = self.calib_top + 20 + 16 * len(self.calibration_lines) + 6
             self.hits["calibrate"] = pygame.Rect(PANEL_W - PAD - 100, y, 100, 28)
             y += 28
+        if self.on_debug:
+            self.debug_top = y + 14
+            y = self.debug_top
+            self.hits["debug"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
+            y += 26
+            self.debug_lines = _wrap(self.debug_path(), self.small, PANEL_W - 2 * PAD) if self.cfg.debug_log else []
+            y += 16 * len(self.debug_lines) + (6 if self.debug_lines else 0)
+            if self.on_report:
+                self.hits["report"] = pygame.Rect(PANEL_W - PAD - 170, y, 170, 28)
+                y += 28
         self.height = y + PAD
 
     def handle(self, event: pygame.event.Event) -> bool:
@@ -536,6 +551,11 @@ class Settings:
                 self.board.forget()
             else:
                 self.confirm_until = now + CONFIRM_S
+        elif hit == "debug" and self.on_debug:
+            self.on_debug()
+            self._relayout()
+        elif hit == "report" and self.on_report:
+            self.on_report()
         elif hit == "copy" and self.on_copy:
             self.on_copy()
         elif hit == "calibrate" and self.calibrating():
@@ -671,6 +691,15 @@ class Settings:
             pygame.draw.rect(surf, fill, c, border_radius=c.height // 2)
             label = self.small.render("Cancel" if running else "Calibrate", True, (255, 255, 255) if running or up else DISABLED)
             surf.blit(label, label.get_rect(center=c.center))
+        if "debug" in self.hits:
+            self._switch(surf, "debug", "Debug log", self.cfg.debug_log)
+            for i, line in enumerate(self.debug_lines):
+                surf.blit(self.small.render(line, True, MUTED), (PAD, self.debug_top + 28 + 16 * i))
+            if "report" in self.hits:
+                r = self.hits["report"]
+                pygame.draw.rect(surf, self._fill("report", FIELD), r, border_radius=r.height // 2)
+                label = self.small.render("Copy debug report", True, ACCENT)
+                surf.blit(label, label.get_rect(center=r.center))
         view = surf.subsurface(pygame.Rect(0, self.scroll, min(rect.w, surf.get_width()), rect.h))
         _round(view, PANEL_R)
         screen.blit(view, rect.topleft)
