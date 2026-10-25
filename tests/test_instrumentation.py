@@ -185,3 +185,22 @@ def test_forget_is_logged(logfile):
     link.forget()
     assert "sent 'p'" in logfile()
     link.close()
+
+
+def test_a_dead_link_logs_one_failure_per_streak(logfile):
+    state = {"fail": True}
+
+    def write(b):
+        if state["fail"]:
+            raise OSError(5, "Input/output error")
+        return len(b)
+
+    link = links.Link(write, lambda: b"")
+    for _ in range(50):
+        link.send(1, 2, 0, 0)
+    state["fail"] = False
+    link.send(1, 2, 0, 0)
+    state["fail"] = True
+    link.send(1, 2, 0, 0)
+    text = logfile()
+    assert text.count("write failed") == 2 and text.count("writes work again") == 1

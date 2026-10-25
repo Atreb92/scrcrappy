@@ -35,6 +35,7 @@ class Link:
         self.last_seen = 0.0  # time.monotonic() of the last line from the device
         self._sent, self._count_at, self._odd = [0, 0], time.monotonic(), 0  # reports sent (mouse, keys), for the log
         self._prev, self._cur, self._same = [], [], False  # the last snapshot and the one arriving, for the log
+        self._write_failing = False  # inside a streak of failed writes (an unplugged board fails every 15 ms)
 
         def reader() -> None:
             buf = b""
@@ -97,8 +98,13 @@ class Link:
         try:
             self._write(f"{line}\n".encode())  # one write per line: lines from two threads never interleave
         except OSError as e:
-            log.debug("write failed: %s", e)
+            if not self._write_failing:  # one line per streak, not one per report
+                log.warning("write failed: %s (further failures are not logged until a write works)", e)
+                self._write_failing = True
             return  # device gone; the window loop keeps running video-only
+        if self._write_failing:
+            log.info("writes work again")
+            self._write_failing = False
         if line[:1] == "k" or line[:1] == "-" or line[:1].isdigit():  # reports: counted, never recorded
             self._sent[line[:1] == "k"] += 1
             if time.monotonic() - self._count_at >= COUNT_EVERY:

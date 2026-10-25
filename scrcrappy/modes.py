@@ -54,7 +54,9 @@ class Mode:
 
 def _why(port: str, e: Exception) -> str:
     hint = diagnose.HINTS.get(getattr(e, "errno", None), "").split(" (")[0]
-    return f"{port}: {hint}" if hint else str(e)
+    reason = f"{port}: {hint}" if hint else str(e)
+    found = [path for path, _ in diagnose.list_ports()]  # the board often comes back under another name
+    return f"{reason}; serial ports found: {', '.join(found)}" if found else reason
 
 
 def selectable(name: str, platform: str | None = None) -> bool:
