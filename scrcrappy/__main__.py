@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
 
-from . import app, calibrate, config, debuglog, modes, video
+from . import app, calibrate, config, debuglog, diagnose, modes, video
 
 PACKAGED_QVH = Path(__file__).resolve().parent / "bin" / "qvh"  # from scripts/build-qvh.sh, shipped in the package
 
@@ -92,9 +92,14 @@ def main(argv: list[str] | None = None) -> int:
     for hint in ("SDL_VIDEO_WAYLAND_WMCLASS", "SDL_VIDEO_X11_WMCLASS"):
         os.environ.setdefault(hint, "scrcrappy")  # the app id / WM class a scrcrappy.desktop entry matches
     cfg = config.load()  # flags win over saved settings for this run, without changing them
-    args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
     debuglog.add_secret(cfg.mcp_token)
     apply_debug(cfg, cfg.debug_log if args.debug is None else args.debug, argv)
+    if args.report:  # neither of these needs a phone, qvh or a window
+        print(diagnose.build_report(cfg, argv))
+        return 0
+    if args.diagnose_esp32:
+        return diagnose.diagnose_esp32(args.port)
+    args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
 
     mac = sys.platform == "darwin"  # macOS captures through AVFoundation, no qvh
     qvh = None if mac else find_qvh(args.qvh)

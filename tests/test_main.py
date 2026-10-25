@@ -169,3 +169,13 @@ def test_the_saved_token_is_registered_as_a_secret(logged):
     cli.main(["--qvh", "/nonexistent/qvh"])
     assert "tok-canary-123" in cli.debuglog._secrets
     cli.debuglog._secrets.discard("tok-canary-123")
+
+
+def test_report_and_diagnose_need_no_phone(monkeypatch, capsys):
+    from scrcrappy.config import Config
+    monkeypatch.setattr(cli.config, "load", lambda: Config())
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: pytest.fail("these commands never look for a phone"))
+    assert cli.main(["--report"]) == 0
+    assert "scrcrappy debug report" in capsys.readouterr().out
+    assert cli.main(["--diagnose-esp32", "--port", "/nonexistent/ttyUSB9"]) == 1
+    assert "cannot open" in capsys.readouterr().out
