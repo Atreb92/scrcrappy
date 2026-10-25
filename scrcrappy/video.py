@@ -2,6 +2,7 @@
 import contextlib
 import ctypes
 import ctypes.util
+import logging
 import os
 import shutil
 import signal
@@ -17,6 +18,8 @@ import av
 import usb.backend.libusb1
 import usb.core
 import usb.util
+
+log = logging.getLogger("scrcrappy.video")
 
 APPLE = 0x05AC
 Frame = tuple[bytes, tuple[int, int], int]  # RGB pixels, (width, height), bytes per row
@@ -105,9 +108,10 @@ def capture(qvh: str, out: LatestFrame) -> Iterator[subprocess.Popen]:
     tmp = tempfile.mkdtemp(prefix="scrcrappy-")
     fifo, log_path = os.path.join(tmp, "video.h264"), os.path.join(tmp, "qvh.log")
     os.mkfifo(fifo)
-    with open(log_path, "wb") as log:
-        proc = subprocess.Popen([qvh, "record", fifo, os.devnull], stdout=log, stderr=log)
+    with open(log_path, "wb") as qvh_out:
+        proc = subprocess.Popen([qvh, "record", fifo, os.devnull], stdout=qvh_out, stderr=qvh_out)
     proc.log = ""
+    log.info("qvh started (pid %d)", proc.pid)
 
     def reader() -> None:
         with open(fifo, "rb", buffering=0) as f:
@@ -125,6 +129,7 @@ def capture(qvh: str, out: LatestFrame) -> Iterator[subprocess.Popen]:
                 proc.kill()
         with open(log_path, errors="replace") as f:
             proc.log = f.read()[-1000:]  # for the error message; the folder doesn't outlive the run
+        log.info("qvh stopped (exit %s); log tail: %s", proc.poll(), proc.log)
         shutil.rmtree(tmp, ignore_errors=True)
 
 
@@ -269,8 +274,10 @@ def capture_avf(out: LatestFrame, serial: str, wait: float = 15, devices: Callab
     if not name:
         cap.log = ("no iPhone found by macOS: unlock it, trust this Mac, and allow camera access for this "
                    "terminal app in System Settings > Privacy & Security > Camera")
+        log.error("AVFoundation: %s", cap.log)
         yield cap
         return
+    log.info("AVFoundation: an iPhone was found, opening it")
 
     def run() -> None:
         try:
@@ -282,6 +289,7 @@ def capture_avf(out: LatestFrame, serial: str, wait: float = 15, devices: Callab
                 cap.log = "the phone stopped sending video (unplugged or locked?)"
         except Exception as e:  # noqa: BLE001 - whatever ended the stream goes to the error message
             cap.log = f"{type(e).__name__}: {e}"
+            log.error("AVFoundation stream ended", exc_info=True)
 
     cap.thread = threading.Thread(target=run, daemon=True)
     cap.thread.start()

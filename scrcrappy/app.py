@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import threading
@@ -20,6 +21,7 @@ from .video import LatestFrame
 
 
 PANEL_MARGIN = 8  # between the Settings panel and the strip / the window's top
+log = logging.getLogger("scrcrappy.app")
 CALIBRATE_WAIT_S = 120  # the AI's calibrate tool gives up waiting (a run takes well under a minute)
 CANCELLED = "calibration cancelled"  # the error calibrated() gets when the user cancels: not a failure
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
@@ -277,6 +279,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             controller.release_all()
             controller.stop()
         controller, calibrating = None, True
+        log.info("calibration started")
         calibrator.begin()
         main.title = f"{title} — calibrating, don't touch the mouse…"
 
@@ -299,6 +302,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def calibrated(error: str | None, on_done: Callable[[str | None], None] | None) -> None:
         nonlocal calibrating
         calibrating = False
+        log.info("calibration ended: %s", error or "ok")
         failed = error and error != CANCELLED
         main.title = f"{title} — calibration failed, see the terminal" if failed else title
         if failed:
@@ -346,6 +350,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             return bar.toast("Not while an AI action runs")
         use_port = new_port or cfg.port
         old_name, old_port = mode.name, active_port
+        log.info("switch to %s requested (port %s)", name, use_port)
         switching = True
         main.title = f"{title} — switching to {LABELS[name]}…"
         if restart:
@@ -374,6 +379,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def built(new: Mode | None, new_port: str, error: str | None) -> None:
         nonlocal switching, pending
         if error:
+            log.warning("switch failed: %s", error)
             bar.toast(error)
         if new:
             pending = (new, new_port, error is None)
@@ -390,6 +396,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if controller:
             controller.stop()
         mode.close()
+        log.info("now running mode %s", new.name)
         mode, pending, switching, active_port = new, None, False, new_port
         make_pointer, keys, agent, calibrator = new.make_pointer, new.keys, new.session, new.calibrator
         board, connected, device_name = new.board, new.connected, new.device_name

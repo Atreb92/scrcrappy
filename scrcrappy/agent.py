@@ -8,6 +8,7 @@ import io
 import itertools
 import os
 import queue
+import logging
 import re
 import socket
 import sys
@@ -18,7 +19,7 @@ from typing import Callable
 
 import pygame
 
-from . import usbmux
+from . import debuglog, usbmux
 from .agent_client import Agent, AgentError, encode_frame, load_secret, pairing_code, read_frame
 from .geometry import ROTATION_BY_ORIENTATION, inside, rotation, to_device
 
@@ -38,6 +39,9 @@ HINTS = {
 }
 
 
+log = logging.getLogger("scrcrappy.agent")
+
+
 def connect(host: str, wait: float = 10) -> Agent:
     """An authenticated connection; the first time, pairs (the user taps Allow on the phone)."""
     deadline, error = time.monotonic() + wait, None
@@ -52,6 +56,9 @@ def connect(host: str, wait: float = 10) -> Agent:
     if not udid:
         raise error or ConnectionError("usbmuxd lists no iPhone: unlock it, or unplug and replug it")
     secret = load_secret(udid)
+    debuglog.add_secret(secret.hex())  # never logged: the key, and the code shown on the phone
+    debuglog.add_secret(pairing_code(secret))
+    log.info("connecting to the agent on the phone")
     try:
         a = _open(udid)
         a.auth(host, secret)
@@ -59,6 +66,7 @@ def connect(host: str, wait: float = 10) -> Agent:
     except AgentError as e:
         if str(e) != "unknown host":
             raise
+    log.info("the phone does not know this computer yet: pairing")
     print(f"Pairing: tap Allow on the phone if it shows the code {pairing_code(secret)}", file=sys.stderr)
     try:
         _open(udid).pair(host, secret)
@@ -157,6 +165,7 @@ class Session:
             try:
                 job()
             except (OSError, ValueError, AgentError) as e:
+                log.warning("connection lost: %s", e)
                 print(f"agent: connection lost ({e}), reconnecting", file=sys.stderr)
                 if not self.reopen or self.closed:
                     return
@@ -171,6 +180,7 @@ class Session:
         with self.lock:
             self.sock.close()
             self.sock = sock
+        log.info("reconnected")
         print("agent: reconnected", file=sys.stderr)
         return True
 

@@ -292,3 +292,23 @@ def test_the_pairing_toast_follows_a_switch_to_esp32(harness):
     new = make("esp32")
     harness.run(lambda n, c: n == 5 and c.settings._click("mode:2"), make("agent"), lambda name, port: new)
     assert new.link.on_pairing is not None
+
+
+def test_switches_and_failures_are_logged(harness, caplog):
+    caplog.set_level("DEBUG", logger="scrcrappy")
+
+    def factory(name, port):
+        if name == "agent":
+            raise modes.ModeError("agent: nobody home")
+        return make(name)
+
+    def script(n, c):
+        if n == 5:
+            c.settings.on_mode("agent")
+        if n == 20:
+            c.settings.on_mode("none")
+
+    harness.run(script, make("esp32"), factory, seconds=2.0)
+    text = caplog.text
+    assert "switch to agent requested" in text and "switch failed: agent: nobody home" in text
+    assert "switch to none requested" in text and "now running mode none" in text

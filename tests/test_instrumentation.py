@@ -1,0 +1,129 @@
+import logging
+import os
+import socket
+import stat
+import threading
+import time
+
+import pytest
+
+from scrcrappy import agent, debuglog, links, modes, video
+from scrcrappy.config import Config
+from scrcrappy.video import LatestFrame
+
+
+@pytest.fixture
+def logfile(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(debuglog.getpass, "getuser", lambda: "alice")
+    debuglog.disable()
+    path = debuglog.enable(Config(), [], tmp_path / "logs" / "scrcrappy.log")
+
+    def text():
+        for h in logging.getLogger("scrcrappy").handlers:
+            h.flush()
+        return path.read_text()
+
+    yield text
+    debuglog.disable()
+    debuglog._secrets.clear()
+
+
+def board(master, replies: bytes):
+    """A fake ESP32 on a pty: answers every '?' with `replies`."""
+    def run():
+        buf = b""
+        while True:
+            try:
+                buf += os.read(master, 1024)
+            except OSError:
+                return
+            *lines, buf = buf.split(b"\n")
+            for line in lines:
+                if line == b"?":
+                    os.write(master, replies)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def esp32_link(replies: bytes):
+    master, slave = os.openpty()
+    board(master, replies)
+    link = links.esp32(os.ttyname(slave))
+    time.sleep(0.2)
+    return link, master
+
+
+def test_esp32_handshake_logs_control_lines_only(logfile):
+    link, _ = esp32_link(b"ready\nconnected\npeer 3F:A2 Alice's iPhone\ndbg connect aa:bb:cc:dd:ee:ff bonds=0\n")
+    text = logfile()
+    assert "handshake attempt 1" in text and "peer 3F:A2" in text and "…:ee:ff" in text
+    assert "Alice" not in text and "aa:bb:cc:dd" not in text
+    link.close()
+
+
+def test_reports_are_counted_never_recorded(logfile, monkeypatch):
+    monkeypatch.setattr(links, "COUNT_EVERY", 0.0)
+    link, _ = esp32_link(b"ready\n")
+    link.send(55, 77, 1, 0)
+    link.send(55, 77, 1, 0)
+    link.send_keys(0, [4, 5])
+    link.send_keys(0, [])
+    text = logfile()
+    assert "mouse" in text and "key reports" in text
+    assert "55 77" not in text and "k 0 4 5" not in text
+    link.close()
+
+
+def test_unrecognised_board_output_is_logged_truncated_and_capped(logfile):
+    link, _ = esp32_link(b"ready\n" + b"".join(b"garbage%d " % i + b"x" * 300 + b"\n" for i in range(40)))
+    text = logfile()
+    assert text.count("unrecognised") == 20 and "x" * 100 not in text
+    link.close()
+
+
+def test_mode_failure_is_logged_with_traceback(logfile, monkeypatch):
+    def boom(port):
+        raise OSError("no such port /dev/ttyUSB9")
+
+    monkeypatch.setattr(modes.links, "esp32", boom)
+    with pytest.raises(modes.ModeError):
+        modes.start_mode("esp32", "/dev/ttyUSB9", "abc", None)
+    text = logfile()
+    assert "no such port" in text and "Traceback" in text
+
+
+def test_canary_secrets_never_reach_the_log_file(logfile, tmp_path, monkeypatch):
+    token, code = "tok-canary-777", "123456"
+    debuglog.add_secret(token)
+    debuglog.add_secret(code)
+    udid, mac = "da9c13bc2d479e8e130e156fe1eddf99b7e3eef8", "aa:bb:cc:dd:ee:ff"
+    home = str(tmp_path / "home")
+    # the board speaks canaries: control lines, a peer name, odd output
+    link, _ = esp32_link(f"ready\npeer 3F:A2 alice-iphone\ndbg connect {mac} {token} {home}\nnoise {udid} {code}\n".encode())
+    # keys and mouse go through the link: counted only
+    link.send_keys(0, [4, 5, 6])
+    link.send(55, 77, 1, 0)
+    # a failing mode start whose message carries canaries
+    monkeypatch.setattr(modes.links, "esp32", lambda port: (_ for _ in ()).throw(OSError(f"{home}/x {udid} {token}")))
+    with pytest.raises(modes.ModeError):
+        modes.start_mode("esp32", "/dev/x", udid, None)
+    # an agent session that loses its connection
+    ours, phone = socket.socketpair()
+    session = agent.Session(ours, post=lambda fn: fn(), reopen=lambda: socket.socketpair()[0])
+    phone.close()
+    session.request({"cmd": "key", "usage": 4})
+    time.sleep(0.3)
+    session.close()
+    # qvh output with the UDID and the home folder
+    script = tmp_path / "fakeqvh"
+    script.write_text(f"#!/bin/sh\necho 'using device {udid} in {home}'\n")
+    script.chmod(0o755)
+    with video.capture(str(script), LatestFrame()) as proc:
+        proc.wait()
+    logging.getLogger("scrcrappy.test").info("clipboard-canary typed-canary should only appear if someone logs them")
+    text = logfile()
+    for leaked in (token, code, home, "alice", udid, mac, "aa:bb:cc:dd", "55 77", "k 0 4 5 6"):
+        assert leaked not in text, leaked
+    assert stat.S_IMODE(os.stat(tmp_path / "logs" / "scrcrappy.log").st_mode) == 0o600
+    link.close()
