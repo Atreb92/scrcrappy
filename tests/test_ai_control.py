@@ -385,3 +385,16 @@ def test_rebind_changes_the_tool_list_with_the_mode():
     assert "check_pointer" in names and "calibrate" in names and "home" not in names
     control.rebind()
     assert "tap" not in [t.name for t in control.tools()]  # no input: screenshots only
+
+
+def test_a_new_mcp_token_becomes_a_logging_secret(monkeypatch):
+    from scrcrappy import debuglog
+    from scrcrappy.config import Config
+    monkeypatch.setattr(ai, "PORT", 0)
+    cfg, control = Config(), ai.AiControl(frames())
+    control.enable(cfg)
+    try:
+        assert cfg.mcp_token and cfg.mcp_token in debuglog._secrets
+    finally:
+        control.disable()
+        debuglog._secrets.discard(cfg.mcp_token)

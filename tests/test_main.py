@@ -1,4 +1,6 @@
 import shutil
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -132,3 +134,38 @@ def test_window_opens_without_a_connected_phone(monkeypatch, capsys):
     t.join(4)
     assert ran.is_set() and not t.is_alive()
     assert "Bluetooth" in capsys.readouterr().err
+
+
+@pytest.fixture
+def logged(monkeypatch):
+    from scrcrappy.config import Config
+    calls = SimpleNamespace(enabled=[], disabled=0, cfg=Config())
+    monkeypatch.setattr(cli.config, "load", lambda: calls.cfg)
+    monkeypatch.setattr(cli.debuglog, "enable", lambda cfg, args, path=None: calls.enabled.append(args) or Path("/tmp/x.log"))
+    monkeypatch.setattr(cli.debuglog, "disable", lambda: setattr(calls, "disabled", calls.disabled + 1))
+    return calls
+
+
+def test_debug_flag_beats_the_saved_switch(logged):
+    logged.cfg.debug_log = True
+    cli.main(["--qvh", "/nonexistent/qvh", "--no-debug"])
+    assert logged.enabled == []
+    logged.cfg.debug_log = False
+    cli.main(["--qvh", "/nonexistent/qvh", "--debug"])
+    assert len(logged.enabled) == 1
+    logged.enabled.clear()
+    logged.cfg.debug_log = True
+    cli.main(["--qvh", "/nonexistent/qvh"])
+    assert len(logged.enabled) == 1
+
+
+def test_debug_prints_the_log_path(logged, capsys):
+    cli.main(["--qvh", "/nonexistent/qvh", "--debug"])
+    assert "debug log: /tmp/x.log" in capsys.readouterr().err
+
+
+def test_the_saved_token_is_registered_as_a_secret(logged):
+    logged.cfg.mcp_token = "tok-canary-123"
+    cli.main(["--qvh", "/nonexistent/qvh"])
+    assert "tok-canary-123" in cli.debuglog._secrets
+    cli.debuglog._secrets.discard("tok-canary-123")

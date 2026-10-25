@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
 
-from . import app, calibrate, config, modes, video
+from . import app, calibrate, config, debuglog, modes, video
 
 PACKAGED_QVH = Path(__file__).resolve().parent / "bin" / "qvh"  # from scripts/build-qvh.sh, shipped in the package
 
@@ -48,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="allow AI control (MCP server on 127.0.0.1:7331) for this run; see Settings")
     parser.add_argument("--x11", action="store_true",
                         help="use X11 (XWayland on a Wayland desktop) instead of native Wayland, which is the default there")
+    parser.add_argument("--debug", action=argparse.BooleanOptionalAction, default=None,
+                        help="write the debug log for this run (see Settings › Debug log; default: that setting)")
+    parser.add_argument("--diagnose-esp32", action="store_true",
+                        help="check the serial side of an ESP32 (--port, else every candidate) and exit; needs no phone")
+    parser.add_argument("--report", action="store_true",
+                        help="print a scrubbed report to paste into a bug report and exit")
     parser.add_argument("--calibrate", action="store_true",
                         help="measure the pointer gain (needs --mouse; open a plain light screen first)")
     return parser
@@ -66,6 +72,15 @@ def pick_video_driver(env: Mapping[str, str], platform: str, x11: bool = False) 
     return "x11" if env.get("DISPLAY") else None
 
 
+def apply_debug(cfg: config.Config, want: bool, argv: list[str]) -> None:
+    """Turn the debug log on or off (the startup flag and the Settings switch both come through here)."""
+    if want:
+        if path := debuglog.enable(cfg, argv):
+            print(f"debug log: {path}", file=sys.stderr)
+    else:
+        debuglog.disable()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["agent"]:
@@ -78,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
         os.environ.setdefault(hint, "scrcrappy")  # the app id / WM class a scrcrappy.desktop entry matches
     cfg = config.load()  # flags win over saved settings for this run, without changing them
     args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
+    debuglog.add_secret(cfg.mcp_token)
+    apply_debug(cfg, cfg.debug_log if args.debug is None else args.debug, argv)
 
     mac = sys.platform == "darwin"  # macOS captures through AVFoundation, no qvh
     qvh = None if mac else find_qvh(args.qvh)
