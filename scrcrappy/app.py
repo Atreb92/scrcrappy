@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 import sys
@@ -553,4 +554,6 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             controller.release_all()
             controller.stop()
         mode.close()
+        with contextlib.suppress(pygame.error):
+            main.destroy()  # before pygame.quit(): a Window object that outlives it must not destroy a freed window later
         pygame.quit()
