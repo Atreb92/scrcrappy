@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from importlib.metadata import version
 from pathlib import Path
 
-from . import app, calibrate, config, modes, video
+from . import app, calibrate, config, debuglog, diagnose, modes, video
 
 PACKAGED_QVH = Path(__file__).resolve().parent / "bin" / "qvh"  # from scripts/build-qvh.sh, shipped in the package
 
@@ -48,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="allow AI control (MCP server on 127.0.0.1:7331) for this run; see Settings")
     parser.add_argument("--x11", action="store_true",
                         help="use X11 (XWayland on a Wayland desktop) instead of native Wayland, which is the default there")
+    parser.add_argument("--debug", action=argparse.BooleanOptionalAction, default=None,
+                        help="write the debug log for this run (see Settings › Debug log; default: that setting)")
+    parser.add_argument("--diagnose-esp32", action="store_true",
+                        help="check the serial side of an ESP32 (--port, else every candidate) and exit; needs no phone")
+    parser.add_argument("--report", action="store_true",
+                        help="print a scrubbed report to paste into a bug report and exit")
     parser.add_argument("--calibrate", action="store_true",
                         help="measure the pointer gain (needs --mouse; open a plain light screen first)")
     return parser
@@ -66,6 +72,17 @@ def pick_video_driver(env: Mapping[str, str], platform: str, x11: bool = False) 
     return "x11" if env.get("DISPLAY") else None
 
 
+def apply_debug(cfg: config.Config, want: bool, argv: list[str]) -> bool:
+    """Turn the debug log on or off (the startup flag and the Settings switch both come through here); returns
+    whether it is on now."""
+    if want:
+        if path := debuglog.enable(cfg, argv):
+            print(f"debug log: {path}", file=sys.stderr)
+    else:
+        debuglog.disable()
+    return debuglog.is_enabled()
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] == ["agent"]:
@@ -77,6 +94,13 @@ def main(argv: list[str] | None = None) -> int:
     for hint in ("SDL_VIDEO_WAYLAND_WMCLASS", "SDL_VIDEO_X11_WMCLASS"):
         os.environ.setdefault(hint, "scrcrappy")  # the app id / WM class a scrcrappy.desktop entry matches
     cfg = config.load()  # flags win over saved settings for this run, without changing them
+    debuglog.add_secret(cfg.mcp_token)
+    apply_debug(cfg, cfg.debug_log if args.debug is None else args.debug, argv)
+    if args.report:  # neither of these needs a phone, qvh or a window
+        print(diagnose.build_report(cfg, argv))
+        return 0
+    if args.diagnose_esp32:
+        return diagnose.diagnose_esp32(args.port)
     args.mouse, args.port = args.mouse or cfg.mouse, args.port or cfg.port
 
     mac = sys.platform == "darwin"  # macOS captures through AVFoundation, no qvh
@@ -93,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         print("error: no iPhone connected over USB", file=sys.stderr)
         return 1
     serial = video.serial_number(dev)
+    debuglog.add_secret(serial)  # however qvh or anything else spells it
     if not mac:
         video.reset_if_stuck(dev, qvh)
 
@@ -103,6 +128,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 1
     atexit.register(mode.close)
+    if mode.error:
+        print(f"note: ESP32 not available ({mode.error}); the window opens so you can fix the port in Settings",
+              file=sys.stderr)
     connected = mode.link.connected if mode.link else None
     if connected and not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
         print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
@@ -111,6 +139,9 @@ def main(argv: list[str] | None = None) -> int:
 
     with (video.capture_avf(frames, serial) if mac else video.capture(qvh, frames)) as proc:
         if args.calibrate:
+            if not mode.link:
+                print(f"error: --calibrate needs the board: {mode.error}", file=sys.stderr)
+                return 1
             if not connected.is_set():  # the window no longer waits for the phone, but measuring needs it
                 print("waiting for the iPhone to connect over Bluetooth...", file=sys.stderr)
                 connected.wait()
@@ -126,7 +157,9 @@ def main(argv: list[str] | None = None) -> int:
             cfg.natural_scroll = args.natural_scroll
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, mode=mode, cfg=cfg,
                                  device_key=f"{serial}/{args.mouse}", mcp=args.mcp, port=args.port, mode_name=args.mouse,
-                                 start_mode=lambda name, port: modes.start_mode(name, port, serial, frames, args.ble_python))
+                                 start_mode=lambda name, port: modes.start_mode(name, port, serial, frames, args.ble_python),
+                                 set_debug=lambda want: apply_debug(cfg, want, argv),
+                                 report=lambda: diagnose.build_report(cfg, argv))
     if not closed_by_user:
         print(f"error: video capture stopped (phone unplugged?), {'log' if mac else 'qvh log'}:\n{proc.log}", file=sys.stderr)
         return 1

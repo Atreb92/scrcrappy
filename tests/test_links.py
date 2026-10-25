@@ -176,3 +176,53 @@ def test_ble_close_kills_a_helper_that_will_not_exit(monkeypatch):
     monkeypatch.setattr(links.subprocess, "Popen", lambda *a, **k: proc)
     links.ble("python3").close()
     assert proc.killed
+
+
+def test_open_serial_sets_raw_mode_and_baud():
+    import termios
+    master, slave = os.openpty()
+    fd = links.open_serial(os.ttyname(slave))
+    try:
+        attrs = termios.tcgetattr(fd)
+        assert attrs[4] == attrs[5] == termios.B115200 and not attrs[3] & termios.ECHO
+    finally:
+        os.close(fd)
+        os.close(master)
+
+
+def test_open_serial_missing_port_raises_oserror():
+    with pytest.raises(OSError):
+        links.open_serial("/nonexistent/ttyUSB9")
+
+
+def test_open_serial_turns_termios_errors_into_oserror_and_closes_the_fd(monkeypatch):
+    import termios
+    master, slave = os.openpty()
+    opened = []
+    real_open = os.open
+    monkeypatch.setattr(links.os, "open", lambda *a, **k: opened.append(real_open(*a, **k)) or opened[-1])
+    monkeypatch.setattr(links.tty, "setraw", lambda fd: (_ for _ in ()).throw(termios.error(25, "Inappropriate ioctl")))
+    with pytest.raises(OSError, match="cannot configure"):
+        links.open_serial(os.ttyname(slave))
+    with pytest.raises(OSError):
+        os.fstat(opened[0])  # closed
+    os.close(master)
+
+
+def test_fw_line_sets_firmware_and_is_part_of_the_snapshot():
+    link = feed(b"ready\nfw debug Oct 25 2026 21:00:00\npaired 3F:A2\n")
+    assert link.firmware == "debug Oct 25 2026 21:00:00"
+    assert feed(b"ready\npaired 3F:A2\n").firmware == ""  # an older firmware has no such line
+
+
+def test_open_serial_does_not_block_on_carrier_and_ends_up_blocking():
+    import fcntl
+    import termios
+    master, slave = os.openpty()
+    fd = links.open_serial(os.ttyname(slave))
+    try:
+        assert not fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_NONBLOCK  # reads/writes are blocking again
+        assert termios.tcgetattr(fd)[2] & termios.CLOCAL  # ignore the carrier line (macOS tty.* waits for it)
+    finally:
+        os.close(fd)
+        os.close(master)

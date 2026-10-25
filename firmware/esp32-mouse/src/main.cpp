@@ -3,15 +3,45 @@
 //   in:  "dx dy buttons wheel"        mouse report (dx/dy/wheel -127..127)
 //        "k modifiers k1 .. k6"       keyboard report: modifier bits + held key usages (0 = none)
 //        "?"                          status query
-//        "p"                          forget the paired phone (dropping it if connected) and let a new one pair
+//        "p"                          forget the paired phone (dropping it if connected), let a new one pair, and
+//                                     restart the board (UART-bridge boards only) so no trace of the old one is left
 //                                     (pairing is otherwise closed once a phone is bonded)
-//   out: "dbg ..." lines (connect, auth result, disconnect reason code) say why a pairing fails; scrcrappy ignores them
+//   out: "dbg ..." lines (connect, auth result, disconnect reason) say why a pairing fails; scrcrappy logs them.
+//        The debug build (pio env *-debug, -DSCRCRAPPY_DEBUG=1) adds link parameters, MTU, PHY and, every 5 s while
+//        anything changes, report / notification counters, failures and free heap.
 //        "ready" (advertising), "connected" (phone subscribed to reports), "disconnected" (phone gone),
-//        "pairing" (answer to "p"). "?" answers a snapshot: "ready", "unpaired" | "paired <id>", and while a phone
+//        "pairing" (answer to "p"). "?" answers a snapshot: "ready", "fw <normal|debug> <build date>", "unpaired" |
+//        "paired <id>", and while a phone
 //        is connected "connected" and "peer <id> <name>" (id = last two bytes of its address, name = its GAP name)
 #include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <NimBLEHIDDevice.h>
+
+#ifdef SCRCRAPPY_DEBUG
+#define FW_FLAVOR "debug"
+static uint32_t rxReports = 0, notifyOk = 0, notifyFail = 0;
+#define COUNT_NOTIFY(ok) ((ok) ? notifyOk++ : notifyFail++)
+#else
+#define FW_FLAVOR "normal"
+#define COUNT_NOTIFY(ok) ((void)(ok))
+#endif
+
+// HCI disconnect reasons worth naming (the host stack adds 0x200 to them: 534 = 0x200 + 0x16)
+static const char* hciReason(int r) {
+    if (r < 0x200) return "stack error";  // not an HCI code at all
+    switch (r - 0x200) {
+        case 0x05: return "authentication failure";
+        case 0x06: return "pin or key missing";
+        case 0x08: return "supervision timeout";
+        case 0x13: return "remote user terminated";
+        case 0x14: return "remote low resources";
+        case 0x15: return "remote power off";
+        case 0x16: return "local host terminated";
+        case 0x3D: return "MIC failure";
+        case 0x3E: return "connection failed to establish";
+        default: return "other";
+    }
+}
 
 // Keyboard first, with LED output: iOS only treats the device as a keyboard like this.
 static const uint8_t REPORT_MAP[] = {
@@ -63,9 +93,22 @@ class ReportCallbacks : public NimBLECharacteristicCallbacks {
 class ServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer*, NimBLEConnInfo& info) override {
         Serial.printf("dbg connect %s bonds=%d\n", info.getAddress().toString().c_str(), NimBLEDevice::getNumBonds());
+#ifdef SCRCRAPPY_DEBUG
+        Serial.printf("dbg conn interval=%u latency=%u timeout=%u\n", info.getConnInterval(), info.getConnLatency(),
+                      info.getConnTimeout());
+#endif
     }
+#ifdef SCRCRAPPY_DEBUG
+    void onMTUChange(uint16_t mtu, NimBLEConnInfo&) override { Serial.printf("dbg mtu %u\n", mtu); }
+    void onConnParamsUpdate(NimBLEConnInfo& info) override {  // interval in 1.25 ms units, timeout in 10 ms units
+        Serial.printf("dbg conn interval=%u latency=%u timeout=%u\n", info.getConnInterval(), info.getConnLatency(),
+                      info.getConnTimeout());
+    }
+    void onPhyUpdate(NimBLEConnInfo&, uint8_t tx, uint8_t rx) override { Serial.printf("dbg phy tx=%u rx=%u\n", tx, rx); }
+    void onIdentity(NimBLEConnInfo&) override { Serial.println("dbg identity resolved"); }
+#endif
     void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int reason) override {
-        Serial.printf("dbg disconnect reason=%d\n", reason);
+        Serial.printf("dbg disconnect reason=%d (%s)\n", reason, hciReason(reason));
         subscribed = false;
         peerName[0] = 0;
         Serial.println("disconnected");
@@ -119,6 +162,17 @@ void loop() {
     static char line[48];
     static size_t len = 0;
     static uint32_t checked = 0;
+#ifdef SCRCRAPPY_DEBUG
+    static uint32_t statsAt = 0, lastRx = 0, lastOk = 0, lastFail = 0;
+    if (millis() - statsAt > 5000) {  // only while something changed: an idle board stays quiet
+        statsAt = millis();
+        if (rxReports != lastRx || notifyOk != lastOk || notifyFail != lastFail) {
+            lastRx = rxReports, lastOk = notifyOk, lastFail = notifyFail;
+            Serial.printf("dbg stats rx=%u notify_ok=%u notify_fail=%u heap=%u up=%us\n", rxReports, notifyOk,
+                          notifyFail, ESP.getFreeHeap(), millis() / 1000);
+        }
+    }
+#endif
     if (millis() - checked > 500) {  // advertising must never stay off while no phone is connected (it did after "p")
         checked = millis();
         NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
@@ -134,6 +188,7 @@ void loop() {
         len = 0;
         if (line[0] == '?') {
             Serial.println("ready");
+            Serial.printf("fw %s %s %s\n", FW_FLAVOR, __DATE__, __TIME__);
             if (NimBLEDevice::getNumBonds() == 0) {
                 Serial.println("unpaired");
             } else {
@@ -152,6 +207,14 @@ void loop() {
             if (server->getConnectedCount()) server->disconnect(server->getPeerInfo(0).getConnHandle());
             pairing = true;
             Serial.println("pairing");
+#if !ARDUINO_USB_CDC_ON_BOOT
+            // The stack keeps recognising the forgotten phone (its address resolves to the old identity) and its
+            // next pairing fails until the board restarts. A restart is harmless behind a UART bridge; a native-USB
+            // board would re-enumerate and lose the serial port, so those keep the old behaviour.
+            Serial.flush();
+            delay(100);
+            ESP.restart();
+#endif
             continue;
         }
         if (line[0] == 'k') {
@@ -160,13 +223,19 @@ void loop() {
             uint8_t report[8] = {(uint8_t)m, 0};
             for (int i = 0; i < 6; i++) report[2 + i] = (uint8_t)k[i];
             keyboard->setValue(report, sizeof(report));
-            keyboard->notify();
+#ifdef SCRCRAPPY_DEBUG
+            rxReports++;
+#endif
+            COUNT_NOTIFY(keyboard->notify());
             continue;
         }
         int dx, dy, buttons, wheel;
         if (sscanf(line, "%d %d %d %d", &dx, &dy, &buttons, &wheel) != 4) continue;
         uint8_t report[4] = {(uint8_t)(buttons & 0x1F), (uint8_t)(int8_t)dx, (uint8_t)(int8_t)dy, (uint8_t)(int8_t)wheel};
         input->setValue(report, sizeof(report));
-        input->notify();
+#ifdef SCRCRAPPY_DEBUG
+        rxReports++;
+#endif
+        COUNT_NOTIFY(input->notify());
     }
 }

@@ -34,6 +34,7 @@ class Config:
     screenshots: str = ""  # folder; "" = the desktop's Pictures folder, else ~/Pictures, else home
     ai_control: bool = False  # MCP server in the window (Settings)
     mcp_token: str = ""  # created when AI control is first turned on
+    debug_log: bool = False  # Settings › Debug log: write the opt-in log file
 
 
 def load(path: Path = PATH) -> Config:
@@ -59,7 +60,8 @@ def load(path: Path = PATH) -> Config:
     mouse = raw.get("mouse") if raw.get("mouse") in MICE else "none"
     return Config(bool(raw.get("natural_scroll", False)), customs, mouse,
                   str(raw.get("port") or Config.port), str(raw.get("screenshots") or ""),
-                  bool(raw.get("ai_control", False)), str(raw.get("mcp_token") or ""))
+                  bool(raw.get("ai_control", False)), str(raw.get("mcp_token") or ""),
+                  bool(raw.get("debug_log", False)))
 
 
 def save(cfg: Config, path: Path = PATH) -> None:
@@ -69,7 +71,7 @@ def save(cfg: Config, path: Path = PATH) -> None:
             "customs": {k: [{"button": c.button, "icon": f"{ord(c.icon):x}", "name": c.name} for c in v]
                         for k, v in cfg.customs.items()},
             "mouse": cfg.mouse, "port": cfg.port, "screenshots": cfg.screenshots,
-            "ai_control": cfg.ai_control, "mcp_token": cfg.mcp_token}
+            "ai_control": cfg.ai_control, "mcp_token": cfg.mcp_token, "debug_log": cfg.debug_log}
     tmp = path.with_suffix(".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # holds the MCP token: private
     os.fchmod(fd, 0o600)  # also when a crash left an older tmp behind

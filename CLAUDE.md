@@ -9,6 +9,7 @@ BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor),
 
 - `__main__.py` CLI (flags win over saved settings; `scrcrappy agent …` dispatches to `agent_cli.py`)
 - `app.py` window loop, BLE `Controller`; `toolbar.py` bar (button strip under the phone image); `dialog.py` Settings + right-click menu (overlays in the main window), Add-button dialog (its own window)
+- `debuglog.py` opt-in rotating log + the scrubbing rules (every record and report passes `scrub`); `diagnose.py` `--diagnose-esp32` / `--report`
 - `modes.py` the four input modes as `Mode` bundles; `start_mode` is used by the launcher and by the window's live switch (Settings › Input)
 - `agent.py` agent backend (Session: worker thread, replies posted back as pygame USEREVENTs; reconnects)
 - `agent_client.py` vendored from crappytouch (keep in sync with its `client/`); `usbmux.py` stdlib usbmuxd

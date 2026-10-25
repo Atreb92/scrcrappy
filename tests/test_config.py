@@ -75,3 +75,11 @@ def test_old_pinned_setting_is_ignored(tmp_path):
     p = tmp_path / "c.json"
     p.write_text('{"natural_scroll": true, "pinned": false}')
     assert config.load(p) == Config(natural_scroll=True)
+
+
+def test_debug_log_roundtrips_and_old_files_load(tmp_path):
+    path = tmp_path / "c.json"
+    config.save(Config(debug_log=True), path)
+    assert config.load(path).debug_log is True
+    path.write_text('{"mouse": "ble"}')
+    assert config.load(path).debug_log is False

@@ -9,7 +9,7 @@ import threading
 import time
 from typing import Callable
 
-from . import actions
+from . import actions, debuglog
 from .calibrate import find_cursor, to_array
 from .agent import BUTTONS, HOME, LOCK, SWITCHER_GAP
 from .agent_cli import ERRORS, find_app, listed
@@ -54,6 +54,7 @@ class AiControl:
     # --- server
     def enable(self, cfg: Config) -> None:
         cfg.mcp_token = cfg.mcp_token or secrets.token_urlsafe(24)
+        debuglog.add_secret(cfg.mcp_token)
         if self.server:
             return
         server = McpServer(cfg.mcp_token, self.tools, PORT)

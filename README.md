@@ -81,7 +81,7 @@ position, so set the phone's hardware layout to match your computer's
 on-screen keyboard.
 
 After updating scrcrappy, if the device description changed: "Forget" it on the phone, run
-`bluetoothctl remove <phone address>` (ble) or press Settings › *Forget phone & allow pairing* (esp32; it also shows whether the board is paired or connected), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
+`bluetoothctl remove <phone address>` (ble) or press Settings › *Forget phone & allow pairing* (esp32; it also shows whether the board is paired or connected; the board restarts itself, which a pairing afterwards needs), and pair again: iOS caches it. The cursor re-syncs in the top-left corner whenever the
 mouse enters the window.
 
 ## Control with a jailbreak (crappytouch)
@@ -156,7 +156,7 @@ The window keeps the phone's aspect ratio when you resize it, and follows the ph
 | Screenshot | Saves a PNG (your desktop's Pictures folder, e.g. `~/Pictures` or `~/Immagini`, else your home folder; or the folder in Settings) and says where in a short message over the toolbar. With `--mouse agent` it is the phone's own screen; otherwise the mirrored video frame. |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
-| Settings (gear) | Input mode — switches at once, no restart (BT is Linux only; a mode that can't start leaves the old one and says why) — and the ESP32 port (changing it restarts ESP32 mode); the last choice is also the default when `--mouse` / `--port` aren't given; natural scrolling; AI control (MCP); in ESP32 mode the board's status (connected / open to pairing / paired) and *Forget phone & allow pairing* (click twice; forget it on the phone too); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Opens as a panel over the phone image; closes with Esc, a click outside it, or when the window loses focus. |
+| Settings (gear) | Input mode — switches at once, no restart (BT is Linux only; a mode that can't start leaves the old one and says why) — and the ESP32 port (changing it restarts ESP32 mode); the last choice is also the default when `--mouse` / `--port` aren't given; natural scrolling; AI control (MCP); in ESP32 mode the board's status (connected / open to pairing / paired) and *Forget phone & allow pairing* (click twice; the board restarts by itself, and you forget it on the phone too; a board using its chip's native USB port, e.g. a C3 SuperMini built with `ARDUINO_USB_CDC_ON_BOOT`, does not restart, as its port would vanish: there, press the board's reset button after Forget); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Opens as a panel over the phone image; closes with Esc, a click outside it, or when the window loses focus. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32
 each have their own mapping on the phone). The toolbar's state is saved in
@@ -174,6 +174,30 @@ Wayland shows a window's icon from a desktop entry that matches its app id (`scr
 has a generic icon. To add it for your user (untested): copy `packaging/scrcrappy.desktop` to
 `~/.local/share/applications/` and `scrcrappy/icons/scrcrappy.png` to
 `~/.local/share/icons/hicolor/256x256/apps/scrcrappy.png`.
+
+## Reporting a problem
+
+Nothing is logged unless you ask. To help with a bug report:
+
+1. `scrcrappy --diagnose-esp32` (add `--port /dev/cu.usbserial-…` if you know it) checks the ESP32's serial line on its own: no
+   phone or window needed. It lists the serial ports, opens one, shows what the board prints, sends `?` and says
+   whether the firmware answered or why not. On a Mac use the `cu.*` name, not `tty.*`.
+2. Turn on **Settings › Debug log** (or start with `--debug`), reproduce the problem, then `scrcrappy --report` (or
+   **Copy debug report** in Settings) and paste the result into the issue.
+
+The log is a small rotating file (`~/Library/Logs/scrcrappy/scrcrappy.log` on macOS, `~/.local/state/scrcrappy/` on
+Linux, readable only by you). It never contains the AI control token, the agent pairing code or key, clipboard or
+typed text, key presses, screenshots, the phone's name, or your computer's and account names; the home folder shows
+as `~`, phone serials and Bluetooth addresses are cut to a few characters, and mouse and key reports are only counted.
+Reports are scrubbed the same way, and nothing is ever sent anywhere by scrcrappy: skim the report before you post it.
+
+**Debug firmware.** If the log isn't enough (pairing that fails, a laggy cursor), flash the board with the debug build of
+the same firmware: `cd firmware/esp32-mouse && pio run -e esp32dev-debug -t upload` (`esp32-c3-debug`, `esp32-s3-debug`
+for those chips). Go back with the normal environment. It adds `dbg` lines that scrcrappy puts into the debug log: the
+link parameters (connection interval, latency, timeout), MTU and PHY of each connection, and every 5 s while the mouse
+is in use the number of reports received, notifications sent and failed (with the heap left). Every build, normal or
+debug, also says which one it is: the log has a `board: fw <normal|debug> <build date>` line. A disconnect reason such as
+`534` is the stack's offset (`0x200`) plus an HCI code; the log names the common ones (e.g. `534 = local host terminated`).
 
 ## FAQ
 

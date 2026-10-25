@@ -98,7 +98,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(Settings, "__init__", settings_init)
     monkeypatch.setattr(app_module.ai_mod.AiControl, "locked", lambda self: ctx.locked() if hasattr(ctx, "locked") else False)
 
-    def run(script, initial, factory, cfg=None, seconds=1.6):
+    def run(script, initial, factory, cfg=None, seconds=1.6, **extra):
         cfg = cfg or Config()
         cfg.mouse = initial.name
         frames, t0, n = LatestFrame(), time.time(), [0]
@@ -114,7 +114,7 @@ def harness(monkeypatch):
 
         app_module.run(frames, alive, mode=initial, cfg=cfg,
                        device_key=f"abc/{initial.name}",
-                       save=lambda c: ctx.saved.append((c.mouse, c.port)), start_mode=factory, mode_name=initial.name)
+                       save=lambda c: ctx.saved.append((c.mouse, c.port)), start_mode=factory, mode_name=initial.name, **extra)
         ctx.cfg = cfg
         return ctx
 
@@ -292,3 +292,115 @@ def test_the_pairing_toast_follows_a_switch_to_esp32(harness):
     new = make("esp32")
     harness.run(lambda n, c: n == 5 and c.settings._click("mode:2"), make("agent"), lambda name, port: new)
     assert new.link.on_pairing is not None
+
+
+def test_switches_and_failures_are_logged(harness, caplog):
+    caplog.set_level("DEBUG", logger="scrcrappy")
+
+    def factory(name, port):
+        if name == "agent":
+            raise modes.ModeError("agent: nobody home")
+        return make(name)
+
+    def script(n, c):
+        if n == 5:
+            c.settings.on_mode("agent")
+        if n == 20:
+            c.settings.on_mode("none")
+
+    harness.run(script, make("esp32"), factory, seconds=2.0)
+    text = caplog.text
+    assert "switch to agent requested" in text and "switch failed: agent: nobody home" in text
+    assert "switch to none requested" in text and "now running mode none" in text
+
+
+def test_report_button_copies_to_the_clipboard(harness, monkeypatch):
+    put = []
+    monkeypatch.setattr(app_module.pygame.scrap, "put_text", put.append)
+    ctx = harness.run(lambda n, c: n == 5 and c.settings._click("report"), make("esp32"), None,
+                      report=lambda: "REPORT TEXT", set_debug=lambda want: want)
+    assert put == ["REPORT TEXT"] and ctx.bar.toast_text == "Debug report copied"
+
+
+def test_report_button_falls_back_to_a_file(harness, monkeypatch, tmp_path):
+    from scrcrappy import debuglog
+
+    def broken(text):
+        raise pygame.error("no clipboard")
+
+    monkeypatch.setattr(app_module.pygame.scrap, "put_text", broken)
+    monkeypatch.setattr(debuglog, "log_path", lambda *a, **k: tmp_path / "logs" / "scrcrappy.log")
+    ctx = harness.run(lambda n, c: n == 5 and c.settings._click("report"), make("esp32"), None,
+                      report=lambda: "REPORT TEXT", set_debug=lambda want: want)
+    assert (tmp_path / "logs" / "report.txt").read_text() == "REPORT TEXT"
+    assert ctx.bar.toast_text.startswith("Debug report saved: ")
+
+
+def test_debug_switch_enables_saves_and_reverts_when_it_cannot(harness):
+    seen = []
+
+    def set_debug(want):
+        seen.append(want)
+        return want and len(seen) == 1  # the second enable attempt fails
+
+    def script(n, c):
+        if n == 5:
+            c.settings._click("debug")
+        if n == 8:
+            c.settings._click("debug")  # off
+        if n == 11:
+            c.settings._click("debug")  # on again: refused
+
+    ctx = harness.run(script, make("esp32"), None, report=lambda: "r", set_debug=set_debug)
+    assert seen == [True, False, True] and ctx.cfg.debug_log is False
+    assert any(saved for saved in ctx.saved)
+
+
+def test_esp32_without_a_board_still_becomes_the_mode_and_toasts_why(harness):
+    broken = make("esp32", make_pointer=None, keys=None, link=None, calibrator=None)
+    broken.error = "cannot open /dev/ttyUSB0: no such device"
+    ctx = harness.run(lambda n, c: n == 5 and c.settings.on_mode("esp32"), make("none"), lambda name, port: broken)
+    assert ctx.cfg.mouse == "esp32" and ctx.bar.toast_text.startswith("ESP32 not available: cannot open")
+    assert "port" in ctx.settings.hits and ctx.settings.problem_lines
+
+
+def test_clicking_esp32_again_retries_an_unavailable_board(harness):
+    broken = make("esp32", make_pointer=None, keys=None, link=None, calibrator=None)
+    broken.error = "cannot open /dev/ttyUSB0"
+    good, calls = make("esp32"), []
+
+    def factory(name, port):
+        calls.append(port)
+        return broken if len(calls) == 1 else good
+
+    def script(n, c):
+        if n == 5:
+            c.settings.on_mode("esp32")
+        if n == 15:
+            c.settings.on_mode("esp32")
+
+    ctx = harness.run(script, make("none"), factory, seconds=2.2)
+    assert len(calls) == 2 and ctx.bar.toast_text == "Input: ESP32" and "forget" in ctx.settings.hits
+
+
+def test_a_new_port_restarts_an_unavailable_board(harness):
+    broken = make("esp32", make_pointer=None, keys=None, link=None, calibrator=None)
+    broken.error = "cannot open /dev/ttyUSB0"
+    ports = []
+    harness.run(lambda n, c: n == 5 and c.settings.on_port("/dev/ttyUSB3"), broken, lambda name, port: ports.append(port) or make(name))
+    assert ports == ["/dev/ttyUSB3"]
+
+
+def test_report_button_survives_no_clipboard_and_an_unwritable_folder(harness, monkeypatch, tmp_path):
+    from scrcrappy import debuglog
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+
+    def broken(text):
+        raise pygame.error("no clipboard")
+
+    monkeypatch.setattr(app_module.pygame.scrap, "put_text", broken)
+    monkeypatch.setattr(debuglog, "log_path", lambda *a, **k: blocker / "sub" / "scrcrappy.log")
+    ctx = harness.run(lambda n, c: n == 5 and c.settings._click("report"), make("esp32"), None,
+                      report=lambda: "REPORT", set_debug=lambda want: want)
+    assert ctx.bar.toast_text.startswith("Debug report could not be saved")

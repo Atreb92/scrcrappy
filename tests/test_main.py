@@ -1,10 +1,21 @@
 import shutil
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from scrcrappy import __main__ as cli
 
 TRUE = shutil.which("true")  # /bin/true on Linux, /usr/bin/true on macOS
+
+
+@pytest.fixture(autouse=True)
+def isolated(monkeypatch):
+    """main() reads the real config (which may have the debug log on): tests get defaults and leave no log behind."""
+    from scrcrappy.config import Config
+    monkeypatch.setattr(cli.config, "load", lambda: Config())
+    yield
+    cli.debuglog.disable()
 
 
 @pytest.fixture(autouse=True)
@@ -132,3 +143,64 @@ def test_window_opens_without_a_connected_phone(monkeypatch, capsys):
     t.join(4)
     assert ran.is_set() and not t.is_alive()
     assert "Bluetooth" in capsys.readouterr().err
+
+
+@pytest.fixture
+def logged(monkeypatch):
+    from scrcrappy.config import Config
+    calls = SimpleNamespace(enabled=[], disabled=0, cfg=Config())
+    monkeypatch.setattr(cli.config, "load", lambda: calls.cfg)
+    monkeypatch.setattr(cli.debuglog, "enable", lambda cfg, args, path=None: calls.enabled.append(args) or Path("/tmp/x.log"))
+    monkeypatch.setattr(cli.debuglog, "disable", lambda: setattr(calls, "disabled", calls.disabled + 1))
+    return calls
+
+
+def test_debug_flag_beats_the_saved_switch(logged):
+    logged.cfg.debug_log = True
+    cli.main(["--qvh", "/nonexistent/qvh", "--no-debug"])
+    assert logged.enabled == []
+    logged.cfg.debug_log = False
+    cli.main(["--qvh", "/nonexistent/qvh", "--debug"])
+    assert len(logged.enabled) == 1
+    logged.enabled.clear()
+    logged.cfg.debug_log = True
+    cli.main(["--qvh", "/nonexistent/qvh"])
+    assert len(logged.enabled) == 1
+
+
+def test_debug_prints_the_log_path(logged, capsys):
+    cli.main(["--qvh", "/nonexistent/qvh", "--debug"])
+    assert "debug log: /tmp/x.log" in capsys.readouterr().err
+
+
+def test_the_saved_token_is_registered_as_a_secret(logged):
+    logged.cfg.mcp_token = "tok-canary-123"
+    cli.main(["--qvh", "/nonexistent/qvh"])
+    assert "tok-canary-123" in cli.debuglog._secrets
+    cli.debuglog._secrets.discard("tok-canary-123")
+
+
+def test_report_and_diagnose_need_no_phone(monkeypatch, capsys):
+    from scrcrappy.config import Config
+    monkeypatch.setattr(cli.config, "load", lambda: Config())
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: pytest.fail("these commands never look for a phone"))
+    assert cli.main(["--report"]) == 0
+    assert "scrcrappy debug report" in capsys.readouterr().out
+    assert cli.main(["--diagnose-esp32", "--port", "/nonexistent/ttyUSB9"]) == 1
+    assert "cannot open" in capsys.readouterr().out
+
+
+def test_esp32_mode_opens_the_window_even_without_a_board(monkeypatch, capsys):
+    """Settings is where the port is fixed, so a missing board must not stop the window."""
+    import contextlib
+    import threading
+    ran = threading.Event()
+    cap = type("Cap", (), {"poll": lambda self: None, "log": ""})()
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
+    monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: None)
+    monkeypatch.setattr(cli.video, "capture", lambda qvh, frames: contextlib.nullcontext(cap))
+    monkeypatch.setattr(cli.modes.links, "esp32", lambda port: (_ for _ in ()).throw(FileNotFoundError(2, "No such file")))
+    monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
+    assert cli.main(["--qvh", TRUE, "--mouse", "esp32", "--port", "/dev/ttyUSB9"]) == 0
+    assert ran.is_set()

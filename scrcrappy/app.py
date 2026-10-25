@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import threading
@@ -10,7 +11,7 @@ from .geometry import aspect_size, fit, inside, reshaped_size, to_frame
 from .keyqueue import KeyQueue
 from .links import Link
 from .mouse import Pointer
-from . import agent as agent_mod, ai as ai_mod, config
+from . import agent as agent_mod, ai as ai_mod, config, debuglog
 from .calibrate import Calibrator, Cancelled
 from .config import Config, Custom
 from .modes import LABELS, Mode, ModeError
@@ -20,6 +21,8 @@ from .video import LatestFrame
 
 
 PANEL_MARGIN = 8  # between the Settings panel and the strip / the window's top
+log = logging.getLogger("scrcrappy.app")
+tilde_path = agent_mod.tilde
 CALIBRATE_WAIT_S = 120  # the AI's calibrate tool gives up waiting (a run takes well under a minute)
 CANCELLED = "calibration cancelled"  # the error calibrated() gets when the user cancels: not a failure
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
@@ -121,7 +124,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         agent: agent_mod.Session | None = None, calibrator: Calibrator | None = None, mcp: bool = False,
         board: "Link | None" = None, connected: Callable[[], bool] = lambda: True,
         mode: Mode | None = None, start_mode: Callable[[str, str], Mode] | None = None, mode_name: str = "",
-        port: str = "") -> bool:
+        port: str = "", set_debug: Callable[[bool], bool] | None = None, report: Callable[[], str] | None = None) -> bool:
     """Show frames until the window is closed (returns True) or `alive()` goes False (returns False).
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
     with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings; `board` (the ESP32 link) adds its status and Forget button; `connected()` says whether the phone is up over
@@ -277,6 +280,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             controller.release_all()
             controller.stop()
         controller, calibrating = None, True
+        log.info("calibration started")
         calibrator.begin()
         main.title = f"{title} — calibrating, don't touch the mouse…"
 
@@ -299,6 +303,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def calibrated(error: str | None, on_done: Callable[[str | None], None] | None) -> None:
         nonlocal calibrating
         calibrating = False
+        log.info("calibration ended: %s", error or "ok")
         failed = error and error != CANCELLED
         main.title = f"{title} — calibration failed, see the terminal" if failed else title
         if failed:
@@ -320,6 +325,26 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             raise RuntimeError(result[0])
         return f"calibrated: {calibrator.value():.2f} screen px per count for a 12-count report"
 
+    def toggle_debug() -> None:
+        cfg.debug_log = set_debug(not cfg.debug_log)  # False again if the log file can't be written
+        save_or_warn(save, cfg)
+
+    def copy_report() -> None:
+        text = report()
+        try:
+            pygame.scrap.put_text(text)
+            bar.toast("Debug report copied")
+        except pygame.error:  # no clipboard (e.g. some Wayland setups): a file next to the log instead
+            where = (debuglog.current_path() or debuglog.log_path()).with_name("report.txt")
+            try:
+                where.parent.mkdir(parents=True, exist_ok=True)
+                fd = os.open(where, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    f.write(text)
+                bar.toast(f"Debug report saved: {debuglog.scrub(tilde_path(where))}")
+            except OSError as e:
+                bar.toast(f"Debug report could not be saved: {debuglog.scrub(str(e))}")
+
     def let_go() -> None:
         """Release held input and wait until the key reports have really been sent, before the old mode closes."""
         if controller:
@@ -338,14 +363,15 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if start_mode is None or switching or pending:
             return
         restart = name == mode.name
-        if restart and (new_port is None or new_port == active_port):
-            return
+        if restart and (new_port is None or new_port == active_port) and not mode.error:
+            return  # the same, working mode (an unavailable ESP32 is retried by clicking it again)
         if calibrating:
             return bar.toast("Not while calibrating")
         if ai.locked():
             return bar.toast("Not while an AI action runs")
         use_port = new_port or cfg.port
         old_name, old_port = mode.name, active_port
+        log.info("switch to %s requested (port %s)", name, use_port)
         switching = True
         main.title = f"{title} — switching to {LABELS[name]}…"
         if restart:
@@ -374,6 +400,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def built(new: Mode | None, new_port: str, error: str | None) -> None:
         nonlocal switching, pending
         if error:
+            log.warning("switch failed: %s", error)
             bar.toast(error)
         if new:
             pending = (new, new_port, error is None)
@@ -390,6 +417,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if controller:
             controller.stop()
         mode.close()
+        log.info("now running mode %s", new.name)
         mode, pending, switching, active_port = new, None, False, new_port
         make_pointer, keys, agent, calibrator = new.make_pointer, new.keys, new.session, new.calibrator
         board, connected, device_name = new.board, new.connected, new.device_name
@@ -411,9 +439,9 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             if new.name == "esp32":
                 cfg.port = new_port
             save_or_warn(save, cfg)
-            bar.toast(f"Input: {LABELS[new.name]}")
+            bar.toast(f"ESP32 not available: {new.error}" if new.error else f"Input: {LABELS[new.name]}")
         if settings and not settings.closed:
-            settings.rebind(calibrator.value() if calibrator else None, board, connected)
+            settings.rebind(calibrator.value() if calibrator else None, board, connected, new.error)
         bar.set_items(items())
         main.title = title
 
@@ -428,7 +456,10 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
                                 board=board, connected=connected, calibrating=lambda: calibrating,
                                 on_cancel=cancel_calibration, on_mode=request_switch if start_mode else None, active_mode=lambda: mode.name,
-                                on_port=(lambda p: request_switch("esp32", p)) if start_mode else None)
+                                on_port=(lambda p: request_switch("esp32", p)) if start_mode else None,
+                                on_debug=toggle_debug if set_debug else None, on_report=copy_report if report else None,
+                                debug_path=lambda: debuglog.scrub(tilde_path(debuglog.current_path() or "")),
+                                problem=lambda: mode.error)
         bar.set_items(items())
 
     bar = Bar(main, items(), {

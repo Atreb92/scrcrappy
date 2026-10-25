@@ -79,7 +79,6 @@ def test_agent_wraps_a_session():
 
 
 @pytest.mark.parametrize("name,target,exc", [
-    ("esp32", "esp32", OSError("no such port")),
     ("ble", "ble", RuntimeError("helper failed")),
     ("agent", "connect", modes.agent.AgentError("no agent")),
 ])
@@ -110,3 +109,32 @@ def test_ble_on_macos_raises_mode_error(monkeypatch):
     monkeypatch.setattr(modes.sys, "platform", "darwin")
     with pytest.raises(modes.ModeError, match="Linux"):
         start("ble")
+
+
+@pytest.mark.parametrize("exc,expect", [
+    (FileNotFoundError(2, "No such file or directory"), "no such device"),
+    (PermissionError(13, "Permission denied"), "permission denied"),
+    (RuntimeError("no scrcrappy ESP32 firmware answering on /dev/x"), "firmware answering"),
+])
+def test_esp32_without_a_board_starts_unavailable_instead_of_failing(monkeypatch, exc, expect):
+    def boom(port):
+        raise exc
+
+    monkeypatch.setattr(modes.links, "esp32", boom)
+    m = start("esp32")
+    assert m.name == "esp32" and expect in m.error.lower() and m.device_name == "scrcrappy ESP32"
+    assert (m.link, m.board, m.keys, m.make_pointer, m.calibrator) == (None, None, None, None, None)
+    assert m.connected() is True
+    m.close()
+
+
+def test_unavailable_esp32_lists_the_ports_that_do_exist(monkeypatch):
+    monkeypatch.setattr(modes.links, "esp32", lambda port: (_ for _ in ()).throw(FileNotFoundError(2, "No such file")))
+    monkeypatch.setattr(modes.diagnose, "list_ports", lambda *a, **k: [("/dev/ttyUSB1", "USB serial")])
+    assert "serial ports found: /dev/ttyUSB1" in start("esp32").error
+
+
+def test_unavailable_esp32_without_any_port_says_nothing_extra(monkeypatch):
+    monkeypatch.setattr(modes.links, "esp32", lambda port: (_ for _ in ()).throw(FileNotFoundError(2, "No such file")))
+    monkeypatch.setattr(modes.diagnose, "list_ports", lambda *a, **k: [])
+    assert "serial ports found" not in start("esp32").error
