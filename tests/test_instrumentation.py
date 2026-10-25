@@ -127,3 +127,50 @@ def test_canary_secrets_never_reach_the_log_file(logfile, tmp_path, monkeypatch)
         assert leaked not in text, leaked
     assert stat.S_IMODE(os.stat(tmp_path / "logs" / "scrcrappy.log").st_mode) == 0o600
     link.close()
+
+
+def test_status_polls_do_not_flood_the_log(logfile):
+    link, _ = esp32_link(b"ready\npaired 6F:BF\nconnected\npeer 6F:BF x\n")
+    for _ in range(6):
+        link.query()
+        time.sleep(0.05)
+    text = logfile()
+    assert text.count("handshake attempt") >= 1
+    assert text.count("sent '?'") == 0  # polls are not logged
+    assert text.count("board: ready") == 1 and text.count("board: paired 6F:BF") == 1
+    link.close()
+
+
+def test_a_changed_board_state_is_logged_again(logfile):
+    master, slave = os.openpty()
+    state = [b"ready\npaired 6F:BF\nconnected\n"]
+    received = []
+
+    def run():
+        buf = b""
+        while True:
+            try:
+                buf += os.read(master, 1024)
+            except OSError:
+                return
+            *lines, buf = buf.split(b"\n")
+            for line in lines:
+                if line == b"?":
+                    os.write(master, state[0])
+
+    threading.Thread(target=run, daemon=True).start()
+    link = links.esp32(os.ttyname(slave))
+    time.sleep(0.2)
+    state[0] = b"ready\nunpaired\n"
+    link.query()
+    time.sleep(0.2)
+    text = logfile()
+    assert "board: paired 6F:BF" in text and "board: unpaired" in text and text.count("board: ready") == 1
+    link.close()
+
+
+def test_forget_is_logged(logfile):
+    link, _ = esp32_link(b"ready\n")
+    link.forget()
+    assert "sent 'p'" in logfile()
+    link.close()

@@ -126,3 +126,8 @@ def test_rotation_caps_the_file(tmp_path, monkeypatch):
     files = sorted(p.name for p in tmp_path.glob("l.log*"))
     assert files == ["l.log", "l.log.1", "l.log.2"] and all((tmp_path / f).stat().st_size < 4000 for f in files)
     assert all(stat.S_IMODE((tmp_path / f).stat().st_mode) == 0o600 for f in files)
+
+
+def test_startup_facts_show_the_effective_debug_log_setting(tmp_path):
+    path = debuglog.enable(Config(debug_log=False), ["--debug"], tmp_path / "l.log")
+    assert "'debug_log': True" in read(path)

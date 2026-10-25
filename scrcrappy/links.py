@@ -22,6 +22,7 @@ from typing import Callable
 log = logging.getLogger("scrcrappy.links")
 COUNT_EVERY = 1.0  # seconds between the "sent N reports" log lines
 CONTROL = {"ready", "connected", "disconnected", "unpaired", "paired", "peer", "pairing", "dbg"}  # lines worth logging
+SNAPSHOT = {"ready", "unpaired", "paired", "connected", "peer"}  # the board's answer to "?": logged only when it changes
 
 
 class Link:
@@ -33,6 +34,7 @@ class Link:
         self.peer: tuple[str, str] | None = None  # (id, name) of the connected phone
         self.last_seen = 0.0  # time.monotonic() of the last line from the device
         self._sent, self._count_at, self._odd = [0, 0], time.monotonic(), 0  # reports sent (mouse, keys), for the log
+        self._prev, self._cur, self._same = [], [], False  # the last snapshot and the one arriving, for the log
 
         def reader() -> None:
             buf = b""
@@ -50,7 +52,16 @@ class Link:
         self.last_seen = time.monotonic()
         word, _, rest = line.partition(" ")
         if word in CONTROL:  # what the board says about itself; never the phone's name or any input
-            log.debug("board: %s", f"peer {rest.partition(' ')[0]}" if word == "peer" else line)
+            quiet = False
+            if word in SNAPSHOT:  # the Settings panel asks every second: log an answer only when it differs
+                if word == "ready":
+                    self._prev, self._cur, self._same = self._cur, [], True
+                i = len(self._cur)
+                self._cur.append(line)
+                quiet = self._same and self._prev[i:i + 1] == [line]
+                self._same = quiet
+            if not quiet:
+                log.debug("board: %s", f"peer {rest.partition(' ')[0]}" if word == "peer" else line)
         elif self._odd < 20 and line:  # e.g. the ROM's boot text at a wrong baud rate: useful, so shown, but capped
             self._odd += 1
             log.debug("board (unrecognised): %r", line[:80])
@@ -71,7 +82,7 @@ class Link:
             self.on_pairing()
 
     def query(self) -> None:
-        self._line("?")
+        self._line("?", quiet=True)  # polled every second while Settings is open: not worth a log line
 
     def forget(self) -> None:
         self._line("p")
@@ -82,7 +93,7 @@ class Link:
     def send_keys(self, modifiers: int, keys: list[int]) -> None:
         self._line(" ".join(map(str, ["k", modifiers, *(keys + [0] * 6)[:6]])))
 
-    def _line(self, line: str) -> None:
+    def _line(self, line: str, quiet: bool = False) -> None:
         try:
             self._write(f"{line}\n".encode())  # one write per line: lines from two threads never interleave
         except OSError as e:
@@ -93,7 +104,7 @@ class Link:
             if time.monotonic() - self._count_at >= COUNT_EVERY:
                 log.debug("sent %d mouse and %d key reports", *self._sent)
                 self._sent, self._count_at = [0, 0], time.monotonic()
-        else:
+        elif not quiet:
             log.debug("sent %r", line)
 
 

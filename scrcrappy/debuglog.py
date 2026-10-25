@@ -84,7 +84,7 @@ def startup_facts(cfg: Config, args: list[str]) -> list[str]:
             f"video driver {env.get('SDL_VIDEODRIVER', '-')}, session {env.get('XDG_SESSION_TYPE', '-')}, "
             f"WAYLAND_DISPLAY {'set' if env.get('WAYLAND_DISPLAY') else 'unset'}, "
             f"DISPLAY {'set' if env.get('DISPLAY') else 'unset'}",
-            f"args {args}", f"config {config_view(cfg)}"]
+            f"args {args}", f"config { {**config_view(cfg), 'debug_log': is_enabled()} }"]
 
 
 class _Handler(RotatingFileHandler):
