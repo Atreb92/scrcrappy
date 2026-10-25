@@ -57,7 +57,7 @@ class Link:
             quiet = False
             if word in SNAPSHOT:  # the Settings panel asks every second: log an answer only when it differs
                 if word == "ready":
-                    self._prev, self._cur, self._same = self._cur, [], True
+                    self._prev, self._cur, self._same, self._odd = self._cur, [], True, 0  # (a reboot's text is news again)
                 i = len(self._cur)
                 self._cur.append(line)
                 quiet = self._same and self._prev[i:i + 1] == [line]

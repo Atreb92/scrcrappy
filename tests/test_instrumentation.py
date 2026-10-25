@@ -214,3 +214,15 @@ def test_firmware_line_is_logged_once_across_polls(logfile):
     text = logfile()
     assert text.count("board: fw debug Oct 25 2026 21:00:00") == 1 and "unrecognised" not in text
     link.close()
+
+
+def test_boot_text_after_a_restart_is_logged_even_when_the_cap_was_used_up(logfile):
+    master, slave = os.openpty()
+    board(master, b"ready\n")
+    link = links.esp32(os.ttyname(slave))
+    os.write(master, b"".join(b"noise %d\n" % i for i in range(30)))  # uses up the 20 unrecognised lines
+    time.sleep(0.2)
+    os.write(master, b"ready\nafter-restart-text\n")  # the board restarted: its text is news again
+    time.sleep(0.2)
+    assert "after-restart-text" in logfile()
+    link.close()

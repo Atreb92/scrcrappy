@@ -3,7 +3,8 @@
 //   in:  "dx dy buttons wheel"        mouse report (dx/dy/wheel -127..127)
 //        "k modifiers k1 .. k6"       keyboard report: modifier bits + held key usages (0 = none)
 //        "?"                          status query
-//        "p"                          forget the paired phone (dropping it if connected) and let a new one pair
+//        "p"                          forget the paired phone (dropping it if connected), let a new one pair, and
+//                                     restart the board (UART-bridge boards only) so no trace of the old one is left
 //                                     (pairing is otherwise closed once a phone is bonded)
 //   out: "dbg ..." lines (connect, auth result, disconnect reason) say why a pairing fails; scrcrappy logs them.
 //        The debug build (pio env *-debug, -DSCRCRAPPY_DEBUG=1) adds link parameters, MTU, PHY and, every 5 s while
@@ -205,6 +206,14 @@ void loop() {
             if (server->getConnectedCount()) server->disconnect(server->getPeerInfo(0).getConnHandle());
             pairing = true;
             Serial.println("pairing");
+#if !ARDUINO_USB_CDC_ON_BOOT
+            // The stack keeps recognising the forgotten phone (its address resolves to the old identity) and its
+            // next pairing fails until the board restarts. A restart is harmless behind a UART bridge; a native-USB
+            // board would re-enumerate and lose the serial port, so those keep the old behaviour.
+            Serial.flush();
+            delay(100);
+            ESP.restart();
+#endif
             continue;
         }
         if (line[0] == 'k') {
