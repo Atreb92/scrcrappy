@@ -18,7 +18,7 @@
 
 - [x] Screenshot button in Bluetooth / ESP32 mode: saves the mirrored video frame, same in-window toast as agent mode.
 
-- [ ] BLE link speed: since the device advertises as a keyboard (appearance 0x03C1, keyboard-first descriptor) the phone delivers ~1 report / 15 ms (was ≥125/s as a mouse), so reports are paced at 15 ms and the cursor feels a bit less immediate than at the start. Experiment: advertise as a mouse again (keep keyboard-first + LED descriptor), re-pair, re-measure throughput at 8 ms and check the Hardware Keyboard setting still appears. User decided to keep 15 ms for now (usable).
+- [ ] BLE link speed: since the device advertises as a keyboard (appearance 0x03C1, keyboard-first descriptor) the phone delivers ~1 report / 15 ms (was ≥125/s as a mouse), so reports are paced at 15 ms and the cursor feels a bit less immediate than at the start. The ESP32 firmware now asks iOS for an 11–15 ms interval and reports the granted one (`interval` line); reports are paced to it, never faster than 15 ms (the Linux helper reports none: fixed 15 ms). Experiment: advertise as a mouse again (keep keyboard-first + LED descriptor), re-pair, re-measure throughput at 8 ms and check the Hardware Keyboard setting still appears. User decided to keep 15 ms for now (usable).
 - [x] AssistiveTouch actions are now user-added custom buttons with in-app binding steps (+ on the toolbar).
 - [x] Calibration: while it runs the button is a red Cancel (Settings stays open) that stops the measurement and keeps the old table; the bar's Copy / Home / Switcher / Lock do nothing mid-run. Tried on a real phone (2026-10-24): works.
 - [x] Switch the input mode from Settings without restarting (spec 2026-10-25): BT is not selectable on macOS; a failed start keeps the old mode and toasts the reason. Tried live: see the merge notes.
@@ -57,7 +57,7 @@
 
 ## Housekeeping
 
-- [ ] MCP `calibrate` waits its full 120 s (holding the one-tool-at-a-time lock) if the window is closed during a run; have a failed post end the wait.
+- [ ] MCP `calibrate` waits its full 300 s (holding the one-tool-at-a-time lock) if the window is closed during a run; have a failed post end the wait.
 
 - [ ] No test drives the main loop's event routing end to end (overlays → popups → bar → phone controller); only the pieces are tested.
 

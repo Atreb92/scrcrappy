@@ -18,7 +18,6 @@ SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (
 FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (68, 68, 74), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
 COLS, CELL, PAD, WIDTH = 8, 44, 16, 400
 SELECTION = (24, 76, 140)  # selected field text: a dark accent
-ERROR = (255, 69, 58)  # iOS red
 
 
 class DialogState:
