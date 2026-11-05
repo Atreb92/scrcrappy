@@ -1,5 +1,6 @@
 """Opened from the toolbar: windows for add/edit a custom button and its right-click menu, and the Settings\noverlay inside the phone window."""
 import glob
+import os
 import subprocess
 import sys
 import threading
@@ -17,6 +18,7 @@ SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (
 FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (68, 68, 74), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
 COLS, CELL, PAD, WIDTH = 8, 44, 16, 400
 SELECTION = (24, 76, 140)  # selected field text: a dark accent
+ERROR = (255, 69, 58)  # iOS red
 
 
 class DialogState:
@@ -661,6 +663,8 @@ class Settings:
         elif getattr(self.cfg, self.editing) != value:
             setattr(self.cfg, self.editing, value)
             self.on_change()
+            if self.editing == "port":
+                self._layout()  # the offers follow the port
         self.editing, self.selected = None, False
         pygame.key.stop_text_input()
 
