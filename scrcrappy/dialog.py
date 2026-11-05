@@ -581,6 +581,7 @@ class Settings:
         return self.tips.get(self.hover)
 
     def _click(self, hit: str | None) -> None:
+        offer = self.offers[int(hit[4:])] if hit and hit.startswith("use:") else None  # before a commit re-lists them
         if hit not in ("port", "screenshots"):
             self._commit()
         if hit and hit.startswith("mode:"):
@@ -594,7 +595,7 @@ class Settings:
             self.on_change()
             self._relayout()  # the port row comes and goes with ESP32
         elif hit and hit.startswith("use:"):
-            self.editing, self.text["port"] = "port", self.offers[int(hit[4:])]
+            self.editing, self.text["port"] = "port", offer
             self._commit()
             self._relayout()
         elif hit in ("port", "screenshots"):

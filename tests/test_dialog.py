@@ -734,3 +734,34 @@ def test_found_port_offered_with_a_use_button(monkeypatch):
     click(panel, "use:0")
     assert cfg.port == "/dev/cu.usbserial-310" and panel.text["port"] == cfg.port and changes == [1]
     assert panel.offers == ["/dev/x"]  # the one it replaced is still plugged in
+
+
+def test_use_picks_its_own_device_even_while_a_typed_port_is_pending(monkeypatch):
+    from scrcrappy import dialog
+    from scrcrappy.config import Config
+    monkeypatch.setattr(dialog, "serial_ports", lambda: ["/dev/A", "/dev/B", "/dev/C"])
+    cfg = Config(mouse="esp32", port="/dev/X")
+    panel, _ = settings_panel(cfg, [])
+    click(panel, "port")
+    key(panel, pygame.K_a, pygame.KMOD_META)
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="/dev/A", window=panel.window))  # not committed yet
+    click(panel, "use:1")  # the button next to /dev/B
+    assert cfg.port == "/dev/B"
+
+
+def test_only_a_quick_second_click_selects(monkeypatch):
+    from scrcrappy import dialog
+    from scrcrappy.config import Config
+    now = [100.0]
+    monkeypatch.setattr(dialog.time, "monotonic", lambda: now[0])
+    panel, _ = settings_panel(Config(screenshots="~/old"), [])
+    click(panel, "screenshots")
+    now[0] += 1.0
+    click(panel, "screenshots")
+    assert not panel.selected  # too slow: a second single click
+    now[0] += 0.2
+    click(panel, "screenshots")
+    assert panel.selected
+    now[0] += 1.0
+    click(panel, "screenshots")
+    assert not panel.selected  # a slow click drops the selection
