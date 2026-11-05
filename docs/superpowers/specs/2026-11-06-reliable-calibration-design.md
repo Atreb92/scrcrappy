@@ -28,6 +28,12 @@ never replaces a good table; a failure leaves evidence; x and y each get their o
 
 ## Design
 
+> **Revised during implementation (2026-11-06), after measuring on the phone:** the x and y tables came out equal
+> within 0.1 % at every length, so only x is measured (3 samples per length, as below) and used for both axes; one
+> vertical move at length 12 checks it and warns above 5 %. The cursor is found against a reference frame (the
+> screen with the cursor parked in the corner) with the measured blend `0.495 p + 27.5` instead of the fixed grey
+> window, which lost it on Settings' grey search field. A run takes about a minute and a half.
+
 ### Measurement (`calibrate.py`)
 
 - **Probe:** home, nudge out (`(4, 4) × 15`, as today), look, send `(8, 0) × 5`, look. `ratio = measured / DEFAULT_GAIN(8)`

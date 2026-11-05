@@ -70,8 +70,8 @@ cursor, and scrcrappy steers that cursor to follow your mouse over the window.
    (AssistiveTouch > Devices > Bluetooth Devices).
 4. Once per phone, after changing AssistiveTouch Tracking Speed, or when the cursor overshoots / falls
    short: open a plain light screen (e.g. Settings) and click **Calibrate** in the toolbar's Settings
-   (or run `scrcrappy --mouse ble --calibrate`, or `esp32`). It takes about 3 minutes and measures both
-   axes; leave the mouse alone meanwhile. A run that goes wrong keeps the previous calibration.
+   (or run `scrcrappy --mouse ble --calibrate`, or `esp32`). It takes about a minute and a half; leave
+   the mouse alone meanwhile. A run that goes wrong keeps the previous calibration.
 
 Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it).
 

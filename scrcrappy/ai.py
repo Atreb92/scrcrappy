@@ -108,7 +108,7 @@ class AiControl:
                               "the cursor landed from it, in pixels. Needs a plain, light screen "
                               f"(e.g. Settings scrolled to the top) where the grey cursor disk is visible. {COORDS}", _schema(POINT), self.check_pointer))
             if self.calibrate_pointer:
-                found.append(Tool("calibrate", "Recalibrate the pointer (about three minutes; the cursor moves by "
+                found.append(Tool("calibrate", "Recalibrate the pointer (about a minute and a half; the cursor moves by "
                                   "itself). Use when check_pointer shows taps landing off target. Needs a plain, "
                                   "light screen (e.g. Settings scrolled to the top) open on the phone.",
                                   {"type": "object", "properties": {}}, self.calibrate))

@@ -18,6 +18,7 @@ SAMPLES, SPREAD, DROP = 3, 0.05, 0.97  # samples per length; warn above this spr
 SETTLE, RETRY, TRIES = 0.35, 0.05, 20  # s for the last frames to arrive; then up to TRIES newer frames, RETRY apart
 NUDGE = [(4, 4)] * 15  # from the top-left corner to about (140, 140)
 PROBE_LENGTH, PROBE_REPORTS = 8, 5  # first guess of this phone's speed
+CHECK_LENGTH = 12  # the one vertical move that checks the horizontal table holds vertically too
 Table = dict[str, dict[int, float]]  # {"x": {length: px per count}, "y": {...}}
 K = 21  # detection box side, smaller than the ~36 px cursor disk
 BLEND = (0.495, 27.5)  # the cursor over a screen pixel p reads 0.495 p + 27.5 (fitted, 0..255, within 4.4)
@@ -129,8 +130,9 @@ def check_monotonic(table: Table) -> None:
 def calibrate(send: Send, frames: LatestFrame, pace: float = TICK, sleep: Callable[[float], None] = time.sleep,
               miss: Path | None = None, log: Callable[[str], None] = print,
               cancel: threading.Event | None = None) -> Table:
-    """Measure both axes: a probe for the phone's speed, then SAMPLES moves per report length and axis, each
-    sized for about TRAVEL px; the median of each length is kept. Reports go out every `pace` (the link's).
+    """A probe for the phone's speed, then SAMPLES horizontal moves per report length, each sized for about TRAVEL px;
+    the median of each length is kept and used for both axes (iOS moves them alike: within 0.1 % on an iPhone 8),
+    with one vertical move as a check. Reports go out every `pace` (the link's).
     `cancel`, once set, stops it within a report (raises Cancelled)."""
     miss = miss or miss_path()
 
@@ -166,20 +168,21 @@ def calibrate(send: Send, frames: LatestFrame, pace: float = TICK, sleep: Callab
                            "plain light screen without touching the mouse")
 
     ratio = sample("x", PROBE_LENGTH, PROBE_REPORTS) / DEFAULT_GAIN[PROBE_LENGTH]  # this phone vs the defaults
-    table: Table = {"x": {}, "y": {}}
-    for axis in ("x", "y"):
-        speed = ratio
-        for length in LENGTHS:
-            n = plan_reports(length, DEFAULT_GAIN[length] * speed)
-            samples = [sample(axis, length, n) for _ in range(SAMPLES)]
-            gain, spread = median_gain(samples)
-            table[axis][length] = gain
-            log(f"  {axis} length {length:2}: {gain} px/count")
-            if spread > SPREAD:
-                log(f"  {axis} length {length:2}: samples spread {spread:.0%} ({', '.join(f'{g:.3f}' for g in samples)})")
-            speed = gain / DEFAULT_GAIN[length]
-    check_monotonic(table)
-    return table
+    gains: dict[int, float] = {}
+    for length in LENGTHS:
+        n = plan_reports(length, DEFAULT_GAIN[length] * ratio)
+        samples = [sample("x", length, n) for _ in range(SAMPLES)]
+        gains[length], spread = median_gain(samples)
+        log(f"  length {length:2}: {gains[length]} px/count")
+        if spread > SPREAD:
+            log(f"  length {length:2}: samples spread {spread:.0%} ({', '.join(f'{g:.3f}' for g in samples)})")
+        ratio = gains[length] / DEFAULT_GAIN[length]
+    check_monotonic({"x": gains})
+    vertical = sample("y", CHECK_LENGTH, plan_reports(CHECK_LENGTH, gains[CHECK_LENGTH]))
+    if abs(vertical / gains[CHECK_LENGTH] - 1) > SPREAD:
+        log(f"  vertical moves differ: {vertical:.3f} px/count at length {CHECK_LENGTH}, horizontal "
+            f"{gains[CHECK_LENGTH]}; the horizontal table is used for both")
+    return {"x": gains, "y": dict(gains)}
 
 
 def gain_path(serial: str) -> Path:

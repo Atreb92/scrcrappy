@@ -132,7 +132,7 @@ class SimPhone:
         return any(r1 == r2 and n2 == max(3, n1 // 2) < n1 for (r1, n1), (r2, n2) in zip(moves, moves[1:]))
 
 
-def sim_gains(fx=2.0, fy=1.9):
+def sim_gains(fx=2.0, fy=2.0):
     return Gains(Gain({k: v * fx for k, v in DEFAULT_GAIN.items()}), Gain({k: v * fy for k, v in DEFAULT_GAIN.items()}))
 
 
@@ -140,13 +140,22 @@ def run_cal(phone, tmp_path, **kw):
     return calibrate.calibrate(phone.send, phone, sleep=phone.sleep, miss=tmp_path / "miss.png", log=phone.log.append, **kw)
 
 
-def test_measures_both_axes_of_a_fast_phone_without_hitting_the_edge(tmp_path):
+def test_measures_a_fast_phone_without_hitting_the_edge_and_uses_x_for_both_axes(tmp_path):
     phone = SimPhone(sim_gains())
     table = run_cal(phone, tmp_path)
-    for axis, gain in (("x", phone.gains.x), ("y", phone.gains.y)):
-        for length in calibrate.LENGTHS:
-            assert table[axis][length] == pytest.approx(gain(length), rel=0.03)
+    for length in calibrate.LENGTHS:
+        assert table["x"][length] == pytest.approx(phone.gains.x(length), rel=0.03)
+    assert table["y"] == table["x"]  # iOS moves both axes alike (measured: within 0.1 %)
     assert phone.max_x < 750 - calibrate.EDGE and phone.max_y < 1334 - calibrate.EDGE
+    assert not any("vertical" in line for line in phone.log)
+    vertical = [r for r, _ in phone.runs if r[0] == 0 and r[1] > 0]
+    assert vertical == [(0, 12)]  # one check move, not a table
+
+
+def test_a_vertical_gain_that_differs_is_warned(tmp_path):
+    phone = SimPhone(sim_gains(fy=1.8))
+    run_cal(phone, tmp_path)
+    assert any("vertical" in line for line in phone.log)
 
 
 def test_sample_that_reaches_the_edge_is_redone_with_half_the_reports(tmp_path):
@@ -202,7 +211,7 @@ def test_gray_decoy_off_the_path_is_ignored(tmp_path):
 def test_landscape_frame(tmp_path):
     phone = SimPhone(sim_gains(), size=(1334, 750))
     table = run_cal(phone, tmp_path)
-    assert phone.max_y < 750 - calibrate.EDGE and table["y"][24] == pytest.approx(phone.gains.y(24), rel=0.03)
+    assert phone.max_y < 750 - calibrate.EDGE and table["x"][24] == pytest.approx(phone.gains.x(24), rel=0.03)
 
 
 def test_video_gone_is_a_clean_error(tmp_path):
@@ -218,17 +227,17 @@ def test_reports_are_sent_at_the_given_pace(tmp_path):
 
 
 def test_cursor_over_a_grey_field_is_still_found(tmp_path):
-    # Settings: the vertical samples end on the grey search field / avatar row, where the cursor reads ~139, not 150
-    phone = SimPhone(sim_gains(), band=(330, 460, 224))
+    # Settings' grey search field / avatar row, where the cursor reads ~139, not 150: here under the samples' path
+    phone = SimPhone(sim_gains(), band=(120, 170, 224))
     table = run_cal(phone, tmp_path)
-    assert table["y"][12] == pytest.approx(phone.gains.y(12), rel=0.03)
+    assert table["x"][12] == pytest.approx(phone.gains.x(12), rel=0.03)
 
 
 def test_cursor_over_black_text_is_still_found(tmp_path):
-    # the big black "Settings" title under the vertical path: the cursor reads ~28 there
-    phone = SimPhone(sim_gains(), band=(330, 460, 0))
+    # the big black "Settings" title under the samples' path: the cursor reads ~28 there
+    phone = SimPhone(sim_gains(), band=(120, 170, 0))
     table = run_cal(phone, tmp_path)
-    assert table["y"][12] == pytest.approx(phone.gains.y(12), rel=0.03)
+    assert table["x"][12] == pytest.approx(phone.gains.x(12), rel=0.03)
 
 
 def test_find_cursor_on_ignores_a_screen_without_it():
