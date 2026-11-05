@@ -88,4 +88,5 @@ def test_nonpositive_gain_file_falls_back_to_default(tmp_path, monkeypatch):
     from scrcrappy import calibrate
     monkeypatch.setattr(calibrate, "gain_path", lambda serial: tmp_path / "g.json")
     (tmp_path / "g.json").write_text('{"4": 0.0, "12": -1}')
-    assert calibrate.load("x") == calibrate.DEFAULT_GAIN
+    g = calibrate.load("x")
+    assert g.x(12) == g.y(12) == calibrate.DEFAULT_GAIN[12]

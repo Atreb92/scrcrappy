@@ -663,3 +663,105 @@ def test_rebind_updates_the_problem_line():
     assert panel.problem_lines
     panel.rebind(None, None, lambda: True, problem="")
     assert panel.problem_lines == []
+
+
+def key(panel, k, mod=0):
+    panel.handle(pygame.event.Event(pygame.KEYDOWN, key=k, mod=mod, window=panel.window))
+
+
+def test_double_click_selects_the_field_and_typing_replaces_it():
+    from scrcrappy.config import Config
+    cfg, changes = Config(screenshots="~/old"), []
+    panel, _ = settings_panel(cfg, changes)
+    click(panel, "screenshots")
+    assert not panel.selected
+    click(panel, "screenshots")
+    assert panel.selected
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="~/new", window=panel.window))
+    assert panel.text["screenshots"] == "~/new" and not panel.selected
+    click(panel, "screenshots")
+    click(panel, "screenshots")
+    panel.draw(panel.window.get_surface(), 667)  # with the selection highlight
+
+
+def test_backspace_clears_a_selection_and_cmd_a_selects():
+    from scrcrappy.config import Config
+    panel, _ = settings_panel(Config(screenshots="~/old"), [])
+    click(panel, "screenshots")
+    key(panel, pygame.K_a, pygame.KMOD_META)
+    assert panel.selected
+    key(panel, pygame.K_BACKSPACE)
+    assert panel.text["screenshots"] == "" and not panel.selected
+
+
+def test_copy_and_paste(monkeypatch):
+    from scrcrappy import dialog
+    from scrcrappy.config import Config
+    clip = ["/dev/cu.pasted"]
+    monkeypatch.setattr(dialog, "clipboard_get", lambda: clip[0])
+    monkeypatch.setattr(dialog, "clipboard_put", lambda text: clip.__setitem__(0, text))
+    panel, _ = settings_panel(Config(mouse="esp32", port="/dev/x"), [])
+    click(panel, "port")
+    click(panel, "port")
+    key(panel, pygame.K_c, pygame.KMOD_CTRL)
+    assert clip[0] == "/dev/x"
+    clip[0] = "/dev/cu.pasted"
+    key(panel, pygame.K_v, pygame.KMOD_META)  # replaces the selection
+    assert panel.text["port"] == "/dev/cu.pasted"
+    key(panel, pygame.K_v, pygame.KMOD_META)  # nothing selected: appends
+    assert panel.text["port"] == "/dev/cu.pasted/dev/cu.pasted"
+
+
+def test_serial_ports_lists_usb_serial_devices(monkeypatch):
+    from scrcrappy import dialog
+    present = {"/dev/cu.usbserial-310", "/dev/ttyACM0", "/dev/cu.Bluetooth-Incoming-Port"}
+    monkeypatch.setattr(dialog.glob, "glob", lambda pattern: sorted(p for p in present
+                                                                    if __import__("fnmatch").fnmatch(p, pattern)))
+    assert dialog.serial_ports() == ["/dev/cu.usbserial-310", "/dev/ttyACM0"]
+
+
+def test_found_port_offered_with_a_use_button(monkeypatch):
+    from scrcrappy import dialog
+    from scrcrappy.config import Config
+    monkeypatch.setattr(dialog, "serial_ports", lambda: ["/dev/cu.usbserial-310", "/dev/x"])
+    cfg, changes = Config(port="/dev/x"), []
+    panel, _ = settings_panel(cfg, changes)
+    assert "use:0" not in panel.hits  # not in ESP32 mode
+    click(panel, "mode:2")
+    assert panel.offers == ["/dev/cu.usbserial-310"]  # the current port isn't offered
+    panel.draw(panel.window.get_surface(), 667)
+    changes.clear()
+    click(panel, "use:0")
+    assert cfg.port == "/dev/cu.usbserial-310" and panel.text["port"] == cfg.port and changes == [1]
+    assert panel.offers == ["/dev/x"]  # the one it replaced is still plugged in
+
+
+def test_use_picks_its_own_device_even_while_a_typed_port_is_pending(monkeypatch):
+    from scrcrappy import dialog
+    from scrcrappy.config import Config
+    monkeypatch.setattr(dialog, "serial_ports", lambda: ["/dev/A", "/dev/B", "/dev/C"])
+    cfg = Config(mouse="esp32", port="/dev/X")
+    panel, _ = settings_panel(cfg, [])
+    click(panel, "port")
+    key(panel, pygame.K_a, pygame.KMOD_META)
+    panel.handle(pygame.event.Event(pygame.TEXTINPUT, text="/dev/A", window=panel.window))  # not committed yet
+    click(panel, "use:1")  # the button next to /dev/B
+    assert cfg.port == "/dev/B"
+
+
+def test_only_a_quick_second_click_selects(monkeypatch):
+    from scrcrappy import dialog
+    from scrcrappy.config import Config
+    now = [100.0]
+    monkeypatch.setattr(dialog.time, "monotonic", lambda: now[0])
+    panel, _ = settings_panel(Config(screenshots="~/old"), [])
+    click(panel, "screenshots")
+    now[0] += 1.0
+    click(panel, "screenshots")
+    assert not panel.selected  # too slow: a second single click
+    now[0] += 0.2
+    click(panel, "screenshots")
+    assert panel.selected
+    now[0] += 1.0
+    click(panel, "screenshots")
+    assert not panel.selected  # a slow click drops the selection

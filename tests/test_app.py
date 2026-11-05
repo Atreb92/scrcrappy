@@ -219,10 +219,11 @@ def test_calibrator_reports_current_value_and_saves_a_new_table(monkeypatch, tmp
     monkeypatch.setenv("HOME", str(tmp_path))
     c = calibrate.Calibrator("abc", send=lambda *a: None, frames=None)
     assert c.value() == pytest.approx(1.66, abs=0.01)  # default table, medium move (12 counts)
-    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, cancel=None: {1: 1.0, 12: 2.5, 24: 3.0})
+    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, pace=None, cancel=None: {"x": {1: 1.0, 12: 2.5, 24: 3.0},
+                                                                                          "y": {1: 1.0, 12: 2.0, 24: 3.0}})
     c.run()
     assert c.value() == pytest.approx(2.5)
-    assert calibrate.load("abc")[12.0] == 2.5
+    assert calibrate.load("abc").y(12) == 2.0
 
 
 @pytest.mark.parametrize("failure", [None, OSError("disk full"), "cancelled"])
@@ -536,3 +537,26 @@ def test_cancel_reaches_the_calibrator_even_while_an_ai_tool_holds_the_lock(monk
     app_module.run(frames, alive, make_pointer=make_pointer, calibrator=WaitingCalibrator(), save=lambda c: None)
     assert cancelled.is_set() and bars[0].toast_text == "Calibration cancelled"
     assert len(pointers) == 2  # rebuilt after the cancel
+
+
+def test_run_destroys_its_window_before_quitting(monkeypatch):
+    # pygame-ce: a Window freed after pygame.quit() destroys whichever window is current then. run's window sits in
+    # reference cycles (the nested callbacks), so the gc frees it at some later moment: it closed other tests' windows
+    import os
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.video import LatestFrame
+    made, destroyed = [], []
+
+    class Tracked(pygame.Window):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            made.append(self)
+
+        def destroy(self):
+            destroyed.append(self)
+            super().destroy()
+
+    monkeypatch.setattr(pygame, "Window", Tracked)
+    app_module.run(LatestFrame(), alive=lambda: False, save=lambda c: None)
+    assert made and destroyed == made

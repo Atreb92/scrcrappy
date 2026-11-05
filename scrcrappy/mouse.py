@@ -1,15 +1,15 @@
 """Drive the AssistiveTouch cursor with a relative mouse so it follows an absolute target.
 
 iOS accelerates the pointer by the length of each HID report (not its direction), so we keep a
-gain table (screen px per count, by report length), track where the cursor should be, and every
-TICK send the integer report that lands closest to the target. Pacing is fixed because the gain
+gain table per axis (screen px per count, by report length), track where the cursor should be, and every
+`pace` send the integer report that lands closest to the target. Pacing is fixed because the gain
 was measured at that rate.
 """
 import collections
 import math
 import threading
 import time
-from typing import Callable
+from typing import Callable, NamedTuple
 
 TICK = 0.015  # seconds between reports: faster than the BLE link delivers them and they queue up (cursor lags)
 MAX_LEN = 24  # longest report used; acceleration gets steep above this
@@ -37,9 +37,16 @@ class Gain:
         return pts[-1][1]
 
 
+class Gains(NamedTuple):
+    """One gain table per axis (iOS need not move the cursor as far vertically as horizontally)."""
+    x: Gain
+    y: Gain
+
+
 class Pointer:
-    def __init__(self, send: Send, gain: Gain, size: tuple[int, int]) -> None:
-        self.send, self.size = send, size
+    def __init__(self, send: Send, gains: Gains, size: tuple[int, int], pace: float = TICK) -> None:
+        """`pace`: seconds between reports, the link's (and the one the gains were measured at)."""
+        self.send, self.size, self.pace = send, size, pace
         self.pos = (0.0, 0.0)  # where the phone cursor should be, frame px
         self.target: tuple[float, float] | None = None
         self.buttons = 0
@@ -47,9 +54,9 @@ class Pointer:
         self.pending: collections.deque = collections.deque()
         self.lock = threading.Lock()
         # every report we may send, with the displacement it should cause
-        self.moves = [((dx, dy), (g * dx, g * dy))
+        self.moves = [((dx, dy), (gains.x(length) * dx, gains.y(length) * dy))
                       for dx in range(-MAX_LEN, MAX_LEN + 1) for dy in range(-MAX_LEN, MAX_LEN + 1)
-                      if 0 < math.hypot(dx, dy) <= MAX_LEN for g in [gain(math.hypot(dx, dy))]]
+                      if 0 < (length := math.hypot(dx, dy)) <= MAX_LEN]
         self._thread: threading.Thread | None = None
 
     # --- called from the UI thread; actions run in order
@@ -129,7 +136,7 @@ class Pointer:
             with self.lock:
                 if not self.pending and not self.homing and self._next_move() is None:
                     return True
-            time.sleep(TICK)
+            time.sleep(self.pace)
         return False
 
     def start(self) -> None:
@@ -137,7 +144,7 @@ class Pointer:
             next_t = time.monotonic()
             while self._thread:
                 self.step()
-                next_t += TICK
+                next_t += self.pace
                 time.sleep(max(0.0, next_t - time.monotonic()))
 
         self._thread = threading.Thread(target=loop, daemon=True)

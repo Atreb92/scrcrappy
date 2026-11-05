@@ -226,8 +226,10 @@ STALL = 5  # seconds without a frame before the stream counts as dead
 
 
 def open_iphone(name: str, stop: threading.Event) -> Iterator[av.VideoFrame]:
+    # bgr0 (32BGRA), not uyvy422: macOS puts the phone's full-range picture into uyvy422 without rescaling it
+    # (+16 on every level, highlights clipped: too bright and saturated)
     container = av.open(name, format="avfoundation", timeout=15,
-                        options={"framerate": "60", "pixel_format": "uyvy422"})
+                        options={"framerate": "60", "pixel_format": "bgr0"})
     try:
         stream = container.streams.video[0]
         last = time.monotonic()

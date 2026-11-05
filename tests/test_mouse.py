@@ -1,18 +1,19 @@
 import pytest
 
-from scrcrappy.mouse import DEFAULT_GAIN, HOME_REPORTS, Gain, Pointer
+from scrcrappy.mouse import DEFAULT_GAIN, HOME_REPORTS, TICK, Gain, Gains, Pointer
 
 
 class Phone:
     """Fake phone: applies the same gain model to received reports, clamps at screen edges."""
 
-    def __init__(self, gain, size=(750, 1334)):
-        self.gain, self.size, self.pos, self.sent = gain, size, [0.0, 0.0], []
+    def __init__(self, gains, size=(750, 1334)):
+        self.gains, self.size, self.pos, self.sent = gains, size, [0.0, 0.0], []
 
     def __call__(self, dx, dy, buttons, wheel):
         self.sent.append((dx, dy, buttons, wheel))
-        g = self.gain((dx * dx + dy * dy) ** 0.5)
-        self.pos = [min(max(self.pos[0] + g * dx, 0), self.size[0] - 1), min(max(self.pos[1] + g * dy, 0), self.size[1] - 1)]
+        length = (dx * dx + dy * dy) ** 0.5
+        gx, gy = self.gains.x(length), self.gains.y(length)
+        self.pos = [min(max(self.pos[0] + gx * dx, 0), self.size[0] - 1), min(max(self.pos[1] + gy * dy, 0), self.size[1] - 1)]
 
 
 def run(p, limit=2000):
@@ -23,9 +24,9 @@ def run(p, limit=2000):
 
 
 def setup():
-    gain = Gain(DEFAULT_GAIN)
-    phone = Phone(gain)
-    return Pointer(phone, gain, (750, 1334)), phone
+    gains = Gains(Gain(DEFAULT_GAIN), Gain(DEFAULT_GAIN))
+    phone = Phone(gains)
+    return Pointer(phone, gains, (750, 1334)), phone
 
 
 def test_gain_interpolates_and_clamps():
@@ -101,3 +102,18 @@ def test_report_pace_fits_the_bluetooth_link():
     # queued up and the cursor trailed behind the mouse, catching up when it stopped
     from scrcrappy.mouse import TICK
     assert TICK >= 0.015
+
+
+def test_each_axis_moves_by_its_own_gain():
+    gains = Gains(Gain(DEFAULT_GAIN), Gain({k: v / 2 for k, v in DEFAULT_GAIN.items()}))
+    phone = Phone(gains)
+    p = Pointer(phone, gains, (750, 1334))
+    p.move_to(300, 600)
+    run(p)
+    assert abs(phone.pos[0] - 300) <= 1 and abs(phone.pos[1] - 600) <= 1
+
+
+def test_pointer_takes_the_links_pace():
+    gains = Gains(Gain(DEFAULT_GAIN), Gain(DEFAULT_GAIN))
+    assert Pointer(lambda *a: None, gains, (750, 1334)).pace == TICK
+    assert Pointer(lambda *a: None, gains, (750, 1334), pace=0.03).pace == 0.03

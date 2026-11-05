@@ -15,6 +15,9 @@ class FakeLink:
     def send_keys(self, *a):
         pass
 
+    def pace(self):
+        return 0.015
+
     def close(self):
         self.closed += 1
 

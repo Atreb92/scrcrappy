@@ -2,9 +2,10 @@
 
 host -> device: "dx dy buttons wheel" (mouse report), "k modifiers k1..k6" (keyboard report: modifier
                 bits + up to 6 held key usages, 0 = none), "?" (status query); reports are sent at once
-device -> host: "ready" (advertising), "connected" (phone subscribed to reports)
-ESP32 firmware only: "?" answers a snapshot ("ready", "unpaired" | "paired <id>", while connected "connected" and
-"peer <id> <name>"), "p" forgets the phone ("pairing"), "disconnected" when the phone goes
+device -> host: "ready" (advertising), "connected" (phone subscribed to reports), "interval N" (ESP32 only: the
+                BLE connection interval the phone granted, microseconds; at most one report gets through per interval)
+ESP32 firmware only: "?" answers a snapshot ("ready", "unpaired" | "paired <id>", while connected "connected",
+"peer <id> <name>" and "interval N"), "p" forgets the phone ("pairing"), "disconnected" when the phone goes
 """
 import contextlib
 import fcntl
@@ -19,18 +20,21 @@ import tty
 from pathlib import Path
 from typing import Callable
 
+from .mouse import TICK
+
 
 log = logging.getLogger("scrcrappy.links")
 REPLY_WINDOW = 0.5  # seconds after a quiet "?" in which snapshot lines count as its answer
 COUNT_EVERY = 1.0  # seconds between the "sent N reports" log lines
-CONTROL = {"ready", "connected", "disconnected", "unpaired", "paired", "peer", "pairing", "dbg", "fw"}  # lines worth logging
-SNAPSHOT = {"ready", "fw", "unpaired", "paired", "connected", "peer"}  # the board's answer to "?": logged only when it changes
+CONTROL = {"ready", "connected", "disconnected", "unpaired", "paired", "peer", "pairing", "dbg", "fw", "interval"}  # lines worth logging
+SNAPSHOT = {"ready", "fw", "unpaired", "paired", "connected", "peer", "interval"}  # the board's answer to "?": logged only when it changes
 
 
 class Link:
     def __init__(self, write: Callable[[bytes], object], read: Callable[[], bytes],
                  close: Callable[[], object] = lambda: None, on_pairing: Callable[[], None] | None = None) -> None:
         self.ready, self.connected = threading.Event(), threading.Event()
+        self.interval: float | None = None  # seconds, once the device has said
         self._write, self.close, self.on_pairing = write, close, on_pairing
         self.paired: bool | None = None  # ESP32 firmware's last snapshot; None = unknown (old firmware, or not yet answered)
         self.peer: tuple[str, str] | None = None  # (id, name) of the connected phone
@@ -84,6 +88,8 @@ class Link:
             self.paired = word == "paired"
         elif word == "fw":
             self.firmware = rest
+        elif word == "interval" and rest.isdigit():
+            self.interval = int(rest) / 1e6
         elif word == "peer":
             id_, _, name = rest.partition(" ")
             self.peer = (id_, name.strip())
@@ -96,6 +102,10 @@ class Link:
 
     def forget(self) -> None:
         self._line("p")
+
+    def pace(self) -> float:
+        """Seconds between reports: TICK, or slower when the phone granted a longer interval (else they queue up)."""
+        return max(TICK, self.interval or 0)
 
     def send(self, dx: int, dy: int, buttons: int, wheel: int) -> None:
         self._line(f"{dx} {dy} {buttons} {wheel}")

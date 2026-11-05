@@ -89,7 +89,7 @@ def source(frames: int):
     def open_source(name: str, stop):
         assert name == "iPhone"
         for _ in range(frames):
-            yield av.VideoFrame(64, 48, "uyvy422")
+            yield av.VideoFrame(64, 48, "bgr0")
     return open_source
 
 
@@ -118,7 +118,7 @@ def test_capture_avf_without_a_phone_says_why():
 def test_capture_avf_stops_a_running_stream_on_exit():
     def endless(name, stop):
         while True:
-            yield av.VideoFrame(64, 48, "uyvy422")
+            yield av.VideoFrame(64, 48, "bgr0")
             time.sleep(0.001)
     with video.capture_avf(LatestFrame(), "s", devices=lambda: {"iPhone": "s"}, open_source=endless) as proc:
         time.sleep(0.05)
@@ -235,3 +235,14 @@ def test_open_iphone_stops_when_asked_even_without_frames(monkeypatch):
     stop.set()
     assert list(video.open_iphone("iPhone", stop)) == []
     assert box.closed
+
+
+def test_open_iphone_asks_for_bgra_frames(monkeypatch):
+    """macOS squeezes the phone's full-range picture into uyvy422 without rescaling (washed out, clipped
+    highlights); 32BGRA comes through as the phone shows it."""
+    opened = {}
+    monkeypatch.setattr(video.av, "open", lambda *a, **k: opened.update(k) or FakeContainer())
+    stop = threading.Event()
+    stop.set()
+    list(video.open_iphone("iPhone", stop))
+    assert opened["options"]["pixel_format"] == "bgr0"
