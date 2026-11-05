@@ -216,11 +216,11 @@ void loop() {
                 idOf(NimBLEDevice::getBondedAddress(0), id);
                 Serial.printf("paired %s\n", id);
             }
+            tell_interval();  // before "connected": the host starts using the link (and its pace) on that line
             if (subscribed) {
                 Serial.println("connected");
                 Serial.printf("peer %s %s\n", peerId, peerName);
             }
-            tell_interval();
             continue;
         }
         if (line[0] == 'p') {

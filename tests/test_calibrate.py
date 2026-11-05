@@ -260,3 +260,14 @@ def test_a_nudge_that_loses_the_cursor_is_tried_shorter(tmp_path):
     phone = SimPhone(sim_gains(fx=3.0, fy=3.0), band=(180, 270, 55))
     table = run_cal(phone, tmp_path)
     assert table["x"][12] == pytest.approx(phone.gains.x(12), rel=0.03)
+
+
+def test_calibrator_reads_the_links_pace_when_it_runs(monkeypatch, tmp_path):
+    # the ESP32 may report its interval after "connected": the pace is read when calibration starts, not at launch
+    monkeypatch.setenv("HOME", str(tmp_path))
+    pace, seen = [TICK], []
+    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, pace: seen.append(pace) or {"x": {1: 1.0}, "y": {1: 1.0}})
+    c = calibrate.Calibrator("abc", lambda *a: None, None, pace=lambda: pace[0])
+    pace[0] = 0.03
+    c.run()
+    assert seen == [0.03]

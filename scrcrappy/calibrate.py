@@ -233,7 +233,8 @@ class Calibrator:
     """Recalibration from the running app (Settings › Calibrate): measures with `send` and the video, saves for
     `serial`. The app rebuilds its pointer afterwards; make_pointer loads the saved table each time."""
 
-    def __init__(self, serial: str, send: Send, frames: LatestFrame, pace: float = TICK) -> None:
+    def __init__(self, serial: str, send: Send, frames: LatestFrame, pace: Callable[[], float] = lambda: TICK) -> None:
+        """`pace()`: the link's, read when a calibration starts (the ESP32 may report its interval late)."""
         self.serial, self.send, self.frames, self.pace = serial, send, frames, pace
         self._cancel = threading.Event()
 
@@ -248,7 +249,7 @@ class Calibrator:
 
     def run(self) -> None:
         """Measure and save; raises Cancelled (saving nothing) after `cancel()`, even one during the last measurement."""
-        table = calibrate(self.send, self.frames, pace=self.pace, cancel=self._cancel)
+        table = calibrate(self.send, self.frames, pace=self.pace(), cancel=self._cancel)
         if self._cancel.is_set():
             raise Cancelled()
         save(self.serial, table)
