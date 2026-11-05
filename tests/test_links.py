@@ -226,3 +226,17 @@ def test_open_serial_does_not_block_on_carrier_and_ends_up_blocking():
     finally:
         os.close(fd)
         os.close(master)
+
+
+def test_link_reads_the_granted_interval_and_paces_to_it():
+    link = feed(b"ready\nconnected\ninterval 30000\n")
+    assert link.interval == pytest.approx(0.03)
+    assert link.pace() == pytest.approx(0.03)
+
+
+def test_link_pace_never_below_tick():
+    from scrcrappy.mouse import TICK
+    fast = feed(b"interval 7500\n")
+    silent = feed()  # Linux helper: never reports one
+    assert fast.interval == pytest.approx(0.0075)
+    assert fast.pace() == TICK and silent.interval is None and silent.pace() == TICK
