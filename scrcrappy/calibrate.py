@@ -6,10 +6,11 @@ from pathlib import Path
 
 import numpy as np
 
-from .mouse import DEFAULT_GAIN, HOME_REPORTS, TICK, Gain, Send
+from .mouse import DEFAULT_GAIN, HOME_REPORTS, TICK, Gain, Gains, Send
 from .video import Frame, LatestFrame
 
 LENGTHS = (1, 2, 3, 4, 6, 8, 12, 16, 24)
+Table = dict[str, dict[int, float]]  # {"x": {length: px per count}, "y": {...}}
 K = 21  # detection box side, smaller than the ~36 px cursor disk
 
 
@@ -38,7 +39,7 @@ class Cancelled(Exception):
     """The user cancelled a running calibration; nothing was saved."""
 
 
-def calibrate(send: Send, frames: LatestFrame, cancel: threading.Event | None = None) -> dict[int, float]:
+def calibrate(send: Send, frames: LatestFrame, cancel: threading.Event | None = None, pace: float = TICK) -> dict[int, float]:
     """Measure the gain table. `cancel`, once set, stops it within a report (raises Cancelled)."""
     def paced(reports: list[tuple[int, int]]) -> tuple[float, float] | None:
         for dx, dy in reports:
@@ -71,15 +72,21 @@ def gain_path(serial: str) -> Path:
     return Path.home() / ".config" / "scrcrappy" / f"gain-{serial}.json"
 
 
-def load(serial: str) -> dict[float, float]:
+def load(serial: str) -> Gains:
+    """The saved tables; an older file holds one table, used for both axes. Anything unusable: the defaults."""
+    default = Gains(Gain(DEFAULT_GAIN), Gain(DEFAULT_GAIN))
     try:
-        table = {float(k): v for k, v in json.loads(gain_path(serial).read_text()).items()}
-    except (OSError, ValueError):
-        return DEFAULT_GAIN
-    return table if table and all(v > 0 for v in table.values()) else DEFAULT_GAIN
+        raw = json.loads(gain_path(serial).read_text())
+        axes = [raw["x"], raw["y"]] if "x" in raw else [raw, raw]
+        tables = [{float(k): float(v) for k, v in axis.items()} for axis in axes]
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return default
+    if not all(t and all(v > 0 for v in t.values()) for t in tables):
+        return default
+    return Gains(Gain(tables[0]), Gain(tables[1]))
 
 
-def save(serial: str, table: dict[int, float]) -> Path:
+def save(serial: str, table: Table) -> Path:
     path = gain_path(serial)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(table))
@@ -90,13 +97,13 @@ class Calibrator:
     """Recalibration from the running app (Settings › Calibrate): measures with `send` and the video, saves for
     `serial`. The app rebuilds its pointer afterwards; make_pointer loads the saved table each time."""
 
-    def __init__(self, serial: str, send: Send, frames: LatestFrame) -> None:
-        self.serial, self.send, self.frames = serial, send, frames
+    def __init__(self, serial: str, send: Send, frames: LatestFrame, pace: float = TICK) -> None:
+        self.serial, self.send, self.frames, self.pace = serial, send, frames, pace
         self._cancel = threading.Event()
 
     def value(self) -> float:
-        """Screen px per count for a medium report (12 counts): the one number Settings shows."""
-        return Gain(load(self.serial))(12)
+        """Screen px per count for a medium horizontal report (12 counts): the one number Settings shows."""
+        return load(self.serial).x(12)
 
     def begin(self) -> None:
         """Forget an earlier cancel; the app calls this on its own thread just before starting the worker, so a
@@ -105,7 +112,7 @@ class Calibrator:
 
     def run(self) -> None:
         """Measure and save; raises Cancelled (saving nothing) after `cancel()`, even one during the last measurement."""
-        table = calibrate(self.send, self.frames, self._cancel)
+        table = calibrate(self.send, self.frames, self._cancel, self.pace)
         if self._cancel.is_set():
             raise Cancelled()
         save(self.serial, table)

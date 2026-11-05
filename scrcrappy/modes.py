@@ -89,6 +89,6 @@ def start_mode(name: str, port: str, serial: str, frames: LatestFrame, ble_pytho
         raise ModeError(str(e)) from e
     keys = KeyQueue(link.send_keys)
     keys.start()
-    return Mode(name, make_pointer=lambda size: mouse.Pointer(link.send, mouse.Gain(calibrate.load(serial)), size),
-                keys=keys, calibrator=Calibrator(serial, link.send, frames), link=link,
+    return Mode(name, make_pointer=lambda size: mouse.Pointer(link.send, calibrate.load(serial), size, link.pace()),
+                keys=keys, calibrator=Calibrator(serial, link.send, frames, link.pace()), link=link,
                 device_name="scrcrappy ESP32" if name == "esp32" else "scrcrappy PC")

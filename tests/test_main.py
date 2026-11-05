@@ -129,6 +129,7 @@ def test_window_opens_without_a_connected_phone(monkeypatch, capsys):
         def send(self, *a): pass
         def send_keys(self, *a): pass
         def close(self): pass
+        def pace(self): return 0.015
 
     ran = threading.Event()
     cap = type("Cap", (), {"poll": lambda self: None, "log": ""})()
