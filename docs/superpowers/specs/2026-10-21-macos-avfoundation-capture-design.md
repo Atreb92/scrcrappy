@@ -16,7 +16,7 @@ QuickTime Player uses). Linux keeps qvh unchanged.
 
 Spike (2026-10-21, iPhone 8, iOS 16.7.1): setting `kCMIOHardwarePropertyAllowScreenCaptureDevices` (`'yes '`) in the
 process, pumping the CoreFoundation run loop for a moment, then `av.open("iPhone", format="avfoundation",
-options={"framerate": "60", "pixel_format": "uyvy422"})` gives 750x1334 frames, first frame after 0.12 s, ~55 fps.
+options={"framerate": "60", "pixel_format": "bgr0"})` gives 750x1334 frames, first frame after 0.12 s, ~55 fps.
 
 ## Design
 
