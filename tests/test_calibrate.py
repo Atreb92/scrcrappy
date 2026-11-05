@@ -266,7 +266,7 @@ def test_calibrator_reads_the_links_pace_when_it_runs(monkeypatch, tmp_path):
     # the ESP32 may report its interval after "connected": the pace is read when calibration starts, not at launch
     monkeypatch.setenv("HOME", str(tmp_path))
     pace, seen = [TICK], []
-    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, pace: seen.append(pace) or {"x": {1: 1.0}, "y": {1: 1.0}})
+    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, pace, cancel=None: seen.append(pace) or {"x": {1: 1.0}, "y": {1: 1.0}})
     c = calibrate.Calibrator("abc", lambda *a: None, None, pace=lambda: pace[0])
     pace[0] = 0.03
     c.run()
