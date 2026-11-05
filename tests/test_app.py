@@ -74,13 +74,13 @@ def test_find_cursor_on_plain_screen():
     assert find_cursor(np.full((1334, 750, 3), 242, np.uint8)) is None
 
 
-@pytest.mark.parametrize("natural, flipped, expected", [
+@pytest.mark.parametrize("invert, flipped, expected", [
     (False, False, 1), (True, False, -1),  # wheel up, OS not flipping
     (False, True, 1), (True, True, -1),    # OS already flipped (macOS natural scrolling): same result
 ])
-def test_scroll_direction(natural, flipped, expected):
+def test_scroll_direction(invert, flipped, expected):
     p = FakePointer()
-    Controller(p, natural_scroll=natural).handle(
+    Controller(p, invert_scroll=invert).handle(
         ev(pygame.MOUSEWHEEL, y=-1 if flipped else 1, flipped=flipped), RECT, FRAME)
     assert p.calls == [("wheel", expected)]
 
@@ -196,7 +196,7 @@ def test_run_survives_failing_settings_save(capsys):
 
     def settings_init(self, *a, **kw):
         orig_settings(self, *a, **kw)
-        self._click("natural")  # as if the switch was clicked right away: saves
+        self._click("invert")  # as if the switch was clicked right away: saves
 
     app_module.Bar.__init__, app_module.Settings.__init__ = bar_init, settings_init
     try:
@@ -355,7 +355,7 @@ def test_mcp_flag_is_never_saved(monkeypatch):
 
     def settings_init(self, *a, **kw):
         orig_settings(self, *a, **kw)
-        self._click("natural")  # any other setting change saves the config
+        self._click("invert")  # any other setting change saves the config
 
     monkeypatch.setattr(Bar, "__init__", bar_init)
     monkeypatch.setattr(app_module.Settings, "__init__", settings_init)

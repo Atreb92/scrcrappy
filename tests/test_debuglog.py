@@ -56,7 +56,7 @@ def test_config_view_is_an_allowlist(tmp_path):
     cfg = Config(mcp_token="SECRET-TOKEN", screenshots=str(tmp_path / "home" / "Pics"), mouse="esp32", ai_control=True)
     cfg.customs = {"abcd/esp32": [Custom(2, "x", "My private name")]}
     view = debuglog.config_view(cfg)
-    assert view == {"mouse": "esp32", "port": cfg.port, "natural_scroll": False, "ai_control": True,
+    assert view == {"mouse": "esp32", "port": cfg.port, "invert_scroll": False, "ai_control": True,
                     "debug_log": False, "screenshots": "~/Pics", "customs": 1}
     assert "SECRET-TOKEN" not in str(view) and "private" not in str(view)
 

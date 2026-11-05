@@ -15,7 +15,7 @@ def test_missing_file_gives_defaults(tmp_path):
 
 def test_roundtrip(tmp_path):
     p = tmp_path / "c.json"
-    cfg = Config(natural_scroll=True, customs={"abc/ble": [Custom(2, HOME, "Home")]})
+    cfg = Config(invert_scroll=True, customs={"abc/ble": [Custom(2, HOME, "Home")]})
     config.save(cfg, p)
     assert json.loads(p.read_text())["customs"]["abc/ble"][0]["icon"] == "e9b2"  # readable hex in the file
     assert config.load(p) == cfg
@@ -29,7 +29,7 @@ def test_corrupt_json_gives_defaults(tmp_path):
 
 def test_invalid_customs_dropped(tmp_path):
     p = tmp_path / "c.json"
-    p.write_text(json.dumps({"natural_scroll": True, "customs": {"k": [
+    p.write_text(json.dumps({"invert_scroll": True, "customs": {"k": [
         {"button": 2, "icon": "e9b2", "name": "Home"},
         {"button": 2, "icon": "e8eb", "name": "dup"},      # duplicate number
         {"button": 7, "icon": "e8eb", "name": "range"},    # outside 2..5
@@ -37,17 +37,17 @@ def test_invalid_customs_dropped(tmp_path):
         {"button": "x"},                                   # garbage
     ]}}))
     cfg = config.load(p)
-    assert cfg.natural_scroll is True
+    assert cfg.invert_scroll is True
     assert cfg.customs == {"k": [Custom(2, HOME, "Home")]}
 
 
 def test_save_is_atomic(tmp_path, monkeypatch):
     p = tmp_path / "c.json"
-    config.save(Config(natural_scroll=True), p)
+    config.save(Config(invert_scroll=True), p)
     monkeypatch.setattr(os, "replace", lambda *a: (_ for _ in ()).throw(OSError("disk full")))
     with pytest.raises(OSError):
-        config.save(Config(natural_scroll=False), p)
-    assert config.load(p).natural_scroll is True
+        config.save(Config(invert_scroll=False), p)
+    assert config.load(p).invert_scroll is True
 
 
 def test_power_icon_offered():
@@ -73,8 +73,8 @@ def test_save_makes_a_stale_tmp_private(tmp_path):
 
 def test_old_pinned_setting_is_ignored(tmp_path):
     p = tmp_path / "c.json"
-    p.write_text('{"natural_scroll": true, "pinned": false}')
-    assert config.load(p) == Config(natural_scroll=True)
+    p.write_text('{"invert_scroll": true, "pinned": false}')
+    assert config.load(p) == Config(invert_scroll=True)
 
 
 def test_debug_log_roundtrips_and_old_files_load(tmp_path):
@@ -83,3 +83,9 @@ def test_debug_log_roundtrips_and_old_files_load(tmp_path):
     assert config.load(path).debug_log is True
     path.write_text('{"mouse": "ble"}')
     assert config.load(path).debug_log is False
+
+
+def test_old_natural_scroll_key_still_loads(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text('{"natural_scroll": true}')
+    assert config.load(p).invert_scroll is True

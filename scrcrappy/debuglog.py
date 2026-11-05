@@ -65,7 +65,7 @@ def scrub(text: str) -> str:
 def config_view(cfg: Config) -> dict:
     """The few settings worth knowing when debugging (an allowlist: no token, no button names)."""
     shots = scrub(cfg.screenshots)
-    return {"mouse": cfg.mouse, "port": cfg.port, "natural_scroll": cfg.natural_scroll,
+    return {"mouse": cfg.mouse, "port": cfg.port, "invert_scroll": cfg.invert_scroll,
             "ai_control": bool(cfg.ai_control), "debug_log": cfg.debug_log, "screenshots": shots,
             "customs": sum(len(v) for v in cfg.customs.values())}
 

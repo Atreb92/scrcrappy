@@ -73,7 +73,7 @@ cursor, and scrcrappy steers that cursor to follow your mouse over the window.
    (or run `scrcrappy --mouse ble --calibrate`, or `esp32`). It takes about a minute and a half; leave
    the mouse alone meanwhile. A run that goes wrong keeps the previous calibration.
 
-Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it).
+Click = tap, drag = drag, wheel = scroll (Settings › Invert scrolling or `--invert-scroll` flips it, in every mode).
 
 The same BLE device is also a keyboard: keys typed in the window go to the phone by physical
 position, so set the phone's hardware layout to match your computer's
@@ -91,7 +91,7 @@ On a jailbroken phone, install [crappytouch](https://github.com/Atreb92/crappyto
 only) and run `.venv/bin/scrcrappy --mouse agent` (or pick Agent in the toolbar's Settings once). No Bluetooth, no AssistiveTouch, no calibration:
 
 - Click / drag = touch at that exact spot; **Ctrl+drag** = two-finger pinch around the screen centre;
-  wheel = short swipe (`--natural-scroll` applies).
+  wheel = short swipe (Invert scrolling applies).
 - Keys go to the phone by physical position (same Hardware Keyboard layout note as above); held keys repeat.
 - Paste (**Ctrl+Shift+V**) types any text, accents and emoji included. iOS shows *Allow Paste* in the app
   (Settings › ‹app› › Paste from Other Apps › Allow stops it); the text stays on the phone's clipboard.
@@ -157,12 +157,12 @@ The window keeps the phone's aspect ratio when you resize it, and follows the ph
 | Screenshot | Saves a PNG (your desktop's Pictures folder, e.g. `~/Pictures` or `~/Immagini`, else your home folder; or the folder in Settings) and says where in a short message over the toolbar. With `--mouse agent` it is the phone's own screen; otherwise the mirrored video frame. |
 | Custom buttons | Click a mouse button (2–5) that you bind to any AssistiveTouch action on the phone. Right-click one to edit or remove it. |
 | + | Adds a custom button: pick an icon and a name, then follow the steps it shows to bind it on the phone (it has a *Send button N* button for the step where iOS asks you to press one). |
-| Settings (gear) | Input mode — switches at once, no restart (BT is Linux only; a mode that can't start leaves the old one and says why) — and the ESP32 port (changing it restarts ESP32 mode); the last choice is also the default when `--mouse` / `--port` aren't given; natural scrolling; AI control (MCP); in ESP32 mode the board's status (connected / open to pairing / paired) and *Forget phone & allow pairing* (click twice; the board restarts by itself, and you forget it on the phone too; a board using its chip's native USB port, e.g. a C3 SuperMini built with `ARDUINO_USB_CDC_ON_BOOT`, does not restart, as its port would vanish: there, press the board's reset button after Forget); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Opens as a panel over the phone image; closes with Esc, a click outside it, or when the window loses focus. |
+| Settings (gear) | Input mode — switches at once, no restart (BT is Linux only; a mode that can't start leaves the old one and says why) — and the ESP32 port (changing it restarts ESP32 mode); the last choice is also the default when `--mouse` / `--port` aren't given; invert scrolling; AI control (MCP); in ESP32 mode the board's status (connected / open to pairing / paired) and *Forget phone & allow pairing* (click twice; the board restarts by itself, and you forget it on the phone too; a board using its chip's native USB port, e.g. a C3 SuperMini built with `ARDUINO_USB_CDC_ON_BOOT`, does not restart, as its port would vanish: there, press the board's reset button after Forget); pointer calibration (Bluetooth / ESP32); screenshot folder (… opens the desktop's folder picker: zenity on Linux). Opens as a panel over the phone image; closes with Esc, a click outside it, or when the window loses focus. |
 
 Custom buttons are remembered per phone and per Bluetooth device (scrcrappy PC and scrcrappy ESP32
 each have their own mapping on the phone). The toolbar's state is saved in
-`~/.config/scrcrappy/config.json`: custom buttons and the Settings (input mode, natural scrolling, screenshot folder).
-`--natural-scroll` / `--no-natural-scroll` override the saved scrolling direction.
+`~/.config/scrcrappy/config.json`: custom buttons and the Settings (input mode, invert scrolling, screenshot folder).
+`--invert-scroll` / `--no-invert-scroll` override the saved scrolling direction (`--natural-scroll` is the old name).
 
 After updating to the 5-button version, forget and re-pair the device on the phone once.
 

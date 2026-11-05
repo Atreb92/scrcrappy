@@ -94,10 +94,11 @@ def test_ctrl_shift_v_pastes_as_text(monkeypatch):
     assert calls == [("request", {"cmd": "text", "text": "àè 😀"})]
 
 
-@pytest.mark.parametrize("natural, finger_dy", [(False, 1), (True, -1)])
-def test_wheel_up_swipes_finger_down(monkeypatch, natural, finger_dy):
+@pytest.mark.parametrize("invert, finger_dy", [(False, -1), (True, 1)])
+def test_wheel_up_swipes_finger_up(monkeypatch, invert, finger_dy):
+    # same direction as the BLE/ESP32 wheel on a phone with iOS's default (natural) mouse scrolling: wheel up -> content up
     monkeypatch.setattr(pygame.mouse, "get_pos", lambda: (287, 333))
-    c, calls = ctl(natural_scroll=natural)
+    c, calls = ctl(invert_scroll=invert)
     c.handle(ev(pygame.MOUSEWHEEL, x=0, y=1, flipped=False), RECT, PORTRAIT)
     _, a, b = calls[0]
     assert a[0] == pytest.approx(b[0]) and (b[1] - a[1]) * finger_dy == pytest.approx(agent.SWIPE, abs=0.01)

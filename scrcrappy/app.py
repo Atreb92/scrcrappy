@@ -44,8 +44,8 @@ class Controller:
     """Window events -> phone: cursor follows the mouse (left button = tap/drag), keys go to a
     BLE keyboard by physical position (SDL scancodes are USB HID usages)."""
 
-    def __init__(self, pointer: Pointer, natural_scroll: bool = False, keys: KeyQueue | None = None) -> None:
-        self.pointer, self.natural_scroll, self.held = pointer, natural_scroll, False
+    def __init__(self, pointer: Pointer, invert_scroll: bool = False, keys: KeyQueue | None = None) -> None:
+        self.pointer, self.invert_scroll, self.held = pointer, invert_scroll, False
         self.keys, self.pressed = keys, []  # pressed: held non-modifier keys, oldest first
         self.modifiers = 0
 
@@ -96,7 +96,7 @@ class Controller:
             self.held = False
         elif event.type == pygame.MOUSEWHEEL:
             notches = -event.y if event.flipped else event.y  # undo the OS's own natural-scroll flip
-            p.wheel(-notches if self.natural_scroll else notches)
+            p.wheel(-notches if self.invert_scroll else notches)
         elif event.type == pygame.WINDOWENTER and not self.held:
             p.home()  # re-sync drift; the next motion event brings the cursor back under the mouse
         elif event.type in (pygame.WINDOWLEAVE, pygame.WINDOWFOCUSLOST) and self.held:
@@ -130,7 +130,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     With `make_pointer`, the phone cursor follows the mouse (pointer is built once the frame size is known);
     with `agent`, clicks and keys go to crappytouch instead. `calibrator` adds Calibrate to Settings; `board` (the ESP32 link) adds its status and Forget button; `connected()` says whether the phone is up over
     Bluetooth (Calibrate is grayed out while it isn't).
-    Toolbar and Settings changes (custom buttons, natural scrolling, …) are written to `cfg` and saved at once.
+    Toolbar and Settings changes (custom buttons, scroll inversion, …) are written to `cfg` and saved at once.
     With `start_mode(name, port)` (raises ModeError) Settings switches the input mode while running; `mode` is the
     mode running at the start (it overrides the loose parameters above and is closed on exit or on a switch),
     `port` the ESP32 port it was started on."""
@@ -152,7 +152,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         mode = Mode(mode_name or "none", make_pointer, keys, agent, calibrator, board, device_name)
     active_port, switching, pending = port or cfg.port, False, None  # pending: (Mode, port) built, waiting to be swapped in
     if agent:
-        controller = agent_mod.Controller(agent, cfg.natural_scroll)
+        controller = agent_mod.Controller(agent, cfg.invert_scroll)
         controller.screenshots = cfg.screenshots
         pygame.key.set_repeat(400, 33)  # agent keys are press+release: held keys repeat from here
     customs = cfg.customs.setdefault(device_key, [])
@@ -210,10 +210,10 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         if controller and (skipped := controller.paste()):
             print(f"paste: skipped {skipped} characters (US layout, ASCII only)", file=sys.stderr)
 
-    def toggle_natural() -> None:
-        cfg.natural_scroll = not cfg.natural_scroll
+    def toggle_invert() -> None:
+        cfg.invert_scroll = not cfg.invert_scroll
         if controller:
-            controller.natural_scroll = cfg.natural_scroll
+            controller.invert_scroll = cfg.invert_scroll
         save_or_warn(save, cfg)
 
     def click(n: int) -> None:
@@ -427,7 +427,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         customs = cfg.customs.setdefault(device_key, [])
         controller = None  # a pointer mode's controller is built by the loop once there is a frame
         if agent:
-            controller = agent_mod.Controller(agent, cfg.natural_scroll)
+            controller = agent_mod.Controller(agent, cfg.invert_scroll)
             controller.screenshots = cfg.screenshots
             controller.notify = bar.toast
             pygame.key.set_repeat(400, 33)
@@ -453,7 +453,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
         else:
             if controller:
                 controller.release()  # a key held right now would otherwise stay down on the phone: the overlay eats its release
-            settings = Settings(main, settings_rect, cfg, settings_changed, toggle_natural, settings_done,
+            settings = Settings(main, settings_rect, cfg, settings_changed, toggle_invert, settings_done,
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
                                 board=board, connected=connected, calibrating=lambda: calibrating,
                                 on_cancel=cancel_calibration, on_mode=request_switch if start_mode else None, active_mode=lambda: mode.name,
@@ -521,7 +521,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 pointer = make_pointer(img.get_size())
                 pointer.home()
                 pointer.start()
-                controller = Controller(pointer, cfg.natural_scroll, keys)
+                controller = Controller(pointer, cfg.invert_scroll, keys)
             if pending and not ai.locked() and not calibrating:
                 swap(*pending)
             if ai.locked() != was_locked:

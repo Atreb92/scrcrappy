@@ -57,12 +57,13 @@ def test_x11_flag():
     assert cli.build_parser().parse_args([]).x11 is False
 
 
-def test_natural_scroll_flag_is_tristate():
-    # no flag: the saved value is used; --natural-scroll / --no-natural-scroll override it
+def test_invert_scroll_flag_is_tristate():
+    # no flag: the saved value is used; --invert-scroll / --no-invert-scroll override it (--natural-scroll is the old name)
     p = cli.build_parser()
-    assert p.parse_args([]).natural_scroll is None
-    assert p.parse_args(["--natural-scroll"]).natural_scroll is True
-    assert p.parse_args(["--no-natural-scroll"]).natural_scroll is False
+    assert p.parse_args([]).invert_scroll is None
+    assert p.parse_args(["--natural-scroll"]).invert_scroll is True
+    assert p.parse_args(["--no-natural-scroll"]).invert_scroll is False
+    assert p.parse_args(["--invert-scroll"]).invert_scroll is True
 
 
 def test_saved_input_mode_used_unless_flag_given(monkeypatch, capsys):

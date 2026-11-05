@@ -235,8 +235,8 @@ class Controller:
     """Window events -> agent: left drag = one finger, Ctrl+drag = pinch (second finger mirrored through
     the screen centre), wheel = short swipe, keys = HID usages by physical position."""
 
-    def __init__(self, session: Session, natural_scroll: bool = False) -> None:
-        self.s, self.natural_scroll = session, natural_scroll
+    def __init__(self, session: Session, invert_scroll: bool = False) -> None:
+        self.s, self.invert_scroll = session, invert_scroll
         self.screenshots = ""  # folder from Settings
         self.notify: Callable[[str], None] = lambda text: None  # a message for the window (set by app.run)
         self.fingers, self.at, self.moved = 0, (0.0, 0.0), 0.0
@@ -280,8 +280,10 @@ class Controller:
             pos = pygame.mouse.get_pos()
             if inside(pos, rect):
                 notches = -event.y if event.flipped else event.y  # undo the OS's own natural-scroll flip
-                notches = -notches if self.natural_scroll else notches
-                end = (pos[0], pos[1] + notches * SWIPE * rect[3])  # wheel up: finger down, content follows
+                notches = -notches if self.invert_scroll else notches
+                # wheel up: finger up, content follows: the way a BT / ESP32 wheel moves a phone with iOS's default
+                # (natural) mouse scrolling, so switching modes keeps the direction
+                end = (pos[0], pos[1] - notches * SWIPE * rect[3])
                 self.s.swipe(self._point(pos, rect, frame), self._point(end, rect, frame))
         elif event.type == pygame.WINDOWLEAVE:
             self.lift()  # never leave a finger down on the phone

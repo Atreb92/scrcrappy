@@ -151,7 +151,7 @@ def settings_panel(cfg, changes, **kw):
     closed = []
     window = pygame.Window("phone", (375, 715))
     panel = Settings(window, lambda size: pygame.Rect(20, 30, *size), cfg, on_change=lambda: changes.append(1),
-                     on_natural=lambda: setattr(cfg, "natural_scroll", not cfg.natural_scroll),
+                     on_invert=lambda: setattr(cfg, "invert_scroll", not cfg.invert_scroll),
                      on_close=lambda: closed.append(1), **kw)
     return panel, closed
 
@@ -186,12 +186,12 @@ def test_settings_typed_folder_kept_on_enter_and_on_close():
     assert cfg.screenshots == "~/shots2" and closed == [1]
 
 
-def test_settings_natural_switch_and_empty_port_falls_back():
+def test_settings_invert_switch_and_empty_port_falls_back():
     from scrcrappy.config import Config
     cfg, changes = Config(mouse="esp32", port="/dev/x"), []
     panel, _ = settings_panel(cfg, changes)
-    click(panel, "natural")
-    assert cfg.natural_scroll is True
+    click(panel, "invert")
+    assert cfg.invert_scroll is True
     click(panel, "port")
     for _ in range(6):
         panel.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_BACKSPACE, window=panel.window))
@@ -313,7 +313,7 @@ def test_settings_scrolls_in_a_window_shorter_than_the_panel():
     window = pygame.Window("phone", (300, 400))
     cfg, calls = Config(), []
     panel = __import__("scrcrappy.dialog", fromlist=["Settings"]).Settings(
-        window, lambda size: pygame.Rect(10, 8, size[0], 200), cfg, on_change=lambda: None, on_natural=lambda: None,
+        window, lambda size: pygame.Rect(10, 8, size[0], 200), cfg, on_change=lambda: None, on_invert=lambda: None,
         on_close=lambda: None, calibration=1.5, on_calibrate=lambda: calls.append(1))
     assert panel.hits["calibrate"].bottom > 200  # below the visible part
     for _ in range(20):
@@ -419,7 +419,7 @@ def test_settings_press_one_button_release_on_another_does_not_click():
                               calibration=1.0)
     press(panel, "calibrate")
     assert panel.pressed == "calibrate"
-    press(panel, "natural", pygame.MOUSEBUTTONUP)
+    press(panel, "invert", pygame.MOUSEBUTTONUP)
     assert calls == [] and panel.pressed is None and not panel.closed
 
 

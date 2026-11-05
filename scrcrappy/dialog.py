@@ -367,7 +367,7 @@ class Settings:
     picker is open) and Calibrate. A window shorter than the panel clips its bottom (ponytail: scroll if it matters)."""
 
     def __init__(self, window: pygame.Window, where: Callable[[tuple[int, int]], pygame.Rect], cfg: Config,
-                 on_change: Callable[[], None], on_natural: Callable[[], None], on_close: Callable[[], None],
+                 on_change: Callable[[], None], on_invert: Callable[[], None], on_close: Callable[[], None],
                  calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
                  on_copy: Callable[[], None] | None = None, board=None,
@@ -388,8 +388,8 @@ class Settings:
         `calibrating()`: a measurement is running; the button is then a red Cancel that calls `on_cancel`.
         `on_ai` toggles AI control (cfg.ai_control), `ai_status()` is its address or error, `on_copy` copies
         the command that registers it with an AI client."""
-        self.window, self.where, self.cfg, self.on_change, self.on_natural, self.on_close = (
-            window, where, cfg, on_change, on_natural, on_close)
+        self.window, self.where, self.cfg, self.on_change, self.on_invert, self.on_close = (
+            window, where, cfg, on_change, on_invert, on_close)
         self.on_calibrate, self.on_ai, self.ai_status, self.on_copy = on_calibrate, on_ai, ai_status, on_copy
         self.font, self.small, self.head = ui_font(14), ui_font(12), ui_font(14, True)
         self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
@@ -441,7 +441,7 @@ class Settings:
         for i in range(len(self.offers)):
             self.hits[f"use:{i}"] = pygame.Rect(PANEL_W - PAD - 44, y - 4, 44, 22)
             y += 22 + 6
-        self.hits["natural"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
+        self.hits["invert"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
         y += 26 + 12
         self.shots_top = y
         self.hits["screenshots"] = pygame.Rect(PAD, y + 20, PANEL_W - 2 * PAD - 34, 26)
@@ -607,8 +607,8 @@ class Settings:
             else:
                 self.selected = now - self.last_click < DOUBLE_CLICK
             self.last_click = now
-        elif hit == "natural":
-            self.on_natural()
+        elif hit == "invert":
+            self.on_invert()
         elif hit == "ai" and self.on_ai:
             self.on_ai()
             self._relayout()
@@ -753,7 +753,7 @@ class Settings:
             pygame.draw.rect(surf, FIELD, u, border_radius=u.height // 2)
             label = self.small.render("Use", True, ACCENT)
             surf.blit(label, label.get_rect(center=u.center))
-        self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
+        self._switch(surf, "invert", "Invert scrolling", self.cfg.invert_scroll)
         surf.blit(self.head.render("Screenshots", True, FG), (PAD, self.shots_top))
         self._field(surf, "screenshots", self.default_folder)
         b = self.hits["browse"]

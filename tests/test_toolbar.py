@@ -15,8 +15,8 @@ def test_buttons_order_and_copy_disabled():
     assert items[7].toggled is False and items[0].toggled is None  # settings: highlighted while open
 
 
-def test_natural_scrolling_lives_in_settings_not_the_bar():
-    assert "natural" not in [b.id for b in buttons(has_input=True, customs=[]) if b]
+def test_invert_scrolling_lives_in_settings_not_the_bar():
+    assert "invert" not in [b.id for b in buttons(has_input=True, customs=[]) if b]
 
 
 def test_no_input_disables_actions():

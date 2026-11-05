@@ -41,9 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", help="ESP32 serial port (default: the toolbar's Settings, /dev/ttyUSB0)")
     parser.add_argument("--ble-python", default="/usr/bin/python3",
                         help="python with python3-dbus and python3-gobject, runs the Bluetooth helper")
-    parser.add_argument("--natural-scroll", action=argparse.BooleanOptionalAction, default=None,
-                        help="invert the wheel: content follows the wheel like a finger (as on a touchpad); "
-                             "default: last setting from the toolbar")
+    parser.add_argument("--invert-scroll", "--natural-scroll", action=argparse.BooleanOptionalAction, default=None,
+                        help="invert the scroll direction (same in every input mode); "
+                             "default: last setting from Settings")
     parser.add_argument("--mcp", action="store_true",
                         help="allow AI control (MCP server on 127.0.0.1:7331) for this run; see Settings")
     parser.add_argument("--x11", action="store_true",
@@ -153,8 +153,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             print(f"saved {calibrate.save(serial, table)}")
             return 0
-        if args.natural_scroll is not None:
-            cfg.natural_scroll = args.natural_scroll
+        if args.invert_scroll is not None:
+            cfg.invert_scroll = args.invert_scroll
         closed_by_user = app.run(frames, alive=lambda: proc.poll() is None, mode=mode, cfg=cfg,
                                  device_key=f"{serial}/{args.mouse}", mcp=args.mcp, port=args.port, mode_name=args.mouse,
                                  start_mode=lambda name, port: modes.start_mode(name, port, serial, frames, args.ble_python),
