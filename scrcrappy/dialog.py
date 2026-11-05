@@ -1,4 +1,5 @@
 """Opened from the toolbar: windows for add/edit a custom button and its right-click menu, and the Settings\noverlay inside the phone window."""
+import glob
 import subprocess
 import sys
 import threading
@@ -15,6 +16,7 @@ from .toolbar import DISABLED, FG, ICONS, ON_BG, ON_FG, SEP, TIP_DELAY, draw_tip
 SURFACE, TEXT, MUTED, ACCENT = (34, 34, 38), (242, 242, 247), (161, 161, 170), (10, 132, 255)  # iOS dark
 FIELD, SWITCH_ON, GLASS_ALPHA, BLUR = (68, 68, 74), (48, 209, 88), 210, 8  # BLUR: shrink factor of the backdrop
 COLS, CELL, PAD, WIDTH = 8, 44, 16, 400
+SELECTION = (24, 76, 140)  # selected field text: a dark accent
 
 
 class DialogState:
@@ -303,6 +305,30 @@ def board_status(board, now: float, opened: float = 0.0, fits: Callable[[str], b
     return ("grey", "Paired, not connected") if board.paired else ("blue", "Open to pairing")
 
 
+DOUBLE_CLICK = 0.4  # s between the clicks of a double click
+SERIAL_PATTERNS = ("/dev/cu.usbserial*", "/dev/cu.usbmodem*", "/dev/cu.wchusbserial*", "/dev/cu.SLAB_USBtoUART*",
+                   "/dev/ttyUSB*", "/dev/ttyACM*")
+
+
+def serial_ports() -> list[str]:
+    """The USB serial devices an ESP32 may be on: macOS cu.* names, Linux ttyUSB / ttyACM."""
+    return [p for pattern in SERIAL_PATTERNS for p in sorted(glob.glob(pattern))]
+
+
+def clipboard_get() -> str:
+    try:
+        return pygame.scrap.get_text() or ""
+    except pygame.error:
+        return ""
+
+
+def clipboard_put(text: str) -> None:
+    try:
+        pygame.scrap.put_text(text)
+    except pygame.error:
+        pass
+
+
 def post_run(fn: Callable[[], None]) -> None:
     """Have the window's loop call `fn` (from any thread); a window that is already gone ignores it."""
     try:
@@ -380,6 +406,9 @@ class Settings:
         self.icons = pygame.font.Font(ICONS / "MaterialSymbolsRounded-outline.ttf", 18)
         self.text = {"port": cfg.port, "screenshots": cfg.screenshots}
         self.editing: str | None = None
+        self.selected = False  # the whole text of the field being edited is selected (double click, Cmd+A)
+        self.last_click = 0.0
+        self.ports = serial_ports() if self.mode() == "esp32" else []
         self.closed = self.picking = False
         self.hits: dict[str, pygame.Rect] = {}
         self._layout()
@@ -406,6 +435,10 @@ class Settings:
             self.problem_top = y
             self.problem_lines = _wrap(self.problem(), self.small, PANEL_W - 2 * PAD - 18)
             y += 16 * len(self.problem_lines) + 10
+        self.offers = [p for p in self.ports if p != self.cfg.port] if self.mode() == "esp32" else []
+        for i in range(len(self.offers)):
+            self.hits[f"use:{i}"] = pygame.Rect(PANEL_W - PAD - 44, y - 4, 44, 22)
+            y += 22 + 6
         self.hits["natural"] = pygame.Rect(PANEL_W - PAD - SWITCH[0], y + 4, *SWITCH)
         y += 26 + 12
         self.shots_top = y
@@ -446,10 +479,19 @@ class Settings:
             if not self.picking:
                 self.close()
             return False  # the phone window still releases what is held
+        shortcut = event.type == pygame.KEYDOWN and getattr(event, "mod", 0) & (pygame.KMOD_META | pygame.KMOD_CTRL)
         if event.type == pygame.TEXTINPUT and self.editing:
-            self.text[self.editing] = (self.text[self.editing] + event.text)[:300]
+            self._insert(event.text)
+        elif shortcut and self.editing and event.key in (pygame.K_a, pygame.K_c, pygame.K_v):
+            if event.key == pygame.K_a:
+                self.selected = True
+            elif event.key == pygame.K_c:
+                clipboard_put(self.text[self.editing])
+            else:
+                self._insert(" ".join(clipboard_get().split()))
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_BACKSPACE and self.editing:
-            self.text[self.editing] = self.text[self.editing][:-1]
+            self.text[self.editing] = "" if self.selected else self.text[self.editing][:-1]
+            self.selected = False
         elif event.type == pygame.KEYDOWN and event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
             self._commit()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
@@ -470,6 +512,11 @@ class Settings:
             else:
                 self.close()  # on release: the press that started it never reached the phone either
         return event.type in INPUT
+
+    def _insert(self, text: str) -> None:
+        """Typed or pasted text: replaces a selection, else goes at the end."""
+        self.text[self.editing] = (("" if self.selected else self.text[self.editing]) + text)[:300]
+        self.selected = False
 
     def _hit(self, pos: tuple[int, int]) -> str | None:
         rect = self.rect
@@ -536,6 +583,7 @@ class Settings:
             self._commit()
         if hit and hit.startswith("mode:"):
             mode = MODES[int(hit[5:])][0]
+            self.ports = serial_ports() if mode == "esp32" else []
             if self.on_mode:
                 if selectable(mode):
                     self.on_mode(mode)  # also the running one: the app retries it if it is unavailable
@@ -543,10 +591,19 @@ class Settings:
             self.cfg.mouse = mode
             self.on_change()
             self._relayout()  # the port row comes and goes with ESP32
-        elif hit in ("port", "screenshots") and hit != self.editing:
+        elif hit and hit.startswith("use:"):
+            self.editing, self.text["port"] = "port", self.offers[int(hit[4:])]
             self._commit()
-            self.editing = hit
-            pygame.key.start_text_input()
+            self._relayout()
+        elif hit in ("port", "screenshots"):
+            now = time.monotonic()
+            if hit != self.editing:
+                self._commit()
+                self.editing = hit
+                pygame.key.start_text_input()
+            else:
+                self.selected = now - self.last_click < DOUBLE_CLICK
+            self.last_click = now
         elif hit == "natural":
             self.on_natural()
         elif hit == "ai" and self.on_ai:
@@ -604,7 +661,7 @@ class Settings:
         elif getattr(self.cfg, self.editing) != value:
             setattr(self.cfg, self.editing, value)
             self.on_change()
-        self.editing = None
+        self.editing, self.selected = None, False
         pygame.key.stop_text_input()
 
     def close(self) -> None:
@@ -628,10 +685,14 @@ class Settings:
         pygame.draw.rect(surf, FIELD, r, border_radius=7)
         if self.editing == key:
             pygame.draw.rect(surf, ACCENT, r, 1, border_radius=7)
-        text = self.text[key] + ("|" if self.editing == key else "")
+        selected = self.selected and self.editing == key and self.text[key]
+        text = self.text[key] + ("|" if self.editing == key and not selected else "")
         label = self.small.render(text or placeholder, True, TEXT if text else MUTED)
         clip = label.subsurface(max(0, label.get_width() - (r.width - 12)), 0,  # long paths: show the end
                                 min(label.get_width(), r.width - 12), label.get_height())
+        if selected:
+            pygame.draw.rect(surf, SELECTION, (r.x + 4, r.y + 5, clip.get_width() + 4, clip.get_height() + 4),
+                             border_radius=3)
         surf.blit(clip, (r.x + 6, r.y + 7))
 
     def draw(self, screen: pygame.Surface, dim_height: int) -> None:
@@ -678,6 +739,15 @@ class Settings:
             label = self.small.render("Click again to confirm" if self.confirming(now) else "Forget phone & allow pairing",
                                       True, (255, 255, 255) if self.confirming(now) else ACCENT)
             surf.blit(label, label.get_rect(center=f.center))
+        for i, port in enumerate(self.offers):  # USB serial devices found: one click to use one
+            u = self.hits[f"use:{i}"]
+            found = self.small.render(port, True, MUTED)
+            room = u.x - 6 - (PAD + 46)
+            surf.blit(found.subsurface(max(0, found.get_width() - room), 0, min(found.get_width(), room),
+                                       found.get_height()), (PAD + 46, u.y + 4))
+            pygame.draw.rect(surf, FIELD, u, border_radius=u.height // 2)
+            label = self.small.render("Use", True, ACCENT)
+            surf.blit(label, label.get_rect(center=u.center))
         self._switch(surf, "natural", "Natural scrolling", self.cfg.natural_scroll)
         surf.blit(self.head.render("Screenshots", True, FG), (PAD, self.shots_top))
         self._field(surf, "screenshots", self.default_folder)
