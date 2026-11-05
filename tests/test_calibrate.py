@@ -66,7 +66,7 @@ import numpy as np
 
 from scrcrappy.mouse import HOME_REPORTS, TICK, Gain, Gains
 
-LIGHT, CURSOR, RADIUS = 240, (150, 148, 152), 18
+LIGHT, RADIUS = 244, 18  # the Settings background; iOS blends the cursor over it as calibrate.BLEND says
 
 
 class SimPhone:
@@ -75,8 +75,9 @@ class SimPhone:
     through sleep()."""
 
     def __init__(self, gains, size=(750, 1334), hidden_until=0.0, decoy=None, video=True, drop_every=0,
-                 drop_in_sample=0):
+                 drop_in_sample=0, band=None):
         self.gains, self.size, self.hidden_until, self.decoy, self.video = gains, size, hidden_until, decoy, video
+        self.band = band  # (y0, y1, grey): a darker field across the screen, like Settings' search field
         self.drop_every, self.drop_in_sample = drop_every, drop_in_sample
         self.pos, self.clock, self.log = [size[0] / 2, size[1] / 2], 0.0, []
         self.max_x = self.max_y = 0.0
@@ -110,10 +111,16 @@ class SimPhone:
         self.peeks += 1
         w, h = self.size
         img = np.full((h, w, 3), LIGHT, np.uint8)
+        if self.band:
+            img[self.band[0]:self.band[1]] = self.band[2]
         yy, xx = np.ogrid[:h, :w]
+        if self.decoy:  # a grey disk that is part of the screen (an avatar, an icon)
+            img[(xx - self.decoy[0]) ** 2 + (yy - self.decoy[1]) ** 2 <= RADIUS * RADIUS] = (150, 148, 152)
         visible = self.clock >= self.hidden_until
-        for x, y in ([self.pos] if visible else []) + ([self.decoy] if self.decoy else []):
-            img[(xx - x) ** 2 + (yy - y) ** 2 <= RADIUS * RADIUS] = CURSOR
+        if visible:
+            disk = (xx - self.pos[0]) ** 2 + (yy - self.pos[1]) ** 2 <= RADIUS * RADIUS
+            gain, offset = calibrate.BLEND
+            img[disk] = (img[disk] * gain + offset).round().astype(np.uint8)
         if visible and self.looks_before_found is None:
             self.looks_before_found = self.peeks
         return img.tobytes(), (w, h), w * 3
@@ -208,3 +215,24 @@ def test_reports_are_sent_at_the_given_pace(tmp_path):
     phone = SimPhone(sim_gains())
     run_cal(phone, tmp_path, pace=0.03)
     assert phone.report_sleeps == {0.03}
+
+
+def test_cursor_over_a_grey_field_is_still_found(tmp_path):
+    # Settings: the vertical samples end on the grey search field / avatar row, where the cursor reads ~139, not 150
+    phone = SimPhone(sim_gains(), band=(330, 460, 224))
+    table = run_cal(phone, tmp_path)
+    assert table["y"][12] == pytest.approx(phone.gains.y(12), rel=0.03)
+
+
+def test_cursor_over_black_text_is_still_found(tmp_path):
+    # the big black "Settings" title under the vertical path: the cursor reads ~28 there
+    phone = SimPhone(sim_gains(), band=(330, 460, 0))
+    table = run_cal(phone, tmp_path)
+    assert table["y"][12] == pytest.approx(phone.gains.y(12), rel=0.03)
+
+
+def test_find_cursor_on_ignores_a_screen_without_it():
+    ref = np.full((300, 300, 3), LIGHT, np.uint8)
+    ref[100:200, 50:250] = 0  # text, an avatar, whatever: it's in the reference too
+    assert calibrate.find_cursor_on(ref, ref) is None
+    assert calibrate.find_cursor_on(np.roll(ref, 3, 0), ref) is None  # nor in a screen that moved a little

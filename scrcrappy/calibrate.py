@@ -20,6 +20,8 @@ NUDGE = [(4, 4)] * 15  # from the top-left corner to about (140, 140)
 PROBE_LENGTH, PROBE_REPORTS = 8, 5  # first guess of this phone's speed
 Table = dict[str, dict[int, float]]  # {"x": {length: px per count}, "y": {...}}
 K = 21  # detection box side, smaller than the ~36 px cursor disk
+BLEND = (0.495, 27.5)  # the cursor over a screen pixel p reads 0.495 p + 27.5 (fitted, 0..255, within 4.4)
+SHOWS = 20  # where the screen is within this of 54.5 (= 27.5 / (1 - 0.495)) the cursor doesn't change it
 
 
 def find_cursor(img: np.ndarray) -> tuple[float, float] | None:
@@ -27,11 +29,35 @@ def find_cursor(img: np.ndarray) -> tuple[float, float] | None:
     (grey icons look the same)."""
     a = img.astype(np.int16)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
-    m = ((g >= 140) & (g <= 160) & (abs(r - g) <= 6) & (abs(b - g) <= 8)).astype(np.int32)
+    return _disk_centre(((g >= 140) & (g <= 160) & (abs(r - g) <= 6) & (abs(b - g) <= 8)).astype(np.int32))
+
+
+def find_cursor_on(img: np.ndarray, ref: np.ndarray) -> tuple[float, float] | None:
+    """Centre of the cursor against `ref`, the same screen without it: where `img` is `ref` blended as BLEND says.
+    Works on any screen (white, grey fields, black text, an avatar); what is part of the screen never matches."""
+    a, r = img.astype(np.float32), ref.astype(np.float32)
+    gain, offset = BLEND
+    shows = (np.abs(r - offset / (1 - gain)) >= SHOWS).all(-1)  # pixels where the cursor would be visible
+    match = shows & (np.abs(a - (gain * r + offset)) <= 8).all(-1)
+    return _disk_centre(match.astype(np.int32), shows.astype(np.int32))
+
+
+def _box_sums(m: np.ndarray) -> np.ndarray:
     s = np.pad(m, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
-    box = s[K:, K:] - s[:-K, K:] - s[K:, :-K] + s[:-K, :-K]
+    return s[K:, K:] - s[:-K, K:] - s[K:, :-K] + s[:-K, :-K]
+
+
+def _disk_centre(m: np.ndarray, judged: np.ndarray | None = None) -> tuple[float, float] | None:
+    """Centre of the fullest K x K box that `m` fills (90 % of its `judged` pixels, at least half of the box being
+    judged), refined to the centroid of the disk around it."""
+    box = _box_sums(m)
+    if judged is not None:
+        known = _box_sums(judged)
+        box = np.where((known >= K * K // 2) & (box >= 0.9 * known), box, -1)
+    else:
+        box = np.where(box > 0.9 * K * K, box, -1)
     y, x = np.unravel_index(box.argmax(), box.shape)
-    if box[y, x] <= 0.9 * K * K:
+    if box[y, x] < 0:
         return None
     y0, x0 = max(0, y - K), max(0, x - K)  # first full box sits off-centre: centroid of the disk around it
     ys, xs = np.nonzero(m[y0 : y + 2 * K, x0 : x + 2 * K])
@@ -52,7 +78,15 @@ def miss_path() -> Path:
     return Path.home() / ".config" / "scrcrappy" / "calibrate-miss.png"
 
 
-def look(frames: LatestFrame, sleep: Callable[[float], None], miss: Path) -> tuple[float, float]:
+def reference(frames: LatestFrame, sleep: Callable[[float], None]) -> np.ndarray:
+    """The screen once the last frames are in (the cursor parked in the corner): what find_cursor_on compares to."""
+    sleep(SETTLE)
+    if not (frame := frames.peek()):
+        raise RuntimeError("can't see the cursor: no video from the phone")
+    return to_array(frame)
+
+
+def look(frames: LatestFrame, sleep: Callable[[float], None], miss: Path, ref: np.ndarray) -> tuple[float, float]:
     """The cursor's centre once the last frames are in, trying newer frames for up to a second. A miss saves the
     frame it saw to `miss`."""
     sleep(SETTLE)
@@ -61,7 +95,7 @@ def look(frames: LatestFrame, sleep: Callable[[float], None], miss: Path) -> tup
         if i:
             sleep(RETRY)
         frame = frames.peek() or frame
-        if frame and (pos := find_cursor(to_array(frame))):
+        if frame and (pos := find_cursor_on(to_array(frame), ref)):
             return pos
     if frame is None:
         raise RuntimeError("can't see the cursor: no video from the phone")
@@ -114,11 +148,12 @@ def calibrate(send: Send, frames: LatestFrame, pace: float = TICK, sleep: Callab
         i, report = (0, (length, 0)) if axis == "x" else (1, (0, length))
         for count in (n, max(3, n // 2)):
             paced([(-127, -127)] * HOME_REPORTS)
+            ref = reference(frames, sleep)  # the screen with the cursor out of the way
             paced(NUDGE)  # out of the corner, so the whole cursor is visible
-            a = look(frames, sleep, miss)
+            a = look(frames, sleep, miss, ref)
             paced([report] * count)
             try:
-                b = look(frames, sleep, miss)
+                b = look(frames, sleep, miss, ref)
             except RuntimeError:
                 if count != n:
                     raise
