@@ -537,3 +537,26 @@ def test_cancel_reaches_the_calibrator_even_while_an_ai_tool_holds_the_lock(monk
     app_module.run(frames, alive, make_pointer=make_pointer, calibrator=WaitingCalibrator(), save=lambda c: None)
     assert cancelled.is_set() and bars[0].toast_text == "Calibration cancelled"
     assert len(pointers) == 2  # rebuilt after the cancel
+
+
+def test_run_destroys_its_window_before_quitting(monkeypatch):
+    # pygame-ce: a Window freed after pygame.quit() destroys whichever window is current then. run's window sits in
+    # reference cycles (the nested callbacks), so the gc frees it at some later moment: it closed other tests' windows
+    import os
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    from scrcrappy import app as app_module
+    from scrcrappy.video import LatestFrame
+    made, destroyed = [], []
+
+    class Tracked(pygame.Window):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            made.append(self)
+
+        def destroy(self):
+            destroyed.append(self)
+            super().destroy()
+
+    monkeypatch.setattr(pygame, "Window", Tracked)
+    app_module.run(LatestFrame(), alive=lambda: False, save=lambda c: None)
+    assert made and destroyed == made
