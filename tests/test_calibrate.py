@@ -129,7 +129,7 @@ class SimPhone:
     def halved(self):
         """A measuring run redone right away with half the reports (the edge guard)."""
         moves = [(r, n) for r, n in self.runs if r not in ((-127, -127), (4, 4))]
-        return any(r1 == r2 and n2 == max(3, n1 // 2) < n1 for (r1, n1), (r2, n2) in zip(moves, moves[1:]))
+        return any(r1 == r2 and n2 == max(1, n1 // 2) < n1 for (r1, n1), (r2, n2) in zip(moves, moves[1:]))
 
 
 def sim_gains(fx=2.0, fy=2.0):
@@ -245,3 +245,18 @@ def test_find_cursor_on_ignores_a_screen_without_it():
     ref[100:200, 50:250] = 0  # text, an avatar, whatever: it's in the reference too
     assert calibrate.find_cursor_on(ref, ref) is None
     assert calibrate.find_cursor_on(np.roll(ref, 3, 0), ref) is None  # nor in a screen that moved a little
+
+
+def test_a_fast_pointer_is_still_nudged_to_the_top_left(tmp_path):
+    # 6x the defaults: a fixed nudge would start every sample at ~(440, 440), low on the screen
+    phone = SimPhone(sim_gains(fx=6.0, fy=6.0))
+    table = run_cal(phone, tmp_path)
+    assert table["x"][12] == pytest.approx(phone.gains.x(12), rel=0.03)
+    assert phone.max_y < 450  # starts near y 140; the one vertical check adds ~250
+
+
+def test_a_nudge_that_loses_the_cursor_is_tried_shorter(tmp_path):
+    # the first nudge (3x speed: ~220 px) ends on dark grey where the cursor doesn't show; half of it doesn't
+    phone = SimPhone(sim_gains(fx=3.0, fy=3.0), band=(180, 270, 55))
+    table = run_cal(phone, tmp_path)
+    assert table["x"][12] == pytest.approx(phone.gains.x(12), rel=0.03)

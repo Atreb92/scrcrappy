@@ -16,7 +16,7 @@ LENGTHS = (1, 2, 3, 4, 6, 8, 12, 16, 24)
 TRAVEL, EDGE = 250, 40  # px a sample aims to move; ending closer than EDGE to the screen's edge means it hit it
 SAMPLES, SPREAD, DROP = 3, 0.05, 0.97  # samples per length; warn above this spread; a longer report may not be slower
 SETTLE, RETRY, TRIES = 0.35, 0.05, 20  # s for the last frames to arrive; then up to TRIES newer frames, RETRY apart
-NUDGE = [(4, 4)] * 15  # from the top-left corner to about (140, 140)
+NUDGE, NUDGE_TO = 15, 140  # (4, 4) reports out of the corner, rescaled so the cursor lands near (140, 140)
 PROBE_LENGTH, PROBE_REPORTS = 8, 5  # first guess of this phone's speed
 CHECK_LENGTH = 12  # the one vertical move that checks the horizontal table holds vertically too
 Table = dict[str, dict[int, float]]  # {"x": {length: px per count}, "y": {...}}
@@ -108,7 +108,7 @@ def look(frames: LatestFrame, sleep: Callable[[float], None], miss: Path, ref: n
 
 def plan_reports(length: int, guess: float) -> int:
     """How many reports of `length` move the cursor about TRAVEL px at `guess` px per count."""
-    return max(3, round(TRAVEL / (length * guess)))
+    return max(1, round(TRAVEL / (length * guess)))  # one long report on a fast pointer already moves far
 
 
 def median_gain(samples: list[float]) -> tuple[float, float]:
@@ -145,14 +145,33 @@ def calibrate(send: Send, frames: LatestFrame, pace: float = TICK, sleep: Callab
         if cancel and cancel.is_set():
             raise Cancelled()
 
+    nudge = NUDGE
+
+    def start() -> tuple[np.ndarray, tuple[float, float]]:
+        """Park the cursor (the reference frame), then nudge it out to about (NUDGE_TO, NUDGE_TO), however fast the
+        pointer is. A nudge that loses the cursor (landed somewhere it doesn't show) is tried once more at half."""
+        nonlocal nudge
+        for attempt in range(2):
+            paced([(-127, -127)] * HOME_REPORTS)
+            ref = reference(frames, sleep)  # the screen with the cursor out of the way
+            paced([(4, 4)] * nudge)
+            try:
+                a = look(frames, sleep, miss, ref)
+            except RuntimeError:
+                if attempt:
+                    raise
+                nudge = max(3, nudge // 2)
+                continue
+            if not 0.75 <= a[0] / NUDGE_TO <= 1.33:
+                nudge = max(3, min(60, round(nudge * NUDGE_TO / max(a[0], 1))))
+            return ref, a
+        raise AssertionError("unreachable")
+
     def sample(axis: str, length: int, n: int) -> float:
         """px per count from one move; one that hit the edge (or went nowhere) is redone with half the reports."""
         i, report = (0, (length, 0)) if axis == "x" else (1, (0, length))
-        for count in (n, max(3, n // 2)):
-            paced([(-127, -127)] * HOME_REPORTS)
-            ref = reference(frames, sleep)  # the screen with the cursor out of the way
-            paced(NUDGE)  # out of the corner, so the whole cursor is visible
-            a = look(frames, sleep, miss, ref)
+        for count in (n, max(1, n // 2)):
+            ref, a = start()
             paced([report] * count)
             try:
                 b = look(frames, sleep, miss, ref)
