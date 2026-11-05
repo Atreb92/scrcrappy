@@ -24,7 +24,7 @@ from .video import LatestFrame
 PANEL_MARGIN = 8  # between the Settings panel and the strip / the window's top
 log = logging.getLogger("scrcrappy.app")
 tilde_path = agent_mod.tilde
-CALIBRATE_WAIT_S = 120  # the AI's calibrate tool gives up waiting (a run takes well under a minute)
+CALIBRATE_WAIT_S = 300  # the AI's calibrate tool gives up waiting (a run takes about two minutes)
 CANCELLED = "calibration cancelled"  # the error calibrated() gets when the user cancels: not a failure
 MODIFIERS = range(0xE0, 0xE8)  # LCtrl..RGui; their bit in the report is usage - 0xE0
 # SDL ignores the click that focuses a window by default: the toolbar would need two clicks

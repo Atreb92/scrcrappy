@@ -219,7 +219,7 @@ def test_calibrator_reports_current_value_and_saves_a_new_table(monkeypatch, tmp
     monkeypatch.setenv("HOME", str(tmp_path))
     c = calibrate.Calibrator("abc", send=lambda *a: None, frames=None)
     assert c.value() == pytest.approx(1.66, abs=0.01)  # default table, medium move (12 counts)
-    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, cancel=None, pace=None: {"x": {1: 1.0, 12: 2.5, 24: 3.0},
+    monkeypatch.setattr(calibrate, "calibrate", lambda send, frames, pace=None, cancel=None: {"x": {1: 1.0, 12: 2.5, 24: 3.0},
                                                                                           "y": {1: 1.0, 12: 2.0, 24: 3.0}})
     c.run()
     assert c.value() == pytest.approx(2.5)

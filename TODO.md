@@ -27,7 +27,7 @@
 - [x] Pairing failed after Forget until the board restarted (the stack kept recognising the old phone): fixed by restarting the board on `p` (UART-bridge boards). Native-USB boards (C3 SuperMini, S3) are not restarted and still need the reset button; a cleaner fix would clear the stack's resolving list instead.
 - [ ] Mouse wheel doesn't scroll iOS Settings lists (works in other apps). Investigate (wheel report size/pacing? AssistiveTouch scroll mode?).
 - [ ] Slow mouse movements make the pointer tracking fail (reported 2026-10-24, ESP32): the phone cursor drifts or stops following when the mouse moves slowly. Look at the small-delta end of the gain table in `mouse.py` (rounding of sub-count moves, `LENGTHS` starts at 1) and at how small moves are accumulated.
-- [ ] Long, mostly-vertical cursor moves land 5–10% short of the target. Options: calibrate the vertical axis too, or correct from the video (closed loop).
+- [ ] Linux BT adapter (`blemouse.py`): does BlueZ get a 15 ms connection interval from the phone? The ESP32 asks for it and reports it (`interval` line); the helper reports none, so the pace stays 15 ms there. Measure with a burst (lost reports / lag) as on 2026-11-06.
 - [ ] Paste types US layout, printable ASCII only; other characters are skipped. Other layouts / accented characters via Option dead keys.
 - [ ] Optional `--ctrl-as-cmd`: send Ctrl as Cmd so Ctrl+C/V/A work as iPhone shortcuts.
 

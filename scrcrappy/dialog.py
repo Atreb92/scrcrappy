@@ -270,7 +270,7 @@ def _glass(screen: pygame.Surface, rect: pygame.Rect) -> pygame.Surface:
 
 CALIBRATE_TIP = ("Measures the pointer speed again. Do it after changing Tracking Speed on the iPhone (Settings › "
                  "Accessibility › Touch › AssistiveTouch), or when the cursor overshoots or falls short. Open a plain, "
-                 "light screen first and don't touch the mouse for about 20 s.")
+                 "light screen first and don't touch the mouse for about 2 minutes.")
 CANCEL_TIP = "Stops the measurement. The previous calibration stays."
 RED = (255, 69, 58)  # iOS dark red
 NEEDS_LINUX_TIP = "Needs Linux (use ESP32 or Agent on macOS)"

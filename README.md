@@ -70,7 +70,8 @@ cursor, and scrcrappy steers that cursor to follow your mouse over the window.
    (AssistiveTouch > Devices > Bluetooth Devices).
 4. Once per phone, after changing AssistiveTouch Tracking Speed, or when the cursor overshoots / falls
    short: open a plain light screen (e.g. Settings) and click **Calibrate** in the toolbar's Settings
-   (or run `scrcrappy --mouse ble --calibrate`, or `esp32`).
+   (or run `scrcrappy --mouse ble --calibrate`, or `esp32`). It takes about 2 minutes and measures both
+   axes; leave the mouse alone meanwhile. A run that goes wrong keeps the previous calibration.
 
 Click = tap, drag = drag, wheel = scroll (`--natural-scroll` inverts it).
 
@@ -219,7 +220,8 @@ For `esp32`, reflash the board instead (iOS caches the device description).
 touch the phone's screen once before clicks work.
 
 **The cursor overshoots or stops short (Bluetooth / ESP32).** The phone's pointer speed changed. Settings ›
-Calibrate, or `scrcrappy --calibrate`, on a plain light screen.
+Calibrate, or `scrcrappy --calibrate`, on a plain light screen. If it says it can't see the cursor, the frame it
+looked at is in `~/.config/scrcrappy/calibrate-miss.png`.
 
 **Stuck at "lockdown error -8", or `idevice_id -l` hangs.** usbmuxd can wedge after scrcrappy's USB reset while
 the phone is locked. Unlock the phone and replug it; scrcrappy gives up after 5 s with this hint.

@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
                 connected.wait()
             time.sleep(3)  # stream start-up
             try:
-                table = calibrate.calibrate(mode.link.send, frames)
+                table = calibrate.calibrate(mode.link.send, frames, mode.link.pace())
             except RuntimeError as e:
                 print(f"error: {e}", file=sys.stderr)
                 return 1

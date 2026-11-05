@@ -1,15 +1,23 @@
 """Measure the pointer gain table from the video: move by known counts, find the cursor, divide."""
 import json
+import statistics
 import threading
 import time
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
+import pygame
 
 from .mouse import DEFAULT_GAIN, HOME_REPORTS, TICK, Gain, Gains, Send
 from .video import Frame, LatestFrame
 
 LENGTHS = (1, 2, 3, 4, 6, 8, 12, 16, 24)
+TRAVEL, EDGE = 250, 40  # px a sample aims to move; ending closer than EDGE to the screen's edge means it hit it
+SAMPLES, SPREAD, DROP = 3, 0.05, 0.97  # samples per length; warn above this spread; a longer report may not be slower
+SETTLE, RETRY, TRIES = 0.35, 0.05, 20  # s for the last frames to arrive; then up to TRIES newer frames, RETRY apart
+NUDGE = [(4, 4)] * 15  # from the top-left corner to about (140, 140)
+PROBE_LENGTH, PROBE_REPORTS = 8, 5  # first guess of this phone's speed
 Table = dict[str, dict[int, float]]  # {"x": {length: px per count}, "y": {...}}
 K = 21  # detection box side, smaller than the ~36 px cursor disk
 
@@ -39,32 +47,103 @@ class Cancelled(Exception):
     """The user cancelled a running calibration; nothing was saved."""
 
 
-def calibrate(send: Send, frames: LatestFrame, cancel: threading.Event | None = None, pace: float = TICK) -> dict[int, float]:
-    """Measure the gain table. `cancel`, once set, stops it within a report (raises Cancelled)."""
-    def paced(reports: list[tuple[int, int]]) -> tuple[float, float] | None:
+def miss_path() -> Path:
+    """Where the frame goes when calibration can't find the cursor in it."""
+    return Path.home() / ".config" / "scrcrappy" / "calibrate-miss.png"
+
+
+def look(frames: LatestFrame, sleep: Callable[[float], None], miss: Path) -> tuple[float, float]:
+    """The cursor's centre once the last frames are in, trying newer frames for up to a second. A miss saves the
+    frame it saw to `miss`."""
+    sleep(SETTLE)
+    frame = None
+    for i in range(TRIES + 1):
+        if i:
+            sleep(RETRY)
+        frame = frames.peek() or frame
+        if frame and (pos := find_cursor(to_array(frame))):
+            return pos
+    if frame is None:
+        raise RuntimeError("can't see the cursor: no video from the phone")
+    miss.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(pygame.surfarray.make_surface(to_array(frame).swapaxes(0, 1)), str(miss))
+    raise RuntimeError("can't see the cursor: open a plain light screen (e.g. Settings scrolled to the top) and "
+                       f"retry (the frame it looked at: {miss})")
+
+
+def plan_reports(length: int, guess: float) -> int:
+    """How many reports of `length` move the cursor about TRAVEL px at `guess` px per count."""
+    return max(3, round(TRAVEL / (length * guess)))
+
+
+def median_gain(samples: list[float]) -> tuple[float, float]:
+    """The median, and how far the samples spread around it (fraction of it)."""
+    median = statistics.median(samples)
+    return round(median, 3), (max(samples) - min(samples)) / median
+
+
+def check_monotonic(table: Table) -> None:
+    """iOS accelerates longer reports more: a gain that goes down means a sample went wrong."""
+    for axis, gains in table.items():
+        pairs = sorted(gains.items())
+        for (a, ga), (b, gb) in zip(pairs, pairs[1:]):
+            if gb < DROP * ga:
+                raise RuntimeError(f"gains went down from length {a} to {b} on {axis}: {ga} -> {gb}; "
+                                   "retry on a plain light screen without touching the mouse")
+
+
+def calibrate(send: Send, frames: LatestFrame, pace: float = TICK, sleep: Callable[[float], None] = time.sleep,
+              miss: Path | None = None, log: Callable[[str], None] = print,
+              cancel: threading.Event | None = None) -> Table:
+    """Measure both axes: a probe for the phone's speed, then SAMPLES moves per report length and axis, each
+    sized for about TRAVEL px; the median of each length is kept. Reports go out every `pace` (the link's).
+    `cancel`, once set, stops it within a report (raises Cancelled)."""
+    miss = miss or miss_path()
+
+    def paced(reports: list[tuple[int, int]]) -> None:
         for dx, dy in reports:
             if cancel and cancel.is_set():
                 raise Cancelled()
             send(dx, dy, 0, 0)
-            time.sleep(TICK)
+            sleep(pace)
         if cancel and cancel.is_set():
             raise Cancelled()
-        time.sleep(0.35)  # let the last frames arrive
-        frame = frames.peek()
-        return find_cursor(to_array(frame)) if frame else None
 
-    guess, table = Gain(DEFAULT_GAIN), {}
-    for length in LENGTHS:
-        paced([(-127, -127)] * HOME_REPORTS)
-        a = paced([(4, 4)] * 15)  # out of the corner, so the whole cursor is visible
-        n = max(3, round(250 / (length * guess(length))))  # ~250 px travel
-        b = paced([(length, 0)] * n)
-        if not (a and b):
-            raise RuntimeError("can't see the cursor: open a plain light screen (e.g. Settings scrolled to the top) and retry")
-        table[length] = round((b[0] - a[0]) / (n * length), 3)
-        if table[length] <= 0:
-            raise RuntimeError("the cursor didn't move right: retry (Settings > Calibrate)")
-        print(f"  length {length:2}: {table[length]} px/count", flush=True)
+    def sample(axis: str, length: int, n: int) -> float:
+        """px per count from one move; one that hit the edge (or went nowhere) is redone with half the reports."""
+        i, report = (0, (length, 0)) if axis == "x" else (1, (0, length))
+        for count in (n, max(3, n // 2)):
+            paced([(-127, -127)] * HOME_REPORTS)
+            paced(NUDGE)  # out of the corner, so the whole cursor is visible
+            a = look(frames, sleep, miss)
+            paced([report] * count)
+            try:
+                b = look(frames, sleep, miss)
+            except RuntimeError:
+                if count != n:
+                    raise
+                continue  # lost right after a move: most likely half off the screen's edge
+            frame = frames.peek()
+            limit = frame[1][i] if frame else float("inf")
+            if b[i] > a[i] and b[i] < limit - EDGE:
+                return (b[i] - a[i]) / (count * length)
+        raise RuntimeError(f"the cursor hit the screen edge or didn't move ({axis}, length {length}): retry on a "
+                           "plain light screen without touching the mouse")
+
+    ratio = sample("x", PROBE_LENGTH, PROBE_REPORTS) / DEFAULT_GAIN[PROBE_LENGTH]  # this phone vs the defaults
+    table: Table = {"x": {}, "y": {}}
+    for axis in ("x", "y"):
+        speed = ratio
+        for length in LENGTHS:
+            n = plan_reports(length, DEFAULT_GAIN[length] * speed)
+            samples = [sample(axis, length, n) for _ in range(SAMPLES)]
+            gain, spread = median_gain(samples)
+            table[axis][length] = gain
+            log(f"  {axis} length {length:2}: {gain} px/count")
+            if spread > SPREAD:
+                log(f"  {axis} length {length:2}: samples spread {spread:.0%} ({', '.join(f'{g:.3f}' for g in samples)})")
+            speed = gain / DEFAULT_GAIN[length]
+    check_monotonic(table)
     return table
 
 
@@ -112,7 +191,7 @@ class Calibrator:
 
     def run(self) -> None:
         """Measure and save; raises Cancelled (saving nothing) after `cancel()`, even one during the last measurement."""
-        table = calibrate(self.send, self.frames, self._cancel, self.pace)
+        table = calibrate(self.send, self.frames, pace=self.pace, cancel=self._cancel)
         if self._cancel.is_set():
             raise Cancelled()
         save(self.serial, table)
