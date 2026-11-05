@@ -9,6 +9,7 @@
 //   out: "dbg ..." lines (connect, auth result, disconnect reason) say why a pairing fails; scrcrappy logs them.
 //        The debug build (pio env *-debug, -DSCRCRAPPY_DEBUG=1) adds link parameters, MTU, PHY and, every 5 s while
 //        anything changes, report / notification counters, failures and free heap.
+//        "interval N" (the BLE connection interval the phone granted, in microseconds: at most one report each)
 //        "ready" (advertising), "connected" (phone subscribed to reports), "disconnected" (phone gone),
 //        "pairing" (answer to "p"). "?" answers a snapshot: "ready", "fw <normal|debug> <build date>", "unpaired" |
 //        "paired <id>", and while a phone
@@ -83,6 +84,16 @@ static int nameCb(uint16_t, const struct ble_gatt_error* e, struct ble_gatt_attr
     return 0;
 }
 
+static uint16_t interval = 0;  // granted connection interval, 1.25 ms units (0: not connected)
+
+// Ask for the shortest interval iOS allows a HID device (11.25 ms): without asking, iOS picks a slow one and
+// reports sent faster than it queue up (cursor lag) and get dropped.
+static const uint16_t WANT_MIN = 9, WANT_MAX = 12, WANT_LATENCY = 0, WANT_TIMEOUT = 400;  // 1.25 ms, 1.25 ms, -, 10 ms
+
+static void tell_interval() {
+    if (interval) Serial.printf("interval %u\n", (unsigned)interval * 1250);
+}
+
 class ReportCallbacks : public NimBLECharacteristicCallbacks {
     void onSubscribe(NimBLECharacteristic*, NimBLEConnInfo&, uint16_t subValue) override {
         subscribed = subValue != 0;
@@ -91,30 +102,39 @@ class ReportCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class ServerCallbacks : public NimBLEServerCallbacks {
-    void onConnect(NimBLEServer*, NimBLEConnInfo& info) override {
+    void onConnect(NimBLEServer* s, NimBLEConnInfo& info) override {
         Serial.printf("dbg connect %s bonds=%d\n", info.getAddress().toString().c_str(), NimBLEDevice::getNumBonds());
 #ifdef SCRCRAPPY_DEBUG
         Serial.printf("dbg conn interval=%u latency=%u timeout=%u\n", info.getConnInterval(), info.getConnLatency(),
                       info.getConnTimeout());
 #endif
+        interval = info.getConnInterval();
+        tell_interval();
+        s->updateConnParams(info.getConnHandle(), WANT_MIN, WANT_MAX, WANT_LATENCY, WANT_TIMEOUT);
     }
 #ifdef SCRCRAPPY_DEBUG
     void onMTUChange(uint16_t mtu, NimBLEConnInfo&) override { Serial.printf("dbg mtu %u\n", mtu); }
-    void onConnParamsUpdate(NimBLEConnInfo& info) override {  // interval in 1.25 ms units, timeout in 10 ms units
-        Serial.printf("dbg conn interval=%u latency=%u timeout=%u\n", info.getConnInterval(), info.getConnLatency(),
-                      info.getConnTimeout());
-    }
     void onPhyUpdate(NimBLEConnInfo&, uint8_t tx, uint8_t rx) override { Serial.printf("dbg phy tx=%u rx=%u\n", tx, rx); }
     void onIdentity(NimBLEConnInfo&) override { Serial.println("dbg identity resolved"); }
 #endif
+    void onConnParamsUpdate(NimBLEConnInfo& info) override {  // interval in 1.25 ms units, timeout in 10 ms units
+#ifdef SCRCRAPPY_DEBUG
+        Serial.printf("dbg conn interval=%u latency=%u timeout=%u\n", info.getConnInterval(), info.getConnLatency(),
+                      info.getConnTimeout());
+#endif
+        interval = info.getConnInterval();
+        tell_interval();
+    }
     void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int reason) override {
         Serial.printf("dbg disconnect reason=%d (%s)\n", reason, hciReason(reason));
         subscribed = false;
+        interval = 0;
         peerName[0] = 0;
         Serial.println("disconnected");
     }
     void onAuthenticationComplete(NimBLEConnInfo& info) override {
         Serial.printf("dbg auth enc=%d bonded=%d auth=%d\n", info.isEncrypted(), info.isBonded(), info.isAuthenticated());
+        server->updateConnParams(info.getConnHandle(), WANT_MIN, WANT_MAX, WANT_LATENCY, WANT_TIMEOUT);  // iOS heeds it once encrypted
         idOf(info.getIdAddress(), peerId);
         ble_uuid16_t gap = BLE_UUID16_INIT(0x2A00);  // the phone's Device Name
         ble_gattc_read_by_uuid(info.getConnHandle(), 1, 0xffff, &gap.u, nameCb, nullptr);
@@ -200,6 +220,7 @@ void loop() {
                 Serial.println("connected");
                 Serial.printf("peer %s %s\n", peerId, peerName);
             }
+            tell_interval();
             continue;
         }
         if (line[0] == 'p') {
