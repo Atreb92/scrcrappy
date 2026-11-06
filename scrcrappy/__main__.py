@@ -131,14 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     if mode.error:
         print(f"note: ESP32 not available ({mode.error}); the window opens so you can fix the port in Settings",
               file=sys.stderr)
-    if mode.session and not mode.session.connected:
-        print(f"note: agent: {mode.session.error}; the window opens and keeps trying (Settings shows the state)",
-              file=sys.stderr)
-    connected = mode.link.connected if mode.link else None
-    if connected and not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
-        print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
-              "(AssistiveTouch on; pair it in Settings > Accessibility > Touch > AssistiveTouch > Devices)",
-              file=sys.stderr)
+    connected = mode.link.connected if mode.link else None  # the window opens at once, whatever is (not) connected
 
     with (video.capture_avf(frames, serial) if mac else video.capture(qvh, frames)) as proc:
         if args.calibrate:
@@ -147,7 +140,10 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             if not connected.is_set():  # the window no longer waits for the phone, but measuring needs it
                 print("waiting for the iPhone to connect over Bluetooth...", file=sys.stderr)
-                connected.wait()
+                while not connected.wait(0.5):
+                    if mode.link.error:  # the board / helper never came up: nothing to wait for
+                        print(f"error: {mode.link.error}", file=sys.stderr)
+                        return 1
             time.sleep(3)  # stream start-up
             try:
                 table = calibrate.calibrate(mode.link.send, frames, mode.link.pace())

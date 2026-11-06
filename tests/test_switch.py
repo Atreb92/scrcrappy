@@ -32,6 +32,7 @@ class FakeKeys:
 
 class FakeLink:
     paired, peer, on_pairing = True, None, None
+    error, on_error = "", None
 
     def __init__(self):
         self.connected = threading.Event()
@@ -406,3 +407,27 @@ def test_report_button_survives_no_clipboard_and_an_unwritable_folder(harness, m
     ctx = harness.run(lambda n, c: n == 5 and c.settings._click("report"), make("esp32"), None,
                       report=lambda: "REPORT", set_debug=lambda want: want)
     assert ctx.bar.toast_text.startswith("Debug report could not be saved")
+
+
+def test_a_link_that_failed_before_the_window_was_up_is_toasted(harness):
+    old = make("ble")
+    old.link.error = "Bluetooth mouse helper failed to start"
+    ctx = harness.run(lambda n, c: None, old, None, seconds=0.5)
+    assert ctx.bar.toast_text == "Bluetooth mouse helper failed to start"
+
+
+def test_a_link_that_fails_in_the_background_is_toasted(harness):
+    old = make("esp32")
+
+    def script(n, c):
+        if n == 6:  # as the handshake thread would
+            old.link.on_error("no scrcrappy ESP32 firmware answering on /dev/x")
+
+    ctx = harness.run(script, old, None, seconds=0.8)
+    assert ctx.bar.toast_text == "no scrcrappy ESP32 firmware answering on /dev/x"
+
+
+def test_the_error_hook_follows_a_switch(harness):
+    new = make("ble")
+    harness.run(lambda n, c: n == 5 and c.settings._click("mode:1"), make("esp32"), lambda name, port: new)
+    assert new.link.on_error is not None

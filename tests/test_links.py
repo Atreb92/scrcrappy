@@ -54,10 +54,42 @@ def test_esp32_close_stops_the_reader_and_releases_the_port():
     link.send(1, 2, 0, 0)  # writing to the closed port is swallowed, not a crash
 
 
-def test_esp32_silent_port_is_an_error():
+def wait_for(cond, seconds=3.0):
+    import time
+    t0 = time.monotonic()
+    while not cond() and time.monotonic() - t0 < seconds:
+        time.sleep(0.01)
+    return cond()
+
+
+def test_esp32_returns_at_once_and_a_silent_port_is_reported_later():
+    import time
     master, slave = os.openpty()
-    with pytest.raises(RuntimeError, match="no scrcrappy ESP32 firmware"):
-        links.esp32(os.ttyname(slave), wait=1)
+    t0 = time.monotonic()
+    link = links.esp32(os.ttyname(slave), wait=1)
+    assert time.monotonic() - t0 < 0.5  # the handshake runs in the background
+    heard = []
+    link.on_error = heard.append
+    assert wait_for(lambda: "no scrcrappy ESP32 firmware" in link.error)
+    assert heard == [link.error] and not link.ready.is_set()
+    link.close()
+
+
+def test_esp32_closed_during_the_handshake_reports_nothing():
+    master, slave = os.openpty()
+    link = links.esp32(os.ttyname(slave), wait=1)
+    link.close()
+    threading.Event().wait(1.5)
+    assert link.error == ""
+
+
+def test_a_late_failure_reaches_the_hook_and_is_kept():
+    link = links.Link(lambda b: None, lambda: b"")
+    heard = []
+    link.fail("too early to be heard")  # nobody listens yet: kept in .error for whoever wires the hook later
+    link.on_error = heard.append
+    link.fail("again")
+    assert link.error == "again" and heard == ["again"]
 
 
 def test_link_handles_lines_split_across_reads():
@@ -152,6 +184,9 @@ class _Out:
 
 
 class _Proc:
+    def poll(self):
+        return None
+
     def __init__(self, stubborn=False):
         self.stdin, self.stdout, self.stubborn, self.waited, self.killed = _Pipe(), _Out(), stubborn, [], False
 
@@ -162,6 +197,43 @@ class _Proc:
 
     def kill(self):
         self.killed = True
+
+
+class _Silent(_Out):
+    def read(self, n):
+        threading.Event().wait(0.05)
+        return b""
+
+
+def test_ble_returns_at_once_and_a_helper_that_exits_is_reported(monkeypatch):
+    import time
+    proc = _Proc()
+    proc.stdout, proc.poll = _Silent(), lambda: 1  # never ready, and gone
+    monkeypatch.setattr(links.subprocess, "Popen", lambda *a, **k: proc)
+    t0 = time.monotonic()
+    link = links.ble("python3")
+    assert time.monotonic() - t0 < 0.5
+    assert wait_for(lambda: "Bluetooth mouse helper" in link.error)
+
+
+def test_ble_helper_that_never_gets_ready_is_killed_and_reported(monkeypatch):
+    monkeypatch.setattr(links, "BLE_READY_S", 0.3)
+    proc = _Proc()
+    proc.stdout, proc.poll = _Silent(), lambda: None
+    monkeypatch.setattr(links.subprocess, "Popen", lambda *a, **k: proc)
+    link = links.ble("python3")
+    assert wait_for(lambda: "Bluetooth mouse helper" in link.error) and proc.killed
+
+
+def test_ble_closed_before_ready_reports_nothing(monkeypatch):
+    monkeypatch.setattr(links, "BLE_READY_S", 0.3)
+    proc = _Proc()
+    proc.stdout, proc.poll = _Silent(), lambda: None
+    monkeypatch.setattr(links.subprocess, "Popen", lambda *a, **k: proc)
+    link = links.ble("python3")
+    link.close()
+    threading.Event().wait(0.6)
+    assert link.error == ""
 
 
 def test_ble_close_ends_the_helper(monkeypatch):

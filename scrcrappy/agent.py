@@ -218,6 +218,8 @@ class Session:
         try:
             sock = self.reopen()
         except (OSError, ValueError, KeyError, AgentError) as e:  # a bad hello is as good as no connection
+            if str(e) != self.error:  # once per reason, not once a second
+                log.info("agent not reachable: %s", e)
             self.error = str(e)
             return False
         with self.lock:

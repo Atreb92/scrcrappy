@@ -76,16 +76,13 @@ def test_ble_has_no_board():
     assert m.link and m.board is None and m.device_name == "scrcrappy PC"
 
 
-def test_agent_start_does_not_wait_for_the_phone(monkeypatch):
-    waits = []
-    monkeypatch.setattr(modes.agent, "connect", lambda host, wait=10: waits.append(wait) or type("A", (), {"sock": object()})())
-    start("agent")
-    assert waits == [0]  # one quick try; a phone that is not there yet is waited for in the background
-
-
-def test_agent_wraps_a_session():
+def test_agent_wraps_a_session_that_connects_in_the_background(monkeypatch):
+    calls = []
+    monkeypatch.setattr(modes.agent, "connect", lambda host, wait=10: calls.append(wait) or type("A", (), {"sock": "s"})())
     m = start("agent")
     assert isinstance(m.session, FakeSession) and m.keys is None and m.make_pointer is None
+    assert m.session.sock is None and calls == []  # nothing connected, or waited for, at the start
+    assert m.session.reopen() == "s" and calls == [1]  # the session's own attempts (pairing included) run on its thread
 
 
 @pytest.mark.parametrize("name,target,exc", [
@@ -100,15 +97,8 @@ def test_failures_become_mode_errors(monkeypatch, name, target, exc):
         start(name)
 
 
-@pytest.mark.parametrize("exc", [modes.agent.AgentError("no agent"), ConnectionError("usbmuxd lists no iPhone")])
-def test_an_unreachable_agent_still_starts_and_keeps_trying(monkeypatch, exc):
-    def boom(*a, **k):
-        raise exc
-
-    monkeypatch.setattr(modes.agent, "connect", boom)
-    m = start("agent")  # no ModeError: the window opens, Settings shows the state and Retry
-    assert m.name == "agent" and isinstance(m.session, FakeSession)
-    assert m.session.sock is None and m.session.error == str(exc) and m.session.reopen
+def test_closing_an_agent_mode_closes_its_session():
+    m = start("agent")
     m.close()
     assert m.session.closed == 1
 
