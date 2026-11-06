@@ -1,6 +1,6 @@
 [project]
 name = "scrcrappy"
-version = "0.5.1"
+version = "0.6.0"
 description = "scrcpy for iOS"
 readme = "README.md"
 authors = [{ name = "atreb92" }]
