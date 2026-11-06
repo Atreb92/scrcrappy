@@ -50,6 +50,8 @@ class FakeLink:
 
 class FakeSession:
     orientation = 1
+    state = "connected"
+    connected = True
 
     def close(self): pass
     def touch(self, *a): pass

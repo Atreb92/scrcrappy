@@ -11,7 +11,8 @@ BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor),
 - `app.py` window loop, BLE `Controller`; `toolbar.py` bar (button strip under the phone image); `dialog.py` Settings + right-click menu (overlays in the main window), Add-button dialog (its own window)
 - `debuglog.py` opt-in rotating log + the scrubbing rules (every record and report passes `scrub`); `diagnose.py` `--diagnose-esp32` / `--report`
 - `modes.py` the four input modes as `Mode` bundles; `start_mode` is used by the launcher and by the window's live switch (Settings › Input)
-- `agent.py` agent backend (Session: worker thread, replies posted back as pygame USEREVENTs; reconnects)
+- `agent.py` agent backend (Session: worker thread, replies posted back as pygame USEREVENTs; may start without a socket and
+  connects by itself, `state` = connected / reconnecting / unreachable for the Settings row; requests are dropped while down)
 - `agent_client.py` vendored from crappytouch (keep in sync with its `client/`); `usbmux.py` stdlib usbmuxd
 - `ai.py` AI tools + LED/rings/lock; `mcp.py` stdlib MCP server (127.0.0.1:7331, Bearer token); `actions.py` shared percent-coordinate logic
 - `mouse.py` pointer steering (a gain table per axis; reports paced to `Link.pace()`, the interval the ESP32 reports), `calibrate.py` (x measured, y checked, ~90 s), `links.py` + `blemouse.py` (BLE helper, system python), `keyqueue.py`
@@ -36,6 +37,7 @@ BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor),
 - Scroll direction: BT / ESP32 send a wheel report (iOS's own mouse-scroll setting decides), agent swipes a finger; the agent's
   sign is set to match a phone with iOS's default. One setting, Settings › Invert scrolling (`invert_scroll`), flips all modes.
 - Starting the video (qvh) drops the agent's usbmuxd tunnel once; the Session reconnects by itself.
+- An unreachable agent no longer stops `--mouse agent` or the switch in Settings: the mode runs with a disconnected Session.
 - Never `pkill -f <pattern>` from the shell tool: it matches the tool's own command line and kills it.
 
 ## Process the user likes

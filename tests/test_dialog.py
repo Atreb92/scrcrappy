@@ -765,3 +765,69 @@ def test_only_a_quick_second_click_selects(monkeypatch):
     now[0] += 1.0
     click(panel, "screenshots")
     assert not panel.selected  # a slow click drops the selection
+
+
+class FakeAgent:
+    """The parts of agent.Session the Settings agent row reads."""
+
+    def __init__(self, state="connected"):
+        self.state, self.retries = state, 0
+
+    def retry(self):
+        self.retries += 1
+
+
+def agent_panel(mode="agent", agent=None):
+    from scrcrappy.config import Config
+    cfg = Config()
+    cfg.mouse = mode
+    return settings_panel(cfg, [], agent=agent)[0]
+
+
+def test_agent_status_rows():
+    from scrcrappy.dialog import agent_status
+    assert agent_status(FakeAgent("connected")) == ("green", "Agent connected", False)
+    assert agent_status(FakeAgent("reconnecting")) == ("amber", "Agent reconnecting\u2026", False)
+    assert agent_status(FakeAgent("unreachable")) == ("amber", "Agent not reachable", True)
+
+
+def test_agent_row_is_there_in_agent_mode_only():
+    assert "retry" in agent_panel(agent=FakeAgent()).hits
+    assert "retry" not in agent_panel(mode="ble", agent=None).hits
+    assert "retry" not in agent_panel(mode="esp32", agent=None).hits
+
+
+def test_agent_row_sits_under_the_mode_row():
+    panel = agent_panel(agent=FakeAgent())
+    assert panel.hits["retry"].y >= panel.hits["mode:3"].bottom
+
+
+def test_retry_acts_only_when_the_agent_is_unreachable():
+    agent = FakeAgent("unreachable")
+    panel = agent_panel(agent=agent)
+    click(panel, "retry")
+    assert agent.retries == 1
+    for state in ("reconnecting", "connected"):  # the button is not shown then
+        agent.state = state
+        click(panel, "retry")
+    assert agent.retries == 1
+
+
+def test_agent_row_draws_in_every_state():
+    for state in ("connected", "reconnecting", "unreachable"):
+        panel = agent_panel(agent=FakeAgent(state))
+        panel.draw(panel.window.get_surface(), 667)
+
+
+def test_agent_row_follows_a_mode_switch():
+    from scrcrappy.config import Config
+    cfg = Config()
+    cfg.mouse = "ble"
+    mode = ["ble"]
+    panel, _ = settings_panel(cfg, [], active_mode=lambda: mode[0])
+    assert "retry" not in panel.hits
+    mode[0], agent = "agent", FakeAgent("unreachable")
+    panel.rebind(None, None, lambda: True, "", agent)
+    assert "retry" in panel.hits
+    click(panel, "retry")
+    assert agent.retries == 1

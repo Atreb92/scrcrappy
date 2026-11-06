@@ -25,6 +25,8 @@ from .geometry import ROTATION_BY_ORIENTATION, inside, rotation, to_device
 
 REPLY_S = 15  # s to wait for a reply before the connection counts as lost
 POLL = 1.0  # s of idle worker between `screen` requests (orientation)
+RETRY_S = 1.0  # s between attempts to reopen a lost connection (`retry()` makes one at once)
+GIVE_UP_S = 3.0  # s a lost connection may stay down before it counts as unreachable (not just a blip)
 MOVE_GAP = 0.016  # s between touch moves: about the phone's screen rate
 SWIPE = 0.1  # wheel notch = swipe of this fraction of the shown frame's height
 CTRL, SHIFT, KEY_V = 0x11, 0x22, 0x19  # either side's modifier bits; V usage
@@ -92,18 +94,37 @@ class Session:
     """Authenticated agent connection. Touches go out at once from the UI thread; requests run in order on
     a worker thread (some wait for an answer on the phone) and `done(reply)` is handed to `post`, which runs
     it on the UI thread. While idle the worker asks for the screen's orientation. A lost connection (qvh
-    switching the phone's USB configuration, a respring) is reopened with `reopen`."""
+    switching the phone's USB configuration, a respring) is reopened with `reopen`, every RETRY_S in the
+    background. `sock` may be None (the agent was not reachable at the start): the session then connects by itself
+    as soon as it can; `error` says why it could not at first. `state` tells the user-facing story."""
 
     def __init__(self, sock, post: Callable[[Callable[[], None]], None] = _post,
-                 reopen: Callable[[], socket.socket] | None = None) -> None:
-        self.sock, self.post, self.reopen = sock, post, reopen
+                 reopen: Callable[[], socket.socket] | None = None, error: str = "") -> None:
+        self.sock, self.post, self.reopen, self.error = sock, post, reopen, error
         self.orientation, self.warned, self.closed = 1, False, False
+        self.connected = sock is not None
+        self.down_since = None if sock is not None else time.monotonic()
         self.lock = threading.Lock()
         self.jobs: queue.Queue = queue.Queue()
-        threading.Thread(target=self._work, daemon=True).start()
+        self._wake = threading.Event()
+        self.worker = threading.Thread(target=self._work, daemon=True)
+        self.worker.start()
+
+    @property
+    def state(self) -> str:
+        """"connected", "reconnecting" (down for less than GIVE_UP_S) or "unreachable"."""
+        if self.connected:
+            return "connected"
+        return "reconnecting" if time.monotonic() - (self.down_since or 0) < GIVE_UP_S else "unreachable"
+
+    def retry(self) -> None:
+        """Try to reconnect now instead of at the next RETRY_S tick."""
+        self._wake.set()
 
     def _send(self, obj: dict) -> None:
         with self.lock:  # whole frames: the UI thread and the worker both send
+            if self.sock is None:
+                raise OSError("agent not connected")
             self.sock.sendall(encode_frame(obj))
 
     def touch(self, *events: tuple[int, str, float, float]) -> None:
@@ -115,7 +136,13 @@ class Session:
 
     def request(self, obj: dict, done: Callable[[dict], None] | None = None,
                 failed: Callable[[str], None] | None = None) -> None:
-        """`failed(error)` (else a printed warning) when the agent replies with an error."""
+        """`failed(error)` (else a printed warning) when the agent replies with an error. While the connection is
+        down nothing is queued (it would all fire at once on reconnecting): `failed` hears it, else it is dropped."""
+        if not self.connected:
+            if failed:
+                self.post(lambda: failed("agent not connected"))
+            return
+
         def job() -> None:
             try:
                 self._send(obj)
@@ -139,6 +166,9 @@ class Session:
 
     def swipe(self, a: tuple[float, float], b: tuple[float, float], steps: int = 6) -> None:
         """Finger 3 from a to b, then held still before lifting so iOS doesn't fling."""
+        if not self.connected:
+            return
+
         def job() -> None:
             self.touch((3, "down", *a))
             for i in range(1, steps + 1):
@@ -156,6 +186,8 @@ class Session:
             print("agent: touch the phone's screen once (needed after each reboot) before clicks work", file=sys.stderr)
 
     def _work(self) -> None:
+        if self.sock is None and not self._recover():
+            return
         while True:
             try:
                 job = self.jobs.get(timeout=POLL)
@@ -167,26 +199,41 @@ class Session:
             except (OSError, ValueError, AgentError) as e:
                 log.warning("connection lost: %s", e)
                 print(f"agent: connection lost ({e}), reconnecting", file=sys.stderr)
-                if not self.reopen or self.closed:
+                if not self._recover():
                     return
-                while not self.closed and not self._reconnect():
-                    time.sleep(1)
+
+    def _recover(self) -> bool:
+        """Reopen the connection, trying every RETRY_S (or at once on `retry()`) until it works. False if the
+        session was closed (or cannot reopen) instead."""
+        if not self.reopen or self.closed:
+            return False
+        self.connected = False
+        self.down_since = self.down_since or time.monotonic()
+        while not self.closed and not self._reconnect():
+            self._wake.wait(RETRY_S)
+            self._wake.clear()
+        return not self.closed
 
     def _reconnect(self) -> bool:
         try:
             sock = self.reopen()
-        except (OSError, ValueError, KeyError, AgentError):  # a bad hello is as good as no connection
+        except (OSError, ValueError, KeyError, AgentError) as e:  # a bad hello is as good as no connection
+            self.error = str(e)
             return False
         with self.lock:
-            self.sock.close()
+            if self.sock:
+                self.sock.close()
             self.sock = sock
+        self.connected, self.down_since, self.error = True, None, ""
         log.info("reconnected")
         print("agent: reconnected", file=sys.stderr)
         return True
 
     def close(self) -> None:
         self.closed = True  # the worker must not reconnect a session that was closed on purpose
-        self.sock.close()
+        self._wake.set()
+        if self.sock:
+            self.sock.close()
 
 
 def tilde(path: Path | str) -> str:

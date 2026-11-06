@@ -70,13 +70,14 @@ def start_mode(name: str, port: str, serial: str, frames: LatestFrame, ble_pytho
     if name == "none":
         return Mode("none")
     if name == "agent":
+        host = socket.gethostname()
+        reopen = lambda: agent.connect(host, wait=1).sock  # noqa: E731
         try:
-            host = socket.gethostname()
-            return Mode("agent", session=agent.Session(agent.connect(host).sock,
-                                                       reopen=lambda: agent.connect(host, wait=1).sock))
-        except (OSError, agent.AgentError) as e:
-            log.error("mode agent failed to start", exc_info=True)
-            raise ModeError(f"agent: {e}") from e
+            # wait=0: one quick try, so the window opens at once; a phone that is not there yet is waited for by the Session
+            return Mode("agent", session=agent.Session(agent.connect(host, wait=0).sock, reopen=reopen))
+        except (OSError, agent.AgentError) as e:  # not an error that stops the mode: the session keeps trying
+            log.error("agent not reachable at the start", exc_info=True)
+            return Mode("agent", session=agent.Session(None, reopen=reopen, error=str(e)))
     if not selectable(name):
         log.error("mode %s is not available on this platform", name)
         raise ModeError("Bluetooth mouse needs Linux: use ESP32 or Agent on macOS")

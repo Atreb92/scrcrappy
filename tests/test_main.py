@@ -206,3 +206,21 @@ def test_esp32_mode_opens_the_window_even_without_a_board(monkeypatch, capsys):
     monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
     assert cli.main(["--qvh", TRUE, "--mouse", "esp32", "--port", "/dev/ttyUSB9"]) == 0
     assert ran.is_set()
+
+
+def test_agent_mode_opens_the_window_even_when_the_agent_is_unreachable(monkeypatch, capsys):
+    """Settings shows the agent's state and Retry, so an unreachable agent must not stop the window."""
+    import contextlib
+    import threading
+    ran = threading.Event()
+    cap = type("Cap", (), {"poll": lambda self: None, "log": ""})()
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
+    monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: None)
+    monkeypatch.setattr(cli.video, "capture", lambda qvh, frames: contextlib.nullcontext(cap))
+    monkeypatch.setattr(cli.modes.agent, "connect", lambda host, wait=10: (_ for _ in ()).throw(ConnectionError("no iPhone")))
+    monkeypatch.setattr(cli.modes.agent, "RETRY_S", 30)
+    monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
+    assert cli.main(["--qvh", TRUE, "--mouse", "agent"]) == 0
+    assert ran.is_set()
+    assert "agent: no iPhone" in capsys.readouterr().err
