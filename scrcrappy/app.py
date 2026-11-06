@@ -442,7 +442,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
             save_or_warn(save, cfg)
             bar.toast(f"ESP32 not available: {new.error}" if new.error else f"Input: {LABELS[new.name]}")
         if settings and not settings.closed:
-            settings.rebind(calibrator.value() if calibrator else None, board, connected, new.error)
+            settings.rebind(calibrator.value() if calibrator else None, board, connected, new.error, agent)
         bar.set_items(items())
         main.title = title
 
@@ -455,7 +455,7 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
                 controller.release()  # a key held right now would otherwise stay down on the phone: the overlay eats its release
             settings = Settings(main, settings_rect, cfg, settings_changed, toggle_invert, settings_done,
                                 calibrator.value() if calibrator else None, calibrate, toggle_ai, ai_status, copy_ai_config,
-                                board=board, connected=connected, calibrating=lambda: calibrating,
+                                board=board, agent=agent, connected=connected, calibrating=lambda: calibrating,
                                 on_cancel=cancel_calibration, on_mode=request_switch if start_mode else None, active_mode=lambda: mode.name,
                                 on_port=(lambda p: request_switch("esp32", p)) if start_mode else None,
                                 on_debug=toggle_debug if set_debug else None, on_report=copy_report if report else None,

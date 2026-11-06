@@ -278,7 +278,8 @@ MODES = [("none", "None"), ("ble", "BT"), ("esp32", "ESP32"), ("agent", "Agent")
 PANEL_W, SWITCH = 260, (34, 18)
 SILENT_S, POLL_S, CONFIRM_S = 2.5, 1.0, 3.0  # board: silence before "not answering", poll interval, Forget confirm window
 PAIRING_TOAST = "Board is open to pairing. Forget it on the phone too."
-BOARD_DOT = {"green": SWITCH_ON, "blue": ACCENT, "grey": (142, 142, 147)}
+AMBER = (0xF2, 0xB7, 0x05)
+BOARD_DOT = {"green": SWITCH_ON, "blue": ACCENT, "grey": (142, 142, 147), "amber": AMBER}
 
 
 def board_status(board, now: float, opened: float = 0.0, fits: Callable[[str], bool] = lambda t: True) -> tuple[str, str]:
@@ -304,6 +305,14 @@ def board_status(board, now: float, opened: float = 0.0, fits: Callable[[str], b
     if board.paired is None:
         return "grey", "Reflash the board for status"
     return ("grey", "Paired, not connected") if board.paired else ("blue", "Open to pairing")
+
+
+def agent_status(agent) -> tuple[str, str, bool]:
+    """(dot colour, text, whether Retry shows) for the Agent row, from the session's `state`. A short blip is
+    only "reconnecting": Retry appears once the connection has stayed down for a few seconds."""
+    return {"connected": ("green", "Agent connected", False),
+            "reconnecting": ("amber", "Agent reconnecting\u2026", False)}.get(
+        agent.state, ("amber", "Agent not reachable", True))
 
 
 DOUBLE_CLICK = 0.4  # s between the clicks of a double click
@@ -369,13 +378,14 @@ class Settings:
                  on_change: Callable[[], None], on_invert: Callable[[], None], on_close: Callable[[], None],
                  calibration: float | None = None, on_calibrate: Callable[[], None] | None = None,
                  on_ai: Callable[[], None] | None = None, ai_status: Callable[[], str] = lambda: "",
-                 on_copy: Callable[[], None] | None = None, board=None,
+                 on_copy: Callable[[], None] | None = None, board=None, agent=None,
                  connected: Callable[[], bool] = lambda: True, calibrating: Callable[[], bool] = lambda: False,
                  on_cancel: Callable[[], None] | None = None, on_mode: Callable[[str], None] | None = None,
                  on_port: Callable[[str], None] | None = None, active_mode: Callable[[], str] | None = None,
                  on_debug: Callable[[], None] | None = None, on_report: Callable[[], None] | None = None,
                  debug_path: Callable[[], str] = lambda: "", problem: Callable[[], str] = lambda: "") -> None:
         """`board`: the ESP32 `Link` (only given with `--mouse esp32`): Settings shows its status and a Forget button.
+        `agent`: the agent `Session` (only in Agent mode): Settings shows whether it is connected, and a Retry button.
         `calibration`: the pointer's current value (Bluetooth / ESP32 only); None hides that section.
         `connected()`: whether the phone is up over Bluetooth; Calibrate is grayed out while it isn't.
         `on_mode(name)`: the app switches the input mode (it writes `cfg.mouse` itself once that worked); without
@@ -397,7 +407,7 @@ class Settings:
         self.on_mode, self.on_port, self.asked_port, self.active_mode = on_mode, on_port, cfg.port, active_mode
         self.on_debug, self.on_report, self.debug_path, self.debug_lines = on_debug, on_report, debug_path, []
         self.problem, self.problem_lines = problem, []
-        self.board, self.confirm_until, self.last_poll = board, 0.0, float("-inf")
+        self.board, self.agent, self.confirm_until, self.last_poll = board, agent, 0.0, float("-inf")
         self.opened_at, self._board_text = time.monotonic(), None
         self.hover: str | None = None
         self.pressed: str | None = None  # the item the left mouse button went down on
@@ -436,6 +446,10 @@ class Settings:
             self.problem_top = y
             self.problem_lines = _wrap(self.problem(), self.small, PANEL_W - 2 * PAD - 18)
             y += 16 * len(self.problem_lines) + 10
+        if self.mode() == "agent" and self.agent:  # a status row: the dot, the text, and Retry when it is unreachable
+            self.agent_top = y
+            self.hits["retry"] = pygame.Rect(PANEL_W - PAD - 52, y - 2, 52, 22)
+            y += 22 + 10
         self.offers = [p for p in self.ports if p != self.cfg.port] if self.mode() == "esp32" else []
         for i in range(len(self.offers)):
             self.hits[f"use:{i}"] = pygame.Rect(PANEL_W - PAD - 44, y - 4, 44, 22)
@@ -532,11 +546,12 @@ class Settings:
     def shows_next_launch_tag(self) -> bool:
         return self.on_mode is None
 
-    def rebind(self, calibration: float | None, board, connected: Callable[[], bool], problem: str = "") -> None:
+    def rebind(self, calibration: float | None, board, connected: Callable[[], bool], problem: str = "",
+               agent=None) -> None:
         """The input mode changed under an open panel: show the new mode's calibration and board sections."""
         self.calibration_lines = [] if calibration is None else self._calibration_lines(calibration)
         self.tips = {} if calibration is None else {"calibrate": CALIBRATE_TIP}
-        self.board, self.connected, self._board_text = board, connected, None
+        self.board, self.agent, self.connected, self._board_text = board, agent, connected, None
         self.problem = lambda: problem
         self._relayout()
 
@@ -611,6 +626,8 @@ class Settings:
         elif hit == "ai" and self.on_ai:
             self.on_ai()
             self._relayout()
+        elif hit == "retry" and self.agent and agent_status(self.agent)[2]:
+            self.agent.retry()
         elif hit == "forget" and self.board:
             now = time.monotonic()
             if self.confirming(now):
@@ -732,6 +749,15 @@ class Settings:
             if i == 0:
                 pygame.draw.circle(surf, (0xF2, 0xB7, 0x05), (PAD + 5, self.problem_top + 7), 5)
             surf.blit(self.small.render(line, True, (0xF2, 0xB7, 0x05)), (PAD + 18, self.problem_top + 16 * i))
+        if "retry" in self.hits:
+            colour, text, retry = agent_status(self.agent)
+            pygame.draw.circle(surf, BOARD_DOT[colour], (PAD + 5, self.agent_top + 9), 5)
+            surf.blit(self.small.render(text, True, FG), (PAD + 18, self.agent_top + 2))
+            if retry:
+                r = self.hits["retry"]
+                pygame.draw.rect(surf, self._fill("retry", FIELD), r, border_radius=r.height // 2)
+                label = self.small.render("Retry", True, ACCENT)
+                surf.blit(label, label.get_rect(center=r.center))
         if "forget" in self.hits:
             now = time.monotonic()
             colour, text = self.board_text(now)

@@ -34,8 +34,8 @@ class FakeKeys:
 
 
 class FakeSession:
-    def __init__(self, sock, reopen=None):
-        self.sock, self.closed = sock, 0
+    def __init__(self, sock, reopen=None, error=""):
+        self.sock, self.reopen, self.error, self.closed = sock, reopen, error, 0
 
     def close(self):
         self.closed += 1
@@ -76,6 +76,13 @@ def test_ble_has_no_board():
     assert m.link and m.board is None and m.device_name == "scrcrappy PC"
 
 
+def test_agent_start_does_not_wait_for_the_phone(monkeypatch):
+    waits = []
+    monkeypatch.setattr(modes.agent, "connect", lambda host, wait=10: waits.append(wait) or type("A", (), {"sock": object()})())
+    start("agent")
+    assert waits == [0]  # one quick try; a phone that is not there yet is waited for in the background
+
+
 def test_agent_wraps_a_session():
     m = start("agent")
     assert isinstance(m.session, FakeSession) and m.keys is None and m.make_pointer is None
@@ -83,7 +90,6 @@ def test_agent_wraps_a_session():
 
 @pytest.mark.parametrize("name,target,exc", [
     ("ble", "ble", RuntimeError("helper failed")),
-    ("agent", "connect", modes.agent.AgentError("no agent")),
 ])
 def test_failures_become_mode_errors(monkeypatch, name, target, exc):
     def boom(*a, **k):
@@ -92,6 +98,19 @@ def test_failures_become_mode_errors(monkeypatch, name, target, exc):
     monkeypatch.setattr(modes.agent if target == "connect" else modes.links, target, boom)
     with pytest.raises(modes.ModeError, match=str(exc)):
         start(name)
+
+
+@pytest.mark.parametrize("exc", [modes.agent.AgentError("no agent"), ConnectionError("usbmuxd lists no iPhone")])
+def test_an_unreachable_agent_still_starts_and_keeps_trying(monkeypatch, exc):
+    def boom(*a, **k):
+        raise exc
+
+    monkeypatch.setattr(modes.agent, "connect", boom)
+    m = start("agent")  # no ModeError: the window opens, Settings shows the state and Retry
+    assert m.name == "agent" and isinstance(m.session, FakeSession)
+    assert m.session.sock is None and m.session.error == str(exc) and m.session.reopen
+    m.close()
+    assert m.session.closed == 1
 
 
 def test_close_closes_each_resource_once():

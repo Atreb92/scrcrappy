@@ -264,3 +264,86 @@ def test_a_closed_session_does_not_reconnect(monkeypatch):
     s.close()
     time.sleep(0.5)
     assert reopened == []
+
+
+def wait_for(cond, seconds=2.0):
+    import time
+    t0 = time.monotonic()
+    while not cond() and time.monotonic() - t0 < seconds:
+        time.sleep(0.01)
+    return cond()
+
+
+def test_a_session_may_start_without_a_connection_and_connects_by_itself(monkeypatch):
+    monkeypatch.setattr(agent, "RETRY_S", 0.02)
+    new_ours, new_phone = socket.socketpair()
+    tries = []
+
+    def reopen():
+        tries.append(1)
+        if len(tries) < 3:
+            raise OSError("no phone")
+        return new_ours
+
+    s = agent.Session(None, post=lambda fn: fn(), reopen=reopen, error="no phone")
+    assert not s.connected and s.error == "no phone" and s.state == "reconnecting"  # just started: not given up yet
+    assert wait_for(lambda: s.connected) and s.state == "connected"
+    s.request({"cmd": "key", "usage": 4})
+    assert read_frame(new_phone.recv) == {"cmd": "key", "usage": 4}
+
+
+def test_requests_while_down_fail_at_once_instead_of_queueing():
+    s = agent.Session(None, post=lambda fn: fn(), reopen=lambda: (_ for _ in ()).throw(OSError("no phone")))
+    errors = []
+    s.request({"cmd": "key", "usage": 4}, failed=errors.append)
+    s.request({"cmd": "key", "usage": 5})  # no failed callback: dropped quietly
+    s.swipe((0.5, 0.5), (0.5, 0.6))
+    s.touch((1, "down", 0.5, 0.5))  # nothing to send it on, and no crash
+    assert errors == ["agent not connected"] and s.jobs.empty()
+
+
+def test_state_follows_the_connection(monkeypatch):
+    monkeypatch.setattr(agent, "RETRY_S", 0.02)
+    clock, up = [100.0], []
+    monkeypatch.setattr(agent.time, "monotonic", lambda: clock[0])
+    ours, phone = socket.socketpair()
+    new_ours, _ = socket.socketpair()
+
+    def reopen():
+        if not up:
+            raise OSError("no phone")
+        return new_ours
+
+    s = agent.Session(ours, post=lambda fn: fn(), reopen=reopen)
+    assert s.state == "connected"
+    phone.close()
+    s.request({"cmd": "screen"})
+    assert wait_for(lambda: not s.connected) and s.state == "reconnecting"  # a blip is not "unreachable" yet
+    clock[0] += agent.GIVE_UP_S + 0.5
+    assert s.state == "unreachable"
+    up.append(1)
+    assert wait_for(lambda: s.connected) and s.state == "connected"
+
+
+def test_retry_tries_at_once(monkeypatch):
+    monkeypatch.setattr(agent, "RETRY_S", 30)  # only retry() can get a new attempt in time
+    new_ours, _ = socket.socketpair()
+    up = []
+
+    def reopen():
+        if not up:
+            raise OSError("no phone")
+        return new_ours
+
+    s = agent.Session(None, post=lambda fn: fn(), reopen=reopen)
+    assert not wait_for(lambda: s.connected, 0.2)
+    up.append(1)
+    s.retry()
+    assert wait_for(lambda: s.connected)
+
+
+def test_closing_a_session_that_never_connected_ends_its_worker(monkeypatch):
+    monkeypatch.setattr(agent, "RETRY_S", 30)
+    s = agent.Session(None, post=lambda fn: fn(), reopen=lambda: (_ for _ in ()).throw(OSError("no phone")))
+    s.close()
+    assert wait_for(lambda: not s.worker.is_alive())

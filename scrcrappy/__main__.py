@@ -131,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
     if mode.error:
         print(f"note: ESP32 not available ({mode.error}); the window opens so you can fix the port in Settings",
               file=sys.stderr)
+    if mode.session and not mode.session.connected:
+        print(f"note: agent: {mode.session.error}; the window opens and keeps trying (Settings shows the state)",
+              file=sys.stderr)
     connected = mode.link.connected if mode.link else None
     if connected and not connected.wait(1):  # the window opens anyway: with the ESP32, pairing is done from its Settings
         print("note: the iPhone is not connected over Bluetooth yet to 'scrcrappy PC' / 'scrcrappy ESP32' "
