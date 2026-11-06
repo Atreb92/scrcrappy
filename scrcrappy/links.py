@@ -35,6 +35,8 @@ class Link:
                  close: Callable[[], object] = lambda: None, on_pairing: Callable[[], None] | None = None) -> None:
         self.ready, self.connected = threading.Event(), threading.Event()
         self.interval: float | None = None  # seconds, once the device has said
+        self.error = ""  # why the device never came up (set by `fail`, from a thread)
+        self.on_error: Callable[[str], None] | None = None  # the app's: called from that thread, once it is wired
         self._write, self.close, self.on_pairing = write, close, on_pairing
         self.paired: bool | None = None  # ESP32 firmware's last snapshot; None = unknown (old firmware, or not yet answered)
         self.peer: tuple[str, str] | None = None  # (id, name) of the connected phone
@@ -96,6 +98,13 @@ class Link:
         elif word == "pairing" and self.on_pairing:
             self.on_pairing()
 
+    def fail(self, message: str) -> None:
+        """The device did not come up (the handshake got no answer, the helper died): kept in `error` for a hook that
+        is wired later, and passed to `on_error` if there is one."""
+        self.error = message
+        if self.on_error:
+            self.on_error(message)
+
     def query(self) -> None:
         self._asked_at = time.monotonic()
         self._line("?", quiet=True)  # polled every second while Settings is open: not worth a log line
@@ -133,13 +142,19 @@ class Link:
             log.debug("sent %r", line)
 
 
+BLE_READY_S = 10  # s the Bluetooth helper may take to say it is ready, before the link is failed
+
+
 def ble(python: str) -> Link:
     """This computer's Bluetooth adapter (Linux), via blemouse.py under the system python."""
     log.info("starting the Bluetooth helper with %s", python)
     proc = subprocess.Popen([python, "-I", str(Path(__file__).with_name("blemouse.py"))],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
 
+    closing = threading.Event()
+
     def close() -> None:
+        closing.set()
         log.info("closing the Bluetooth helper")  # the helper quits on EOF; without this it stays advertised (and connected) after a mode switch
         with contextlib.suppress(OSError):
             proc.stdin.close()
@@ -149,11 +164,20 @@ def ble(python: str) -> Link:
             proc.kill()
 
     link = Link(proc.stdin.write, lambda: proc.stdout.read(4096), close)
-    if not link.ready.wait(10):  # the helper prints its reason on stderr
-        proc.kill()
-        log.error("the Bluetooth helper did not report ready within 10 s")
-        raise RuntimeError("Bluetooth mouse helper failed to start")
-    log.info("the Bluetooth helper is ready")
+
+    def watch() -> None:  # the window must not wait for this: it fails the link, which the app then says
+        deadline = time.monotonic() + BLE_READY_S
+        while not link.ready.wait(0.1):
+            if closing.is_set():
+                return
+            if proc.poll() is not None or time.monotonic() > deadline:  # the helper prints its reason on stderr
+                proc.kill()
+                log.error("the Bluetooth helper did not report ready (within %.0f s, or it exited)", BLE_READY_S)
+                link.fail("Bluetooth mouse helper failed to start")
+                return
+        log.info("the Bluetooth helper is ready")
+
+    threading.Thread(target=watch, daemon=True).start()
     return link
 
 
@@ -196,13 +220,23 @@ def esp32(port: str, baud: int = 115200, wait: float = 10) -> Link:
         os.close(fd)
 
     link = Link(lambda b: os.write(fd, b), read, close)
-    for attempt in range(int(wait / 0.5)):  # opening the port may reboot the board: ask until it answers
-        log.debug("handshake attempt %d", attempt + 1)
-        link._asked_at = time.monotonic()  # its answer is the first snapshot the quiet polls are compared with
-        os.write(fd, b"?\n")
-        if link.ready.wait(0.5):
-            log.info("the board answered on %s", port)
-            return link
-    link.close()
-    log.error("no firmware answered on %s within %.0f s", port, wait)
-    raise RuntimeError(f"no scrcrappy ESP32 firmware answering on {port}")
+
+    def handshake() -> None:  # opening the port may reboot the board: ask until it answers (off the window's thread)
+        for attempt in range(int(wait / 0.5)):
+            if closing.is_set():
+                return
+            log.debug("handshake attempt %d", attempt + 1)
+            link._asked_at = time.monotonic()  # its answer is the first snapshot the quiet polls are compared with
+            try:
+                os.write(fd, b"?\n")
+            except OSError:
+                return  # closed under us
+            if link.ready.wait(0.5):
+                log.info("the board answered on %s", port)
+                return
+        if not closing.is_set():
+            log.error("no firmware answered on %s within %.0f s", port, wait)
+            link.fail(f"no scrcrappy ESP32 firmware answering on {port}")
+
+    threading.Thread(target=handshake, daemon=True).start()
+    return link

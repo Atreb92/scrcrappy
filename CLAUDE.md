@@ -37,7 +37,8 @@ BLE mouse/keyboard (Linux adapter or ESP32, steering the AssistiveTouch cursor),
 - Scroll direction: BT / ESP32 send a wheel report (iOS's own mouse-scroll setting decides), agent swipes a finger; the agent's
   sign is set to match a phone with iOS's default. One setting, Settings › Invert scrolling (`invert_scroll`), flips all modes.
 - Starting the video (qvh) drops the agent's usbmuxd tunnel once; the Session reconnects by itself.
-- An unreachable agent no longer stops `--mouse agent` or the switch in Settings: the mode runs with a disconnected Session.
+- The window never waits for a control device: the ESP32 handshake, the BT helper's start and the agent connection (pairing
+  included) run on threads; a failure is `Link.error` / `Session.state` (toast + Settings), not an exception at start.
 - Never `pkill -f <pattern>` from the shell tool: it matches the tool's own command line and kills it.
 
 ## Process the user likes

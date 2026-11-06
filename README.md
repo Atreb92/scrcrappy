@@ -90,7 +90,8 @@ mouse enters the window.
 On a jailbroken phone, install [crappytouch](https://github.com/Atreb92/crappytouch) (a SpringBoard tweak, reached over USB
 only) and run `.venv/bin/scrcrappy --mouse agent` (or pick Agent in the toolbar's Settings once). No Bluetooth, no AssistiveTouch, no calibration. The window opens (and Agent can be picked in Settings) even when the agent is not reachable yet
 (phone locked, unplugged, tweak not running): Settings › Input shows a dot under the mode row, green *Agent connected* or amber
-*Agent not reachable* with a **Retry** button, and scrcrappy keeps retrying in the background, also after the connection drops later:
+*Agent not reachable* with a **Retry** button, and scrcrappy keeps retrying in the background, also after the connection drops later. Whatever the control device is
+(ESP32, Bluetooth, agent), the window opens at once and the device connects (and pairs) in the background:
 
 - Click / drag = touch at that exact spot; **Ctrl+drag** = two-finger pinch around the screen centre;
   wheel = short swipe (Invert scrolling applies).

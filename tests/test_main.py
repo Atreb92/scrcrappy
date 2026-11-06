@@ -142,9 +142,9 @@ def test_window_opens_without_a_connected_phone(monkeypatch, capsys):
     monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
     t = threading.Thread(target=cli.main, args=(["--qvh", TRUE, "--mouse", "esp32"],), daemon=True)
     t.start()
+    assert ran.wait(0.8)  # the window does not wait for the phone's Bluetooth (it used to wait a second)
     t.join(4)
-    assert ran.is_set() and not t.is_alive()
-    assert "Bluetooth" in capsys.readouterr().err
+    assert not t.is_alive()
 
 
 @pytest.fixture
@@ -222,5 +222,29 @@ def test_agent_mode_opens_the_window_even_when_the_agent_is_unreachable(monkeypa
     monkeypatch.setattr(cli.modes.agent, "RETRY_S", 30)
     monkeypatch.setattr(cli.app, "run", lambda *a, **k: ran.set() or True)
     assert cli.main(["--qvh", TRUE, "--mouse", "agent"]) == 0
-    assert ran.is_set()
-    assert "agent: no iPhone" in capsys.readouterr().err
+    assert ran.is_set()  # and nothing was connected on the way: the session does that on its own thread
+
+
+def test_calibrate_does_not_wait_forever_for_a_link_that_failed(monkeypatch, capsys):
+    import contextlib
+    import threading
+
+    class Failed:
+        connected, error = threading.Event(), "no scrcrappy ESP32 firmware answering on /dev/x"
+
+        def send(self, *a): pass
+        def send_keys(self, *a): pass
+        def close(self): pass
+        def pace(self): return 0.015
+
+    cap = type("Cap", (), {"poll": lambda self: None, "log": ""})()
+    monkeypatch.setattr(cli.video, "find_iphone", lambda: object())
+    monkeypatch.setattr(cli.video, "serial_number", lambda dev: "abc")
+    monkeypatch.setattr(cli.video, "reset_if_stuck", lambda dev, qvh: None)
+    monkeypatch.setattr(cli.video, "capture", lambda qvh, frames: contextlib.nullcontext(cap))
+    monkeypatch.setattr(cli.modes.links, "esp32", lambda port: Failed())
+    result = []
+    t = threading.Thread(target=lambda: result.append(cli.main(["--qvh", TRUE, "--mouse", "esp32", "--calibrate"])), daemon=True)
+    t.start()
+    t.join(3)
+    assert result == [1] and "no scrcrappy ESP32 firmware" in capsys.readouterr().err

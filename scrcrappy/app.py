@@ -356,6 +356,11 @@ def run(frames: LatestFrame, alive: Callable[[], bool], make_pointer: Callable[[
     def wire_board() -> None:
         if board:
             board.on_pairing = lambda: post_run(lambda: bar.toast(PAIRING_TOAST))
+        link = mode.link
+        if link:  # the board / helper comes up on a thread: if it never does, say so
+            link.on_error = lambda message: post_run(lambda: bar.toast(message))
+            if link.error:
+                bar.toast(link.error)
 
     def request_switch(name: str, new_port: str | None = None) -> None:
         """Settings › Input: build mode `name` on a thread; `swap` brings it in on this one. Changing the ESP32 port
